@@ -1,0 +1,36 @@
+{
+  "name": "no-initial-auth-token-fix",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "prebuild": "node scripts/stamp-sw.cjs && node scripts/stamp-sw-public.cjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "@fullcalendar/daygrid": "^6.1.19",
+    "@fullcalendar/interaction": "^6.1.19",
+    "@fullcalendar/react": "^6.1.19",
+    "firebase": "^10.13.1",
+    "jspdf": "^3.0.1",
+    "jszip": "^3.10.1",
+    "pulltorefreshjs": "^0.1.22",
+    "qrcode": "^1.5.4",
+    "qrcode-with-logos": "^1.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "soundtouchjs": "^0.3.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "replace-in-file": "^8.3.0",
+    "tailwindcss": "^3.4.13",
+    "vite": "^5.4.0"
+  }
+}

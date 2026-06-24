@@ -1,0 +1,5 @@
+@keyframes scan-animation { 0% { top: 0; } 100% { top: calc(100% - 3px); } }
+@keyframes soundwave { from { transform: scaleY(0.2); opacity: 0.5; } to { transform: scaleY(1); opacity: 1; } }
+.scanner-line { position: absolute; left: 0; width: 100%; height: 3px; background: red; box-shadow: 0 0 10px rgba(255, 0, 0, 0.7); border-radius: 2px; animation: scan-animation 1.5s infinite alternate ease-in-out; }
+@keyframes pulse-gradient { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.animate-pulse-gradient { background-size: 200% 200%; animation: pulse-gradient 4s ease infinite; }

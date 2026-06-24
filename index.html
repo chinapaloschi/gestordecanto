@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+
+    <!-- El manifest se CREA dinámicamente antes de que el browser lo lea —
+         garantiza que iOS Safari reciba el correcto desde el primer momento -->
+    <script>
+      (function() {
+        try {
+          var hash   = window.location.hash || '';
+          var search = window.location.search || '';
+          var PUBLIC = ['/checkin', '/muestras', '/portal', '/ticket', '/inscripcion'];
+          var isPublic = PUBLIC.some(function(r) { return hash.startsWith('#' + r); });
+          var isFinanzas = hash.startsWith('#/finanzas');
+          var href = isFinanzas ? '/manifest-finanzas.webmanifest' : (isPublic ? '/manifest-public.webmanifest' : '/manifest-admin.webmanifest');
+
+          // Crear el link AQUÍ — el browser nunca ve el manifest incorrecto
+          var link = document.createElement('link');
+          link.rel  = 'manifest';
+          link.href = href;
+          link.id   = 'manifest-link';
+          document.currentScript.parentNode.insertBefore(link, document.currentScript.nextSibling);
+
+          // apple-touch-icon: portal público → icono regular (negro sobre blanco)
+          //                   admin         → icono inverted (blanco sobre oscuro)
+          var iconHref = isPublic ? '/icon-192.png' : '/icon-192-inverted.png';
+          var apl = document.createElement('link');
+          apl.rel  = 'apple-touch-icon';
+          apl.href = iconHref;
+          document.currentScript.parentNode.insertBefore(apl, document.currentScript.nextSibling);
+        } catch (e) {}
+      })();
+    </script>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/icon-32-inverted.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icon-16-inverted.png" />
+
+    <meta name="theme-color" content="#be185d" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta http-equiv="Permissions-Policy" content="camera=(self)">
+
+    <title>Estudio de Canto Sandra Paloschi</title>
+    <meta property="og:title" content="Estudio de Canto Sandra Paloschi 🎵" />
+    <meta property="og:image" content="https://estudiosandrapaloschi.web.app/icon-512.png" />
+    <meta property="og:description" content="Portal del alumno — Estudio de Canto Sandra Paloschi." />
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    
+  </head>
+  
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+
+    <script>
+      // (Tus scripts para bloquear el zoom no necesitan cambios)
+      document.addEventListener('touchmove', function (e) { if (e.scale !== undefined && e.scale !== 1) e.preventDefault(); }, { passive: false });
+      document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+      (function () { let lastTouchEnd = 0; document.addEventListener('touchend', function (e) { const now = Date.now(); if (now - lastTouchEnd <= 300) e.preventDefault(); lastTouchEnd = now; }, { passive: false }); })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QR — Dar presente</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .sheet {
+    width: 100%;
+    max-width: 520px;
+    text-align: center;
+    padding: 48px 32px;
+  }
+  .logo { width: 90px; height: 90px; object-fit: contain; margin-bottom: 16px; }
+  h1 { font-size: 22px; font-weight: 900; color: #111; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: #db2777; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 28px; }
+  .qr-box {
+    border: 3px solid #111;
+    border-radius: 24px;
+    padding: 24px;
+    display: inline-block;
+  }
+  .qr-box img { width: 320px; height: 320px; display: block; }
+  .instructions { margin-top: 28px; font-size: 15px; color: #374151; line-height: 1.5; max-width: 380px; margin-left: auto; margin-right: auto; }
+  .instructions b { color: #111; }
+  .footer { margin-top: 32px; font-size: 12px; color: #9ca3af; }
+  .print-btn {
+    margin-top: 28px;
+    background: #db2777;
+    color: #fff;
+    border: none;
+    font-weight: 800;
+    font-size: 14px;
+    padding: 12px 28px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  @media print { .print-btn { display: none; } }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <img class="logo" src="/logo.png" alt="Sandra Paloschi" />
+    <h1>Estudio de Canto Sandra Paloschi</h1>
+    <p class="sub">Escaneá para dar tu presente</p>
+    <div class="qr-box">
+      <img src="/qr-presente-sala.png" alt="QR presente" />
+    </div>
+    <p class="instructions">
+      Abrí la <b>cámara de tu teléfono</b> y apuntá a este código.<br/>
+      Tocá el aviso que aparece y se marca tu <b>presente</b> automáticamente.
+    </p>
+    <button class="print-btn" onclick="window.print()">Imprimir</button>
+    <p class="footer">Pegar este cartel en un lugar visible de la sala.</p>
+  </div>
+</body>
+</html>

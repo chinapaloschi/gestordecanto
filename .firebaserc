@@ -1,0 +1,16 @@
+{
+  "projects": {},
+  "targets": {
+    "nuevaclase-135ec": {
+      "hosting": {
+        "catalogo-lenceria": [
+          "grece-lingerie"
+        ],
+        "app-principal": [
+          "estudiosandrapaloschi"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

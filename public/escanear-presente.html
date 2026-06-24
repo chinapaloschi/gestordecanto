@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Escanear QR — Estudio de Canto Sandra Paloschi</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0f172a; font-family: system-ui, -apple-system, sans-serif; color: #fff;
+    min-height: 100vh; display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+  }
+  header { padding: 18px 16px 10px; text-align: center; }
+  header img { width: 44px; height: 44px; margin-bottom: 8px; border-radius: 12px; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 800; }
+  header p { font-size: 11px; color: #94a3b8; margin: 3px 0 0; }
+  .stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px 20px; }
+  .camerabox {
+    position: relative; width: 100%; max-width: 420px; aspect-ratio: 1 / 1;
+    background: #000; border-radius: 22px; overflow: hidden; box-shadow: 0 12px 30px rgba(0,0,0,.5);
+  }
+  video { width: 100%; height: 100%; object-fit: cover; }
+  .frame { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .frame-inner { position: relative; width: 75%; height: 75%; border: 2px solid rgba(255,255,255,.6); border-radius: 16px; overflow: hidden; }
+  .scanline { position: absolute; left: 0; width: 100%; height: 3px; background: #e11d48; box-shadow: 0 0 10px rgba(225,29,72,.8); animation: scan 1.5s infinite alternate ease-in-out; }
+  @keyframes scan { 0% { top: 0; } 100% { top: calc(100% - 3px); } }
+  .msg {
+    position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; font-weight: 800; font-size: 20px;
+  }
+  .msg.ok { background: rgba(22,163,74,.93); display: flex; }
+  .msg.err { background: rgba(220,38,38,.93); display: flex; }
+  .hint { text-align: center; font-size: 12px; color: #94a3b8; padding: 4px 24px 18px; }
+  .errbox { background: #fee2e2; color: #991b1b; padding: 16px; border-radius: 14px; margin: 0 20px 16px; font-size: 13px; text-align: center; }
+  .closebtn {
+    display: block; margin: 0 auto 22px; background: #1e293b; color: #fff; border: none;
+    padding: 11px 24px; border-radius: 12px; font-weight: 700; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <img src="/logo.png" alt="logo" />
+    <h1>Estudio de Canto Sandra Paloschi</h1>
+    <p>Escaneá el QR de la sala para dar tu presente</p>
+  </header>
+
+  <div class="stage">
+    <div class="camerabox">
+      <video id="video" muted playsinline autoplay></video>
+      <div class="frame"><div class="frame-inner"><div class="scanline" id="scanline"></div></div></div>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+
+  <p class="hint" id="hint">Apuntá la cámara al cartel QR pegado en la sala.</p>
+  <div class="errbox" id="errbox" style="display:none;"></div>
+  <button class="closebtn" onclick="goHome()">Cerrar</button>
+
+  <canvas id="canvas" style="display:none;"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script>
+    var HOME_URL = 'https://estudiosandrapaloschi.web.app/#/checkin?a=1:786390581865:web:ed47531cf7415ae5ca18f8';
+    var ATTENDANCE_CODE = 'SANDRA-PALOSCHI-SALA-PRESENTE';
+    function goHome() { window.location.href = HOME_URL; }
+
+    var video = document.getElementById('video');
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    var msgEl = document.getElementById('msg');
+    var errbox = document.getElementById('errbox');
+    var scanline = document.getElementById('scanline');
+    var locked = false;
+
+    function showMsg(ok, text) {
+      msgEl.className = 'msg ' + (ok ? 'ok' : 'err');
+      msgEl.textContent = text;
+      scanline.style.display = 'none';
+    }
+    function hideMsg() {
+      msgEl.className = 'msg';
+      msgEl.style.display = 'none';
+      scanline.style.display = 'block';
+    }
+
+    function start() {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .catch(function () { return navigator.mediaDevices.getUserMedia({ video: true }); })
+        .then(function (stream) {
+          video.srcObject = stream;
+          return video.play().catch(function () {});
+        })
+        .then(function () { requestAnimationFrame(tick); })
+        .catch(function (err) {
+          errbox.style.display = 'block';
+          errbox.textContent = 'No se pudo acceder a la cámara: ' + ((err && err.message) || (err && err.name) || 'permiso denegado.');
+        });
+    }
+
+    function tick() {
+      if (!locked && video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var code = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+        if (code && code.data) {
+          locked = true;
+          handleResult(code.data);
+          return;
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function handleResult(text) {
+      var clean = (text || '').trim();
+      var target = null;
+
+      if (clean === ATTENDANCE_CODE) {
+        target = HOME_URL + '&present=' + encodeURIComponent(ATTENDANCE_CODE);
+      } else {
+        try {
+          var u = new URL(clean);
+          target = clean;
+        } catch (e) { /* no es URL ni el código esperado */ }
+      }
+
+      if (target) {
+        showMsg(true, '✅ ¡Listo! Abriendo...');
+        setTimeout(function () { window.location.href = target; }, 600);
+      } else {
+        showMsg(false, '❌ Código no reconocido');
+        setTimeout(function () { hideMsg(); locked = false; requestAnimationFrame(tick); }, 1500);
+      }
+    }
+
+    start();
+  </script>
+</body>
+</html>
