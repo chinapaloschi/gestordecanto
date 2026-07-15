@@ -14,7 +14,7 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
-body { margin: 0; background:#0f172a; color:#e2e8f0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial; }
+body { margin: 0; background:#e2e8f0; color:#1e293b; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial; }
 input, textarea, select {
   background-color: white !important;
   color: black;

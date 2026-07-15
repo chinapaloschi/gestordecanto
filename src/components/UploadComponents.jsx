@@ -23,7 +23,7 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, 
   const isAlreadyPending = receiptStatus === 'pending';
   const isApproved = receiptStatus === 'approved';
   const isRejected = receiptStatus === 'rejected';
-  const aplicaRecargo = new Date().getDate() > 8 && (totalHoy || 0) > 0;
+  const aplicaRecargo = new Date().getDate() >= 9 && (totalHoy || 0) > 0;
 
   const fmtAr = (n) => new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(n || 0);
 

@@ -80,16 +80,26 @@ export const MarkPaymentForm = ({
     const item = itemsToPayForStudent.find(it => it.id === selectedItemToPay);
     const totalBase = item ? __getBaseAmountFromItem(item) : 0;
     const dd = Number(String(paymentDate || '').split('-')[2] || '1');
-    const aplicaRecargo = dd > 8;
+    const paymentYear  = Number(String(paymentDate || '').split('-')[0] || '0');
+    const paymentMonth = Number(String(paymentDate || '').split('-')[1] || '0');
+    // Solo aplica recargo si el ítem pertenece al mismo mes que la fecha de pago
+    const itemPeriod = item?.data?.periodStartDate || item?.data?.classDate || '';
+    const itemYear  = Number(String(itemPeriod).split('-')[0] || '0');
+    const itemMonth = Number(String(itemPeriod).split('-')[1] || '0');
+    const esMesActual = itemYear === paymentYear && itemMonth === paymentMonth;
+    const aplicaRecargo = esMesActual && dd >= 9;
     const totalHoy = aplicaRecargo ? Math.round(totalBase * 1.1) : totalBase;
     return { totalHoy, aplicaRecargo, totalBase, recargo: totalHoy - totalBase };
   }, [itemsToPayForStudent, selectedItemToPay, paymentDate]);
 
-  const calculateAndSetAmount = (baseAmount, dateString) => {
+  const calculateAndSetAmount = (baseAmount, dateString, itemPeriodStart = '') => {
     let amt = Number(baseAmount) || 0;
     if (dateString) {
-      const day = Number(String(dateString).split('-')[2] || '1');
-      if (day > 8) amt = amt * 1.10;
+      const [pYear, pMonth, pDay] = String(dateString).split('-').map(Number);
+      const [iYear, iMonth] = String(itemPeriodStart).split('-').map(Number);
+      // Solo aplica recargo si el ítem es del mismo mes que la fecha de pago
+      const esMesActual = iYear === pYear && iMonth === pMonth;
+      if (esMesActual && pDay >= 9) amt = amt * 1.10;
     }
     setAmount(Math.round(amt));
   };
@@ -127,7 +137,7 @@ export const MarkPaymentForm = ({
       setSelectedItemToPay(itemToSelect.id);
       const baseAmt = __getBaseAmountFromItem(itemToSelect);
       setOriginalAmount(baseAmt);
-      calculateAndSetAmount(baseAmt, new Date().toISOString().split('T')[0]);
+      calculateAndSetAmount(baseAmt, new Date().toISOString().split('T')[0], itemToSelect.data?.periodStartDate || itemToSelect.data?.classDate || '');
     } else {
       setSelectedItemToPay(''); setAmount(''); setOriginalAmount(0);
     }
@@ -150,7 +160,9 @@ export const MarkPaymentForm = ({
       } else if (selectedItem.type === 'monthly_package') {
         batch.update(doc(db, `artifacts/${appId}/payments`, selectedItem.id), {
           isPaidForPackage: true, paymentDate: paymentDateObj, amount: parsedAmount,
-          paidAt: paymentDateObj, status: 'paid', updatedAt: new Date(), paymentMethod,
+          paidAt: paymentDateObj, status: 'paid', updatedAt: new Date(),
+          paidVia: paymentMethod,
+          // NO se sobreescribe paymentMethod para preservar 'monthly_package_payment'
         });
         for (const classId of selectedItem.data.associatedClassIds) {
           batch.update(doc(db, `artifacts/${appId}/scheduledClasses`, classId), { isPaid: true });
@@ -244,7 +256,7 @@ export const MarkPaymentForm = ({
                   if (selected) {
                     const baseAmt = __getBaseAmountFromItem(selected);
                     setOriginalAmount(baseAmt);
-                    calculateAndSetAmount(baseAmt, paymentDate);
+                    calculateAndSetAmount(baseAmt, paymentDate, selected.data?.periodStartDate || selected.data?.classDate || '');
                   }
                 }}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 transition bg-white"
@@ -268,7 +280,7 @@ export const MarkPaymentForm = ({
                   Fecha del pago
                 </label>
                 <input type="date" value={paymentDate}
-                  onChange={e => { setPaymentDate(e.target.value); calculateAndSetAmount(originalAmount, e.target.value); }}
+                  onChange={e => { setPaymentDate(e.target.value); const sel = itemsToPayForStudent.find(it => it.id === selectedItemToPay); calculateAndSetAmount(originalAmount, e.target.value, sel?.data?.periodStartDate || sel?.data?.classDate || ''); }}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 transition"
                   required />
               </div>

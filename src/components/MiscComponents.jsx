@@ -22,7 +22,7 @@ export function ReceiptUploadBoxPatched({ appId, student, totalHoy, onRecalculat
 
   if (!appId || !student?.id) return null;
 
-  const isLate = new Date().getDate() > 8;
+  const isLate = new Date().getDate() >= 9;
   const fmtAr = (n) => new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(Number(n || 0));
 
   const onPick = (e) => {

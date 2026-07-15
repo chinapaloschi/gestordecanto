@@ -33,6 +33,7 @@ export const Dashboard = ({
     db,
     appId,
     showMessage,
+    studentsWithNewReceipts = new Set(),
 }) => {
 
     const [expandedStudentId, setExpandedStudentId] = React.useState(null);
@@ -48,79 +49,24 @@ export const Dashboard = ({
 const classesOnSelectedDate = React.useMemo(() => {
   if (!scheduledClasses || !selectedDate) return [];
 
-  // Normaliza cualquier entrada a YYYY-MM-DD
   const normalizeDate = (dateInput) => {
     if (!dateInput) return null;
-
-    // Si es Timestamp de Firestore
-    if (dateInput && typeof dateInput.toDate === 'function') {
-      return dateInput.toDate().toISOString().split('T')[0];
-    }
-    // Si es un objeto Date
-    if (dateInput instanceof Date && !isNaN(dateInput)) {
-      return dateInput.toISOString().split('T')[0];
-    }
-    // Si es string
+    if (typeof dateInput.toDate === 'function') return dateInput.toDate().toISOString().split('T')[0];
+    if (dateInput instanceof Date && !isNaN(dateInput)) return dateInput.toISOString().split('T')[0];
     if (typeof dateInput === 'string') {
-      // Si ya tiene formato YYYY-MM-DD (con o sin hora)
-      if (/^\d{4}-\d{2}-\d{2}/.test(dateInput)) {
-        return dateInput.split('T')[0];
-      }
-      // Si tiene formato DD/MM/YYYY
+      if (/^\d{4}-\d{2}-\d{2}/.test(dateInput)) return dateInput.split('T')[0];
       const parts = dateInput.split('/');
-      if (parts.length === 3 && parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) {
-        return `${parts[2]}-${parts[1]}-${parts[0]}`;
-      }
+      if (parts.length === 3 && parts[0].length === 2) return `${parts[2]}-${parts[1]}-${parts[0]}`;
     }
-    console.warn('[Dashboard] ⚠️ No se pudo normalizar fecha:', dateInput);
     return null;
   };
 
   const targetDate = normalizeDate(selectedDate);
-  console.log('[Dashboard] 🎯 Fecha objetivo normalizada:', targetDate);
 
-  // Log de TODAS las clases que llegan
-  console.log('[Dashboard] 📋 Total de clases en scheduledClasses:', scheduledClasses.length);
-  
-  // Muestra las primeras 5 clases como ejemplo
-  if (scheduledClasses.length > 0) {
-    console.log('[Dashboard] 📅 Ejemplo de las primeras 5 clases:');
-    scheduledClasses.slice(0, 5).forEach((cls, idx) => {
-      const rawDate = cls.classDate;
-      const normalized = normalizeDate(rawDate);
-      console.log(`  Clase ${idx + 1}:`, {
-        student: cls.studentName,
-        rawDate,
-        tipoRaw: typeof rawDate,
-        // Si es objeto Firestore, muestra más info
-        esTimestamp: rawDate && typeof rawDate.toDate === 'function',
-        normalized,
-        status: cls.status,
-        isPaid: cls.isPaid
-      });
-    });
-  }
-
-  // Filtramos clases por fecha y estado
   const dayClasses = scheduledClasses.filter(cls => {
     const clsDateStr = normalizeDate(cls.classDate);
-    if (!clsDateStr) {
-      console.log('[Dashboard] ❌ Fecha inválida ignorada:', cls.studentName, cls.classDate);
-      return false;
-    }
-
-    const match = clsDateStr === targetDate;
-    
-    if (match) {
-      console.log('[Dashboard] ✅ COINCIDE:', cls.studentName, clsDateStr, cls.startTime);
-    } else {
-      console.log('[Dashboard] ❌ No coincide:', cls.studentName, clsDateStr, 'vs', targetDate, '(raw:', cls.classDate, ')');
-    }
-
-    return match && (!cls.status || cls.status === 'scheduled');
+    return clsDateStr === targetDate && (!cls.status || cls.status === 'scheduled');
   });
-
-  console.log('[Dashboard] 📊 Clases encontradas para el día:', dayClasses.length, dayClasses);
 
   // Agrupamos por horario
   const groups = {};
@@ -430,7 +376,7 @@ const classesOnSelectedDate = React.useMemo(() => {
                         No se encontraron alumnos en esta vista.
                     </p>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                         {filteredStudents.map((student) => (
                             <StudentCard
                                 key={student.id}
@@ -439,9 +385,8 @@ const classesOnSelectedDate = React.useMemo(() => {
                                 db={db}
                                 appId={appId}
                                 showMessage={showMessage}
-                                isExpanded={expandedStudentId === student.id}
-                                onToggleExpand={handleToggleExpand}
                                 onRestoreStudent={onRestoreStudent}
+                                hasNewReceipt={studentsWithNewReceipts.has(student.id)}
                             />
                         ))}
                     </div>

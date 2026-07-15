@@ -69,6 +69,7 @@ export const ClassScreen = ({ classGroup, students, db, appId, onClose, onAttend
 
   const videoId = extractYtId(ytUrl);
   const [embedError, setEmbedError] = useState(false);
+  const [embedErrorTitle, setEmbedErrorTitle] = useState('');
   const playerContainerRef = useRef(null);
   const playerInstanceRef = useRef(null);
 
@@ -77,6 +78,7 @@ export const ClassScreen = ({ classGroup, students, db, appId, onClose, onAttend
   // externa (onError 101/150) y mostrar un aviso propio en vez del cartel de YouTube.
   useEffect(() => {
     setEmbedError(false);
+    setEmbedErrorTitle('');
     if (!videoId) return;
     let destroyed = false;
 
@@ -90,7 +92,15 @@ export const ClassScreen = ({ classGroup, students, db, appId, onClose, onAttend
         playerVars: { autoplay: 1, rel: 0 },
         events: {
           onError: (e) => {
-            if (e?.data === 101 || e?.data === 150) setEmbedError(true);
+            if (e?.data === 101 || e?.data === 150) {
+              setEmbedError(true);
+              // Traemos el título del video (endpoint público de YouTube, sin API key)
+              // para poder sugerir una búsqueda de reemplazo ya armada ("<título> audio oficial").
+              fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`)
+                .then(r => (r.ok ? r.json() : null))
+                .then(data => { if (data?.title) setEmbedErrorTitle(data.title); })
+                .catch(() => {});
+            }
           },
         },
       });
@@ -441,16 +451,21 @@ export const ClassScreen = ({ classGroup, students, db, appId, onClose, onAttend
               <div ref={playerContainerRef} className="w-full h-full" style={{ minHeight: '240px' }} />
               {embedError && (
                 <div className="absolute inset-0 bg-gray-900/97 flex flex-col items-center justify-center text-center p-6 gap-3">
-                  <p className="text-rose-400 font-bold text-sm">⚠ Este video no se puede reproducir acá</p>
-                  <p className="text-gray-400 text-xs max-w-xs">El dueño del video desactivó la reproducción fuera de YouTube. Pasa con algunos videos oficiales/discográficas — probá buscar otra versión (en vivo, lyric video, cover).</p>
+                  <p className="text-rose-400 font-bold text-sm">⚠ {embedErrorTitle ? `"${embedErrorTitle}"` : 'Este video'} no se puede reproducir acá</p>
+                  <p className="text-gray-400 text-xs max-w-xs">El dueño del video (sello discográfico, artista) desactivó la reproducción fuera de YouTube. No es un error de la app — pasa seguido con videos oficiales. La versión "audio oficial", lyric video o karaoke casi siempre sí se puede reproducir.</p>
                   <div className="flex gap-2 flex-wrap justify-center">
                     <a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noreferrer"
                       className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition">
                       ▶ Abrir en YouTube
                     </a>
-                    <button onClick={() => setVideoTab('search')}
+                    <button onClick={() => {
+                        const q = embedErrorTitle ? `${embedErrorTitle} audio oficial` : '';
+                        setSearchQuery(q);
+                        setVideoTab('search');
+                        if (q) doSearch(q);
+                      }}
                       className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold rounded-lg transition border border-gray-700">
-                      🔍 Buscar otra versión
+                      🔍 Buscar versión que sí funcione
                     </button>
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
-import { collection as fsCollection, doc, getDoc, getDocs, addDoc as fsAddDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, getFirestore, limit } from 'firebase/firestore';
+import { collection as fsCollection, collectionGroup, doc, getDoc, getDocs, addDoc as fsAddDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, getFirestore, limit } from 'firebase/firestore';
 
 import { ref as stRef, getDownloadURL, listAll, getMetadata } from 'firebase/storage';
 
@@ -49,6 +49,7 @@ import { MassEventsAdminModal } from './MassEvents.jsx';
 import { BlockDaysModal, BackupRestoreModal } from './AdminModals.jsx';
 import { AvailableSlotsManager } from './AvailableSlotsManager.jsx';
 import { TrialRequestsPanel } from './TrialRequestsPanel.jsx';
+import { ExercisePacksManager } from './ExercisePacksManager.jsx';
 
 import { EventsListModal, EventDetailModal } from './EventModals.jsx';
 
@@ -293,6 +294,27 @@ const { amountsHidden, toggleAmountsHidden } = useAmountsHidden();
     const [blockedSlots, setBlockedSlots] = useState([]);
 
     const [loading, setLoading] = useState(true);
+    const [studentsWithNewReceipts, setStudentsWithNewReceipts] = useState(() => new Set());
+
+    // Tick diario: fuerza recalcular studentsWithStats exactamente a medianoche
+    // para que el recargo aparezca en el día correcto aunque la página esté abierta
+    const [todayStr, setTodayStr] = useState(() => new Date().toLocaleDateString('en-CA')); // YYYY-MM-DD local
+    useEffect(() => {
+        const msUntilMidnight = () => {
+            const now = new Date();
+            const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1, 0);
+            return midnight - now;
+        };
+        let timer;
+        const scheduleTick = () => {
+            timer = setTimeout(() => {
+                setTodayStr(new Date().toLocaleDateString('en-CA'));
+                scheduleTick();
+            }, msUntilMidnight());
+        };
+        scheduleTick();
+        return () => clearTimeout(timer);
+    }, []);
 
     const [message, setMessage] = useState({ text: '', type: 'info' });
 
@@ -363,6 +385,7 @@ const [showLenceriaModal, setShowLenceriaModal] = useState(false);
 const [showMassEventsModal, setShowMassEventsModal] = useState(false);
 const [showAvailableSlotsModal, setShowAvailableSlotsModal] = useState(false);
 const [showTrialRequestsModal, setShowTrialRequestsModal] = useState(false);
+const [showExercisePacksModal, setShowExercisePacksModal] = useState(false);
 
 useEffect(() => {
 
@@ -593,159 +616,101 @@ const closeAddStudentForm = useCallback(() => {
 
 
 
-    // Listen for real-time updates on all collections
-
+    // Listeners de Firestore — colecciones con límite de fecha para reducir datos en memoria
     useEffect(() => {
-
         if (!db) return;
 
+        // Fechas de corte para colecciones que crecen indefinidamente
+        const cutoff18m = new Date();
+        cutoff18m.setMonth(cutoff18m.getMonth() - 18);
+        const cutoff18mStr = cutoff18m.toISOString().split('T')[0]; // para classDate (string YYYY-MM-DD)
 
+        const cutoff12m = new Date();
+        cutoff12m.setMonth(cutoff12m.getMonth() - 12);
 
-        const collectionListeners = [
-
-            { name: 'students', setter: setStudents },
-
-            { name: 'scheduledClasses', setter: setScheduledClasses },
-
-            { name: 'payments', setter: setAllPayments },
-
-            { name: 'extraIncomes', setter: setExtraIncomes },
-
-            { name: 'expenses', setter: setExpenses },
-
-            { name: 'expenseCategories', setter: setExpenseCategories },
-
-            { name: 'blockedSlots', setter: setBlockedSlots },
-
-            { name: 'events', setter: setEvents }
-
+        // Colecciones simples: sin filtro de fecha
+        const simpleCollections = [
+            { name: 'students',          setter: setStudents },
+            { name: 'extraIncomes',      setter: setExtraIncomes },
+            { name: 'expenses',          setter: setExpenses },
+            { name: 'expenseCategories', setter: setExpenseCategories, sort: (a, b) => a.name.localeCompare(b.name) },
+            { name: 'blockedSlots',      setter: setBlockedSlots },
+            { name: 'events',            setter: setEvents },
         ];
 
+        const unsubs = simpleCollections.map(({ name, setter, sort }) =>
+            onSnapshot(fsCollection(db, `artifacts/${appId}/${name}`), snap => {
+                const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                setter(sort ? data.sort(sort) : data);
+            }, err => {
+                console.error(`Error al obtener ${name}:`, err);
+                setMessage({ text: `Error al cargar ${name}: ${err.message}`, type: 'error' });
+            })
+        );
 
+        // scheduledClasses: solo últimos 18 meses (string YYYY-MM-DD permite comparación lexicográfica)
+        const qClasses = query(
+            fsCollection(db, `artifacts/${appId}/scheduledClasses`),
+            where('classDate', '>=', cutoff18mStr)
+        );
+        unsubs.push(onSnapshot(qClasses, snap => {
+            setScheduledClasses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, err => console.error('Error scheduledClasses:', err)));
 
-        const unsubscribers = collectionListeners.map(({ name, setter }) => {
+        // payments: todos los no pagados + pagados de los últimos 12 meses
+        // Se cargan en dos listeners y se fusionan para no perder deudas viejas
+        const paidSet = new Map();
+        const unpaidSet = new Map();
 
-            const collectionRef = fsCollection(db, `artifacts/${appId}/${name}`);
+        const mergeSets = () => {
+            const merged = new Map();
+            unpaidSet.forEach((v, k) => merged.set(k, v));
+            paidSet.forEach((v, k) => merged.set(k, v));
+            setAllPayments(Array.from(merged.values()));
+        };
 
-            return onSnapshot(collectionRef, (snapshot) => {
+        const qUnpaid = query(
+            fsCollection(db, `artifacts/${appId}/payments`),
+            where('isPaidForPackage', '==', false)
+        );
+        unsubs.push(onSnapshot(qUnpaid, snap => {
+            snap.docs.forEach(d => unpaidSet.set(d.id, { id: d.id, ...d.data() }));
+            // Limpiar docs que ya no son unpaid
+            unpaidSet.forEach((_, k) => { if (!snap.docs.find(d => d.id === k)) unpaidSet.delete(k); });
+            mergeSets();
+        }, err => console.error('Error payments/unpaid:', err)));
 
-                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const qPaid = query(
+            fsCollection(db, `artifacts/${appId}/payments`),
+            where('isPaidForPackage', '==', true),
+            where('recordedAt', '>=', cutoff12m)
+        );
+        unsubs.push(onSnapshot(qPaid, snap => {
+            snap.docs.forEach(d => paidSet.set(d.id, { id: d.id, ...d.data() }));
+            paidSet.forEach((_, k) => { if (!snap.docs.find(d => d.id === k)) paidSet.delete(k); });
+            mergeSets();
+        }, err => console.error('Error payments/paid:', err)));
 
-                if (name === 'expenseCategories') {
+        // Un solo collectionGroup para todos los comprobantes pendientes — reemplaza N listeners por tarjeta
+        try {
+            const qReceipts = query(collectionGroup(db, 'receipts'), where('status', '==', 'pending'));
+            unsubs.push(onSnapshot(qReceipts, snap => {
+                const ids = new Set();
+                snap.docs.forEach(d => {
+                    // path: artifacts/${appId}/students/${studentId}/receipts/${docId}
+                    const parts = d.ref.path.split('/');
+                    if (parts.length >= 4) ids.add(parts[3]);
+                });
+                setStudentsWithNewReceipts(ids);
+            }, () => {}));
+        } catch (e) { console.warn('collectionGroup receipts no disponible:', e.message); }
 
-                    // Sort categories alphabetically
-
-                    data.sort((a, b) => a.name.localeCompare(b.name));
-
-                }
-
-                setter(data);
-
-            }, (error) => {
-
-                console.error(`Error al obtener ${name}:`, error);
-
-                setMessage({ text: `Error al cargar ${name}: ${error.message}`, type: 'error' });
-
-            });
-
-        });
-
-
-
-        return () => unsubscribers.forEach(unsub => unsub());
-
+        return () => unsubs.forEach(u => u());
     }, [db, userId, appId]);
 
 
 
-    // Effect to synchronize student names
-
-    useEffect(() => {
-
-        if (!db || !students.length) return;
-
-
-
-        const updateNames = async () => {
-
-            const batch = writeBatch(db);
-
-            let updatesNeeded = false;
-
-
-
-            for (const student of students) {
-
-                // Sync names in scheduledClasses
-
-                const qClasses = query(fsCollection(db, `artifacts/${appId}/scheduledClasses`), where('studentId', '==', student.id));
-
-                const classesSnapshot = await getDocs(qClasses);
-
-                classesSnapshot.forEach(docSnapshot => {
-
-                    if (docSnapshot.data().studentName !== student.name) {
-
-                        batch.update(docSnapshot.ref, { studentName: student.name });
-
-                        updatesNeeded = true;
-
-                    }
-
-                });
-
-
-
-                // Sync names in payments
-
-                const qPayments = query(fsCollection(db, `artifacts/${appId}/payments`), where('studentId', '==', student.id));
-
-                const paymentsSnapshot = await getDocs(qPayments);
-
-                paymentsSnapshot.forEach(docSnapshot => {
-
-                    if (docSnapshot.data().studentName !== student.name) {
-
-                        batch.update(docSnapshot.ref, { studentName: student.name });
-
-                        updatesNeeded = true;
-
-                    }
-
-                });
-
-            }
-
-
-
-            if (updatesNeeded) {
-
-                try {
-
-                    await batch.commit();
-
-                    console.log("Batch update: student names synchronized.");
-
-                } catch (error) {
-
-                    console.error("Error synchronizing student names:", error);
-
-                
-
-    if (typeof setLoading === 'function') setLoading(false);
-
-}
-
-            }
-
-        };
-
-
-
-        updateNames();
-
-    }, [students, db, userId, appId]);
+    // updateNames eliminado: corría N×2 queries Firestore en cada snapshot de alumnos
 
 
 
@@ -1050,155 +1015,134 @@ const handleOpenStudentDetailsModal = useCallback((student, initialEditMode = fa
 
 
 const studentsWithStats = React.useMemo(() => {
+    // Pre-build Maps por studentId — O(N) en lugar de O(alumnos × N) con .filter anidados
+    // todayStr como dependencia garantiza que se recalcule exactamente a medianoche
+    const hoy = new Date(todayStr + 'T00:00:00'); // local midnight via string YYYY-MM-DD
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const endOfMonth   = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+    const classesByStudent = {};
+    scheduledClasses.forEach(cls => {
+        if (!classesByStudent[cls.studentId]) classesByStudent[cls.studentId] = [];
+        classesByStudent[cls.studentId].push(cls);
+    });
+
+    const paymentsByStudent = {};
+    allPayments.forEach(p => {
+        if (!paymentsByStudent[p.studentId]) paymentsByStudent[p.studentId] = [];
+        paymentsByStudent[p.studentId].push(p);
+    });
 
     return students.map(student => {
+        const studentClasses  = classesByStudent[student.id]  || [];
+        const studentPayments = paymentsByStudent[student.id] || [];
 
-        const studentUnpaidSingleClasses = scheduledClasses.filter(cls => cls.studentId === student.id && !cls.isPaid && cls.scheduleType === 'single');
-
-        const studentUnpaidMonthlyPackages = allPayments.filter(mp => mp.studentId === student.id && !mp.isPaidForPackage && mp.paymentMethod === 'monthly_package_payment');
-
-        // Abonos Flexibles "por clase": quedan como deuda (pendientes de cobro) hasta que se van pagando clase a clase
-        const studentUnpaidFlexCredits = allPayments
-            .filter(mp => mp.studentId === student.id && mp.paymentMethod === 'abono_flexible' && mp.isPaidForPackage === false)
+        const studentUnpaidSingleClasses   = studentClasses.filter(cls => !cls.isPaid && cls.scheduleType === 'single');
+        const studentUnpaidMonthlyPackages = studentPayments.filter(mp => !mp.isPaidForPackage && mp.paymentMethod === 'monthly_package_payment');
+        const studentUnpaidFlexCredits     = studentPayments
+            .filter(mp => mp.paymentMethod === 'abono_flexible' && mp.isPaidForPackage === false)
             .map(p => {
                 const total = p.amount || 0;
                 const montoPorClase = p.montoPorClase || (p.clasesTotal ? Math.round(total / p.clasesTotal) : total);
-                const pendingAmount = Math.max(total - (p.clasesPagadas || 0) * montoPorClase, 0);
-                return { ...p, amount: pendingAmount };
+                return { ...p, amount: Math.max(total - (p.clasesPagadas || 0) * montoPorClase, 0) };
             })
             .filter(p => p.amount > 0);
 
-
+        // Crédito flexible — calculado aquí para evitar onSnapshot por tarjeta
+        const flexPayments = studentPayments.filter(p => p.paymentMethod === 'abono_flexible');
+        let flexCredit = null;
+        if (flexPayments.length > 0) {
+            let fTotal = 0, fUsed = 0;
+            flexPayments.forEach(p => { fTotal += (p.clasesTotal || 0); fUsed += (p.clasesUsadas || 0); });
+            if (fTotal > 0) flexCredit = { remaining: fTotal - fUsed, total: fTotal };
+        }
 
         const unpaidItems = [
-
             ...studentUnpaidMonthlyPackages.map(p => ({ type: 'package', ...p })),
-
             ...studentUnpaidSingleClasses.map(c => ({ type: 'class', ...c })),
-
             ...studentUnpaidFlexCredits.map(p => ({ type: 'flex_credit', ...p })),
-
-        ].sort((a,b) => (a.classDate || a.periodStartDate).localeCompare(b.classDate || b.periodStartDate));
-
-
-
-        const hoy = new Date();
-
-        hoy.setHours(0, 0, 0, 0);
-
-
+        ].sort((a, b) => (a.classDate || a.periodStartDate).localeCompare(b.classDate || b.periodStartDate));
 
         let pendingBalance = 0;
-
         let pendingBalanceWithSurcharge = 0;
-
         let aplicaRecargoGeneral = false;
 
-
-
         unpaidItems.forEach(item => {
-
             const baseAmount = item.amount || item.price || 0;
-
             pendingBalance += baseAmount;
-
-
-
             const itemDate = new Date((item.periodStartDate || item.classDate) + 'T12:00:00');
-
-            const dueDate = new Date(itemDate.getFullYear(), itemDate.getMonth(), 8, 23, 59, 59, 999);
-
-
-
-            if (hoy > dueDate) {
-
+            // Recargo desde el día 9 inclusive (>= 9 es idéntico a > 8 pero más explícito)
+            const esMesActual = itemDate.getFullYear() === hoy.getFullYear() && itemDate.getMonth() === hoy.getMonth();
+            if (esMesActual && hoy.getDate() >= 9) {
                 pendingBalanceWithSurcharge += Math.round(baseAmount * 1.10);
-
                 aplicaRecargoGeneral = true;
-
             } else {
-
                 pendingBalanceWithSurcharge += baseAmount;
-
             }
-
         });
 
-        
+        const totalPaidUnconsumedClasses = studentClasses.filter(cls =>
+            cls.isPaid && !cls.attendanceStatus && (cls.status === 'scheduled' || cls.status === undefined)
+        ).length;
 
-        const totalPaidUnconsumedClasses = scheduledClasses.filter(cls => cls.studentId === student.id && cls.isPaid && !cls.attendanceStatus && (cls.status === 'scheduled' || cls.status === undefined)).length;
-
-        const scheduledClassesDetailed = scheduledClasses.filter(cls => cls.studentId === student.id && (cls.status === 'scheduled' || cls.status === undefined));
-
-        
-
-        const now = new Date();
-
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-
-
-
-        const paidClassesThisMonthDetails = scheduledClasses.filter(cls =>
-
-            cls.studentId === student.id &&
-
-            cls.isPaid === true &&
-
-            cls.classDate >= startOfMonth &&
-
-            cls.classDate <= endOfMonth
-
+        const scheduledClassesDetailed = studentClasses.filter(cls =>
+            cls.status === 'scheduled' || cls.status === undefined
         );
 
+        const paidClassesThisMonthDetails = studentClasses.filter(cls =>
+            cls.isPaid === true && cls.classDate >= startOfMonth && cls.classDate <= endOfMonth
+        );
         const totalPaidClassesThisMonth = paidClassesThisMonthDetails.length;
 
-
-
-        // --- LÓGICA NUEVA PARA DETECTAR ENTRADAS VISIBLES ---
-
         const hasVisibleTickets = (events || []).some(event => {
-
             const participant = (event.participants || []).find(p => (p.id || p.studentId) === student.id);
-
             return participant && participant.ticketsVisible === true;
-
         });
 
-        // --- FIN DE LA LÓGICA NUEVA ---
+        // Última clase asistida (presente) o pagada
+        const attendedClasses = studentClasses
+            .filter(c => c.attendanceStatus === 'presente' && c.classDate)
+            .map(c => c.classDate)
+            .sort()
+            .reverse();
+        const lastClassDate = attendedClasses[0] || null;
 
-
+        // Último pago registrado (por recordedAt, luego por date)
+        const paidPayments = studentPayments.filter(p => p.isPaidForPackage === true);
+        let lastPaymentDate = null;
+        if (paidPayments.length > 0) {
+            const sorted = paidPayments.slice().sort((a, b) => {
+                const ta = a.recordedAt?.toDate?.() || (a.recordedAt ? new Date(a.recordedAt) : null) || (a.date ? new Date(a.date + 'T00:00:00') : null);
+                const tb = b.recordedAt?.toDate?.() || (b.recordedAt ? new Date(b.recordedAt) : null) || (b.date ? new Date(b.date + 'T00:00:00') : null);
+                if (!ta && !tb) return 0;
+                if (!ta) return 1;
+                if (!tb) return -1;
+                return tb - ta;
+            });
+            const latest = sorted[0];
+            const d = latest.recordedAt?.toDate?.() || (latest.recordedAt ? new Date(latest.recordedAt) : null) || (latest.date ? new Date(latest.date + 'T00:00:00') : null);
+            if (d) lastPaymentDate = d.toISOString().split('T')[0];
+        }
 
         return {
-
             ...student,
-
             pendingBalance,
-
             pendingBalanceWithSurcharge,
-
             aplicaRecargo: aplicaRecargoGeneral,
-
             totalPaidUnconsumedClasses,
-
             scheduledClassesDetailed,
-
             totalPaidClassesThisMonth,
-
             paidClassesThisMonthDetails,
-
             unpaidItems,
-
             hasAnyUnpaidItems: pendingBalance > 0,
-
-            hasVisibleTickets, // <-- Nueva propiedad añadida
-
+            hasVisibleTickets,
+            flexCredit,
+            lastClassDate,
+            lastPaymentDate,
         };
-
     });
-
-}, [students, scheduledClasses, allPayments, events]); // <-- Se añade "events" a la lista
+}, [students, scheduledClasses, allPayments, events, todayStr]);
 
 // Ref con el valor más reciente de studentsWithStats, para que los handlers
 // que lo necesitan puedan tener una referencia ESTABLE (useCallback con deps
@@ -1263,20 +1207,29 @@ const calendarStripeStyles = `
 const handleOpenRenewSubscriptionModal = (student) => {
     try {
         const allStudentPackages = (Array.isArray(allPayments) ? allPayments : [])
-            .filter(p => p.studentId === student.id && p.paymentMethod === 'monthly_package_payment');
+            .filter(p =>
+                p.studentId === student.id &&
+                p.isPaidForPackage === true &&
+                (
+                    p.paymentMethod === 'monthly_package_payment' ||
+                    // Pagos viejos donde MarkPaymentForm sobreescribió paymentMethod
+                    // pero conservaron los campos estructurales del abono
+                    (p.periodStartDate && p.dayOfWeek !== undefined && p.classType)
+                )
+            );
 
         if (allStudentPackages.length === 0) {
-            showMessage('Este alumno no tiene abonos mensuales previos para renovar.', 'info');
+            alert('Este alumno no tiene abonos mensuales pagados para renovar.\n\nSi querés crear un nuevo abono, usá "Marcar Pago" y elegí la modalidad de abono mensual.');
             return;
         }
 
-        // --- LÓGICA CORREGIDA Y SIMPLIFICADA ---
+        // Solo el último abono PAGADO por cada clave de horario
         const latestPackagesMap = new Map();
 
         for (const payment of allStudentPackages) {
             const key = `${payment.classType}-${payment.dayOfWeek}-${payment.startTime}`;
             const existing = latestPackagesMap.get(key);
-            
+
             if (!existing || new Date(payment.periodStartDate) > new Date(existing.periodStartDate)) {
                 latestPackagesMap.set(key, payment);
             }
@@ -1294,20 +1247,8 @@ const handleOpenRenewSubscriptionModal = (student) => {
             const formattedNextPeriodLabel = nextPeriodLabel.charAt(0).toUpperCase() + nextPeriodLabel.slice(1);
 
             let amountForRenewal = Number(latestPayment.amount) || 0;
-            const paymentDateValue = latestPayment.paymentDate || latestPayment.paidAt;
-            
-            // 1. Quitar el recargo si el último pago fue con recargo (para obtener la cuota base)
-            if (paymentDateValue) {
-                const paymentDate = paymentDateValue.toDate ? paymentDateValue.toDate() : new Date(paymentDateValue);
-                if (!isNaN(paymentDate.getTime())) {
-                    const dayOfMonthPaid = paymentDate.getDate();
-                    if (dayOfMonthPaid > 8 && amountForRenewal > 0) {
-                        amountForRenewal = Math.round(amountForRenewal / 1.1);
-                    }
-                }
-            }
 
-            // 2. *** LÓGICA CLAVE DE LA MATRÍCULA ***
+            // *** LÓGICA CLAVE DE LA MATRÍCULA ***
             const isDecemberRenewal = nextPeriodMonth.toLowerCase() === 'diciembre';
             let matricula = 0;
             
@@ -1356,6 +1297,34 @@ const handleOpenRenewSubscriptionModal = (student) => {
     }
 };
 // ▲▲▲ FIN DE LA FUNCIÓN A REEMPLAZAR ▲▲▲
+
+const handleDeleteRenewalPackage = async (student, pkg) => {
+    if (!window.confirm(`¿Eliminar el abono "${mapClassTypeToSpanish ? mapClassTypeToSpanish(pkg.classType) : pkg.classType} ${pkg.startTime}" del historial de renovación?\n\nSe eliminarán todos los registros de pago de ese horario para este alumno. Los pagos pasados no se podrán recuperar.`)) return;
+    try {
+        const q = query(
+            fsCollection(db, `artifacts/${appId}/payments`),
+            where('studentId', '==', student.id),
+            where('paymentMethod', '==', 'monthly_package_payment'),
+            where('classType', '==', pkg.classType),
+            where('dayOfWeek', '==', pkg.dayOfWeek),
+            where('startTime', '==', pkg.startTime),
+        );
+        const snap = await getDocs(q);
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        setRenewalData(prev => prev ? ({
+            ...prev,
+            packages: prev.packages.filter(p =>
+                !(p.classType === pkg.classType && p.dayOfWeek === pkg.dayOfWeek && p.startTime === pkg.startTime)
+            )
+        }) : prev);
+        showMessage('Abono eliminado del historial.', 'success');
+    } catch (e) {
+        showMessage('Error al eliminar: ' + e.message, 'error');
+    }
+};
+
 const handleRenewSelectedSubscription = async (student, packageToRenew, newAmount) => {
     setShowRenewSubscriptionModal(false);
     
@@ -1493,7 +1462,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
 
         />
 
-        <div className="min-h-screen flex flex-col font-inter text-sm text-gray-900 pb-24 sm:pb-0" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="min-h-screen flex flex-col font-inter text-sm text-gray-900 pb-24 sm:pb-0 max-w-[1600px] mx-auto w-full sm:shadow-2xl sm:shadow-slate-300/60" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
 
             {/* ══════ TOP BAR FULL-WIDTH ══════ */}
             <div
@@ -1635,6 +1604,10 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
                     <button onClick={() => setShowGlobalRepertoire(true)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition text-sm font-medium">
                       <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
                       Repertorio
+                    </button>
+                    <button onClick={() => setShowExercisePacksModal(true)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition text-sm font-medium">
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                      Packs de ejercicios
                     </button>
                   </div>
 
@@ -2102,21 +2075,14 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
 </CalendarShell>
 
                 <Dashboard
-
     studentsWithStats={studentsWithStats}
-
     onOpenStudentDetailsModal={handleOpenStudentDetailsModal}
-
     onRestoreStudent={handleRestoreStudent}
-
     scheduledClasses={scheduledClasses}
-
     db={db}
-
     appId={appId}
-
     showMessage={showMessage}
-
+    studentsWithNewReceipts={studentsWithNewReceipts}
 />
 
                 </div>
@@ -2284,15 +2250,11 @@ db={db}
 
 
 <RenewSubscriptionModal
-
     isOpen={showRenewSubscriptionModal}
-
     onClose={() => setShowRenewSubscriptionModal(false)}
-
     renewalData={renewalData}
-
     onRenew={handleRenewSelectedSubscription}
-
+    onDeletePackage={(pkg) => handleDeleteRenewalPackage(renewalData?.student, pkg)}
 />
 
 <GlobalRepertoireModal
@@ -2349,6 +2311,9 @@ size="full"
 {showTrialRequestsModal && (
   <TrialRequestsPanel db={db} appId={appId} onClose={() => setShowTrialRequestsModal(false)}
     onConvertToStudent={(req) => { setShowTrialRequestsModal(false); handleConvertTrialToStudent(req); }} />
+)}
+{showExercisePacksModal && (
+  <ExercisePacksManager db={db} appId={appId} onClose={() => setShowExercisePacksModal(false)} />
 )}
 
               </div>{/* fin flex-1 min-w-0 */}

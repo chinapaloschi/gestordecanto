@@ -71,8 +71,8 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
 
     const handleBlockDate = async (e) => {
         e.preventDefault();
-        if (!startDate || !endDate || !reason.trim()) {
-            showMessage('Completá las fechas y el motivo.', 'error'); return;
+        if (!startDate || !endDate) {
+            showMessage('Completá las fechas.', 'error'); return;
         }
         if (startDate > endDate) {
             showMessage('La fecha inicio no puede ser posterior al fin.', 'error'); return;
@@ -91,7 +91,7 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
                 const exists = blockedSlots.some(s => s.date === d && (isAllDay ? s.isAllDay !== false : false));
                 if (!exists) {
                     batch.set(doc(fsCollection(db, `artifacts/${appId}/blockedSlots`)), {
-                        date: d, reason: reason.trim(),
+                        date: d, reason: reason.trim() || 'Sin motivo',
                         isAllDay, startTime: isAllDay ? null : startTime,
                         endTime: isAllDay ? null : endTime,
                         createdAt: new Date(),
@@ -175,7 +175,7 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
                         </div>
                         <div>
                             <label className={fldLabel}>Hasta</label>
-                            <input type="date" value={endDate} onChange={e => { if(e.target.value >= startDate) setEndDate(e.target.value); }} className={fldInput} required/>
+                            <input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)} className={fldInput} required/>
                         </div>
                     </div>
 

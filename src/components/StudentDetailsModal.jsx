@@ -116,12 +116,14 @@ export const StudentDetailsModal = ({
   onOpenScheduleClassModal, onOpenMarkPaymentModal, onOpenRenewSubscriptionModal,
   onOpenRescheduleClassModal, onArchiveStudentRequest,
 }) => {
-  const [localStudent,   setLocalStudent]   = useState(studentData);
-  const [isEditing,      setIsEditing]      = useState(initialEditMode);
-  const [saving,         setSaving]         = useState(false);
-  const [showWaMenu,     setShowWaMenu]     = useState(false);
-  const [showRepertoire, setShowRepertoire] = useState(false);
-  const [showReceipts,   setShowReceipts]   = useState(false);
+  const [localStudent,      setLocalStudent]      = useState(studentData);
+  const [isEditing,         setIsEditing]         = useState(initialEditMode);
+  const [saving,            setSaving]            = useState(false);
+  const [showWaMenu,        setShowWaMenu]        = useState(false);
+  const [showRepertoire,    setShowRepertoire]    = useState(false);
+  const [showReceipts,      setShowReceipts]      = useState(false);
+  const [showDeleteDebt,    setShowDeleteDebt]    = useState(false);
+  const [deletingDebt,      setDeletingDebt]      = useState(false);
 
   // Data fetched
   const [nextClass,      setNextClass]      = useState(null);
@@ -236,7 +238,7 @@ export const StudentDetailsModal = ({
   if (!localStudent) return null;
 
   const firstName = (localStudent.name || '').split(' ')[0];
-  const debt = localStudent.pendingBalance || 0;
+  const debt = (localStudent.aplicaRecargo ? localStudent.pendingBalanceWithSurcharge : localStudent.pendingBalance) || 0;
   const hasDebt = debt > 0;
   const waRaw = (localStudent.whatsapp || localStudent.contactInfo || '').replace(/\D/g, '');
   const hasWa = waRaw.length >= 8;
@@ -272,6 +274,39 @@ export const StudentDetailsModal = ({
   const handleAction = (action, shouldClose = true) => {
     if (action) action(localStudent);
     if (shouldClose) onClose();
+  };
+
+  const handleDeleteDebt = async () => {
+    if (!db || !appId || !localStudent?.id) return;
+    setDeletingDebt(true);
+    try {
+      const sid = localStudent.id;
+      // Eliminar abonos mensuales pendientes
+      const packSnap = await getDocs(query(
+        fsCollection(db, `artifacts/${appId}/payments`),
+        where('studentId', '==', sid),
+        where('isPaidForPackage', '==', false),
+      ));
+      for (const d of packSnap.docs) {
+        await deleteDoc(doc(db, `artifacts/${appId}/payments`, d.id));
+      }
+      // Marcar clases individuales impagás como "sin cobro"
+      const clsSnap = await getDocs(query(
+        fsCollection(db, `artifacts/${appId}/scheduledClasses`),
+        where('studentId', '==', sid),
+        where('isPaid', '==', false),
+      ));
+      for (const d of clsSnap.docs) {
+        await deleteDoc(doc(db, `artifacts/${appId}/scheduledClasses`, d.id));
+      }
+      showMessage('Deuda eliminada correctamente.', 'success');
+      setShowDeleteDebt(false);
+      onClose();
+    } catch (err) {
+      showMessage('Error al eliminar deuda: ' + err.message, 'error');
+    } finally {
+      setDeletingDebt(false);
+    }
   };
 
   const toggleManualReceipt = async (val) => {
@@ -520,6 +555,13 @@ export const StudentDetailsModal = ({
               />
               <SecBtn icon={<IconTrash/>} label="Elim. Alumno" onClick={() => handleAction(onDeleteStudentRequest)} iconColor="text-red-500" danger />
             </div>
+            {hasDebt && (
+              <button
+                onClick={() => setShowDeleteDebt(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-bold transition">
+                <IconTrash /> Eliminar deuda pendiente
+              </button>
+            )}
           </div>
 
           {/* ÚLTIMOS PAGOS */}
@@ -687,6 +729,44 @@ export const StudentDetailsModal = ({
         db={db} appId={appId} studentId={localStudent.id} showMessage={showMessage} />
       <ReceiptsModal isOpen={showReceipts} onClose={() => setShowReceipts(false)}
         db={db} appId={appId} student={{ ...localStudent, debt: localStudent.pendingBalance || 0 }} />
+
+      {/* Modal confirmar eliminar deuda */}
+      {showDeleteDebt && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <IconTrash />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-base">¿Eliminar deuda?</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{localStudent.name}</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600">
+              Esto va a eliminar todos los abonos y clases pendientes de cobro de este alumno. La acción <strong>no se puede deshacer</strong>.
+            </p>
+            <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-center">
+              <span className="text-2xl font-black text-red-600">{formatMoneyAr(debt)}</span>
+              <p className="text-xs text-red-400 mt-0.5">deuda a eliminar</p>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setShowDeleteDebt(false)}
+                disabled={deletingDebt}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition">
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteDebt}
+                disabled={deletingDebt}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition disabled:opacity-60">
+                {deletingDebt ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

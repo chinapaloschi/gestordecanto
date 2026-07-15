@@ -401,7 +401,7 @@ const getCurrentWeekRange = () => {
 
     const totalBase = packageSum + classSum + flexSum;
 
-    const aplicaRecargo = new Date().getDate() > 8;
+    const aplicaRecargo = new Date().getDate() >= 9;
 
     const totalHoy = (totalBase > 0) ? (aplicaRecargo ? Math.round(totalBase * 1.10) : totalBase) : null;
 
@@ -1161,7 +1161,7 @@ const renderCalendarGrid = () => {
 
           {/* ════════ TAB: INICIO ════════ */}
           {activeTab === 'inicio' && (() => {
-            const aplicaRecargo = new Date().getDate() > 8;
+            const aplicaRecargo = new Date().getDate() >= 9;
             const allClasses = [...(monthlyByType.individual || []), ...(monthlyByType.grupal || []), ...(monthlyByType.otras || [])];
             const now = new Date();
             const next = allClasses

@@ -10,31 +10,37 @@ const PAYMENT_METHODS = [
   { id: 'mercadopago',   label: 'MercadoPago',   icon: '📱' },
 ];
 
-// Calcula cuántas veces cae un día de la semana en un período (ej: cuántos martes en Julio 2026)
-function countClassesInPeriod(dayOfWeek, nextPeriodLabel) {
+// Devuelve las fechas exactas de cada clase en el período
+function getClassDatesInPeriod(dayOfWeek, nextPeriodLabel) {
   try {
     const meses = { enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,julio:6,agosto:7,septiembre:8,octubre:9,noviembre:10,diciembre:11 };
     const parts = (nextPeriodLabel || '').toLowerCase().split(' de ');
-    if (parts.length < 2) return null;
+    if (parts.length < 2) return [];
     const month = meses[parts[0].trim()];
     const year  = parseInt(parts[1].trim());
-    if (month === undefined || isNaN(year)) return null;
-    const target = parseInt(dayOfWeek); // 0=Dom, 1=Lun...
-    let count = 0;
+    if (month === undefined || isNaN(year)) return [];
+    const target = parseInt(dayOfWeek);
     const days = new Date(year, month + 1, 0).getDate();
+    const dates = [];
     for (let d = 1; d <= days; d++) {
-      if (new Date(year, month, d).getDay() === target) count++;
+      if (new Date(year, month, d).getDay() === target) dates.push(d);
     }
-    return count;
-  } catch { return null; }
+    return dates;
+  } catch { return []; }
+}
+
+function countClassesInPeriod(dayOfWeek, nextPeriodLabel) {
+  const dates = getClassDatesInPeriod(dayOfWeek, nextPeriodLabel);
+  return dates.length > 0 ? dates.length : null;
 }
 
 // Una card de renovación por paquete
-const RenewalCard = ({ pkg, index, onRenew }) => {
+const RenewalCard = ({ pkg, index, onRenew, onDelete }) => {
   const prevAmount      = pkg.baseAmount || pkg.amount || 0;
   const [newAmount, setNewAmount]   = useState(pkg.amount || 0);
   const [payMethod, setPayMethod]   = useState('transferencia');
   const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting]     = useState(false);
 
   const quickOptions = [
     { label: 'Sin cambio',    value: prevAmount },
@@ -44,8 +50,10 @@ const RenewalCard = ({ pkg, index, onRenew }) => {
 
   const diff     = newAmount - prevAmount;
   const diffPct  = prevAmount > 0 ? ((diff / prevAmount) * 100).toFixed(0) : 0;
-  const classCount = countClassesInPeriod(pkg.dayOfWeek, pkg.nextPeriodLabel);
-  const dayLabel = daysOfWeekFull.find(d => d.value === pkg.dayOfWeek)?.label || '';
+  const classDates  = getClassDatesInPeriod(pkg.dayOfWeek, pkg.nextPeriodLabel);
+  const classCount  = classDates.length > 0 ? classDates.length : null;
+  const dayLabel    = daysOfWeekFull.find(d => d.value === pkg.dayOfWeek)?.label || '';
+  const monthShort  = (pkg.nextPeriodLabel || '').split(' de ')[0];
 
   const handleConfirm = async () => {
     setConfirming(true);
@@ -56,13 +64,18 @@ const RenewalCard = ({ pkg, index, onRenew }) => {
     }
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try { await onDelete(pkg); } finally { setDeleting(false); }
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
       {/* Header de la clase */}
       <div className="bg-gradient-to-r from-violet-700 to-violet-500 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-sm">
               {mapClassTypeToSpanish(pkg.classType)} · {dayLabel} {pkg.startTime}
             </p>
@@ -70,14 +83,40 @@ const RenewalCard = ({ pkg, index, onRenew }) => {
               Próximo período: <strong className="text-white">{pkg.nextPeriodLabel}</strong>
             </p>
           </div>
-          {classCount && (
-            <div className="text-right bg-white/15 rounded-xl px-3 py-1.5">
-              <p className="text-white font-black text-lg leading-none">{classCount}</p>
-              <p className="text-violet-200 text-[9px] uppercase tracking-wide">clases</p>
-            </div>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {classCount && (
+              <div className="text-right bg-white/15 rounded-xl px-3 py-1.5">
+                <p className="text-white font-black text-lg leading-none">{classCount}</p>
+                <p className="text-violet-200 text-[9px] uppercase tracking-wide">clases</p>
+              </div>
+            )}
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              title="Eliminar este abono del historial"
+              className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/15 hover:bg-red-500 text-white transition disabled:opacity-50"
+            >
+              {deleting
+                ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/>
+                : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+              }
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Fechas de las clases */}
+      {classDates.length > 0 && (
+        <div className="px-4 py-2.5 bg-violet-50 border-b border-violet-100 flex flex-wrap gap-1.5">
+          {classDates.map(d => (
+            <span key={d} className="inline-flex items-center text-[11px] font-bold text-violet-700 bg-white border border-violet-200 rounded-lg px-2 py-0.5">
+              {dayLabel.slice(0,3)} {d}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="p-4 space-y-4">
 
@@ -174,14 +213,11 @@ const RenewalCard = ({ pkg, index, onRenew }) => {
   );
 };
 
-export const RenewSubscriptionModal = ({ isOpen, onClose, renewalData, onRenew }) => {
+export const RenewSubscriptionModal = ({ isOpen, onClose, renewalData, onRenew, onDeletePackage }) => {
   if (!isOpen || !renewalData) return null;
   const { student, packages } = renewalData;
 
-  // Wrapper para adaptar la firma de onRenew
-  const handleRenew = (pkg, amount, payMethod) => {
-    return onRenew(student, pkg, amount, payMethod);
-  };
+  const handleRenew = (pkg, amount, payMethod) => onRenew(student, pkg, amount, payMethod);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="md">
@@ -208,7 +244,7 @@ export const RenewSubscriptionModal = ({ isOpen, onClose, renewalData, onRenew }
         <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-gray-50">
           {packages.length > 0 ? (
             packages.map((pkg, index) => (
-              <RenewalCard key={index} pkg={pkg} index={index} onRenew={handleRenew} />
+              <RenewalCard key={`${pkg.classType}-${pkg.dayOfWeek}-${pkg.startTime}`} pkg={pkg} index={index} onRenew={handleRenew} onDelete={onDeletePackage} />
             ))
           ) : (
             <div className="text-center py-10 text-gray-500">
