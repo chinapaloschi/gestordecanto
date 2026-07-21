@@ -233,7 +233,7 @@ export function ProfilePictureUploader({ db, appId, student, setStudent, size = 
         <img
             src={student.photoURL || fallbackAvatarUrl}
             alt="Perfil"
-            className="h-full w-full rounded-full object-cover"
+            className="h-full w-full rounded-full object-cover object-top"
             // Si la URL de la foto falla, carga el avatar de fallback
             onError={(e) => { if (e.target.src !== fallbackAvatarUrl) e.target.src = fallbackAvatarUrl; }}
         />
