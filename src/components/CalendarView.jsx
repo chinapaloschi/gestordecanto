@@ -435,6 +435,10 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                                 
                                 const classes = scheduledClasses.filter(c => c.classDate === formattedDate && parseInt(c.startTime.split(':')[0]) < 13 && (c.status === 'scheduled' || !c.status));
                                 const groupedClasses = groupClassesForWeeklyView(classes);
+                                const cancelledClasses = isFullDayBlocked
+                                    ? scheduledClasses.filter(c => c.classDate === formattedDate && parseInt(c.startTime.split(':')[0]) < 13 && c.status === 'cancelled')
+                                    : [];
+                                const groupedCancelled = groupClassesForWeeklyView(cancelledClasses);
                                 const bgColorClass = isFullDayBlocked ? 'bg-gray-100' : (isToday ? 'bg-rose-50/30' : 'bg-white');
 
                                 return (
@@ -453,9 +457,28 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                                         
                                         {/* Bloqueo Total */}
                                         {isFullDayBlocked && <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"><span className="text-sm font-semibold text-gray-500 transform rotate-45 opacity-60">Bloqueado</span></div>}
-                                        
+
                                         {/* ✅ Bloqueo Parcial (Solo si no es bloqueo total) */}
                                         {!isFullDayBlocked && renderPartialBlocks(date, 'morning')}
+
+                                        {/* Clases suspendidas por el bloqueo — se muestran de fondo, bien tenues */}
+                                        {groupedCancelled.map(group => {
+                                            const cls = group[0];
+                                            const [h, m] = cls.startTime.split(':').map(Number);
+                                            const top = ((h - 8) * 60) + m;
+                                            const studentNames = group.map(g => g.studentName).join(', ');
+                                            return (
+                                                <div key={`cancelled-${group.map(c => c.id).join('-')}`}
+                                                    className="absolute w-[calc(100%-6px)] overflow-hidden rounded bg-gray-400/20 border border-dashed border-gray-400/40 pointer-events-none opacity-60 grayscale"
+                                                    style={{ top: `${top}px`, left: '3px', height: `${Math.max((cls.duration || 60) - 2, 18)}px`, zIndex: 10 }}
+                                                    title={`Suspendida por bloqueo: ${cls.startTime} · ${studentNames}`}>
+                                                    <div className="px-1.5 py-1 h-full flex items-center gap-1 min-w-0">
+                                                        <span className="text-[10px] font-bold tabular-nums flex-shrink-0 text-gray-500 line-through">{cls.startTime}</span>
+                                                        <span className="text-[11px] font-medium truncate flex-1 text-gray-500 line-through">{studentNames}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
 
                                         {groupedClasses.map(group => {
                                             const cls = group[0];
@@ -510,6 +533,10 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                                 const bgColorClass = isFullDayBlocked ? 'bg-gray-100' : (isToday ? 'bg-rose-50/30' : 'bg-white');
                                 const classes = scheduledClasses.filter(c => c.classDate === formattedDate && parseInt(c.startTime.split(':')[0]) >= 13 && (c.isPaid || c.monthlyPaymentRefId) && (c.status === 'scheduled' || !c.status));
                                 const groupedClasses = groupClassesForWeeklyView(classes);
+                                const cancelledClasses = isFullDayBlocked
+                                    ? scheduledClasses.filter(c => c.classDate === formattedDate && parseInt(c.startTime.split(':')[0]) >= 13 && c.status === 'cancelled')
+                                    : [];
+                                const groupedCancelled = groupClassesForWeeklyView(cancelledClasses);
                                 return (
                                     <div key={formattedDate} className={`relative border-r border-b border-gray-100 ${bgColorClass}`} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, date, 'afternoon')}>
                                         {afternoonTimeSlots.map(t => (
@@ -525,9 +552,28 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                                         ))}
                                         
                                         {isFullDayBlocked && <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"><span className="text-sm font-semibold text-gray-500 transform rotate-45 opacity-60">Bloqueado</span></div>}
-                                        
+
                                         {/* ✅ Bloqueo Parcial (Tarde) */}
                                         {!isFullDayBlocked && renderPartialBlocks(date, 'afternoon')}
+
+                                        {/* Clases suspendidas por el bloqueo — se muestran de fondo, bien tenues */}
+                                        {groupedCancelled.map(group => {
+                                            const cls = group[0];
+                                            const [h, m] = cls.startTime.split(':').map(Number);
+                                            const top = ((h - 13) * 60) + m;
+                                            const studentNames = group.map(g => g.studentName).join(', ');
+                                            return (
+                                                <div key={`cancelled-${group.map(c => c.id).join('-')}`}
+                                                    className="absolute w-[calc(100%-6px)] overflow-hidden rounded bg-gray-400/20 border border-dashed border-gray-400/40 pointer-events-none opacity-60 grayscale"
+                                                    style={{ top: `${top}px`, left: '3px', height: `${Math.max((cls.duration || 60) - 2, 18)}px`, zIndex: 10 }}
+                                                    title={`Suspendida por bloqueo: ${cls.startTime} · ${studentNames}`}>
+                                                    <div className="px-1.5 py-1 h-full flex items-center gap-1 min-w-0">
+                                                        <span className="text-[10px] font-bold tabular-nums flex-shrink-0 text-gray-500 line-through">{cls.startTime}</span>
+                                                        <span className="text-[11px] font-medium truncate flex-1 text-gray-500 line-through">{studentNames}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
 
                                         {groupedClasses.map(group => {
                                             const cls = group[0];
