@@ -794,6 +794,7 @@ export function PortalAlumno({ db, appId }) {
   const [portalClasses, setPortalClasses] = useState([]);
   const [portalReceipts, setPortalReceipts] = useState([]);
   const [portalRepertoire, setPortalRepertoire] = useState([]);
+  const [portalBlockedSlots, setPortalBlockedSlots] = useState([]);
 
   React.useEffect(() => { disablePullToRefreshIOS(); }, []);
   // Abrir popup de eventos al iniciar sesión si hay eventos no confirmados
@@ -847,6 +848,16 @@ React.useEffect(() => {
     );
     const unsub = onSnapshot(q, snap =>
       setPortalClasses(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      () => {}
+    );
+    return unsub;
+  }, [student?.id]);
+
+  useEffect(() => {
+    if (!student?.id) return;
+    const unsub = onSnapshot(
+      fsCollection(db, `artifacts/${appId}/blockedSlots`),
+      snap => setPortalBlockedSlots(snap.docs.map(d => d.data())),
       () => {}
     );
     return unsub;
@@ -936,8 +947,13 @@ React.useEffect(() => {
             const todayStr = toLocalYYYYMMDD(new Date());
             const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
             const tomorrowStr = toLocalYYYYMMDD(tomorrow);
+            const isBlocked = (c) => portalBlockedSlots.some(b => {
+              if (b.date !== c.classDate) return false;
+              if (b.isAllDay !== false) return true;
+              return (c.startTime || '') < b.endTime && (c.endTime || '') > b.startTime;
+            });
             const next = portalClasses
-              .filter(c => c.classDate >= todayStr && c.status !== 'cancelled')
+              .filter(c => c.classDate >= todayStr && c.status !== 'cancelled' && !isBlocked(c))
               .sort((a, b) => {
                 const d = a.classDate.localeCompare(b.classDate);
                 return d !== 0 ? d : (a.startTime || '').localeCompare(b.startTime || '');

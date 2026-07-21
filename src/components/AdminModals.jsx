@@ -83,8 +83,8 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
         setLoading(true);
         try {
             const batch = writeBatch(db);
-            const cur = new Date(startDate + 'T00:00:00Z');
-            const last = new Date(endDate  + 'T00:00:00Z');
+            const cur = new Date(startDate + 'T12:00:00');
+            const last = new Date(endDate  + 'T12:00:00');
             let count = 0;
             while (cur <= last) {
                 const d = toLocalYYYYMMDD(cur);
@@ -100,6 +100,15 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
                 }
                 cur.setDate(cur.getDate() + 1);
             }
+
+            // Cancelar las clases ya agendadas que caen dentro del rango/horario bloqueado
+            const classesToCancel = isAllDay
+                ? affectedClasses
+                : affectedClasses.filter(cls => cls.startTime < endTime && cls.endTime > startTime);
+            classesToCancel.forEach(cls => {
+                batch.update(doc(db, `artifacts/${appId}/scheduledClasses`, cls.id), { status: 'cancelled' });
+            });
+
             await batch.commit();
 
             // Notificación push a alumnos afectados
@@ -115,7 +124,8 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
                 } catch {}
             }
 
-            showMessage(`✅ ${count} día${count!==1?'s':''} bloqueado${count!==1?'s':''} correctamente.`, 'success');
+            const cancelMsg = classesToCancel.length > 0 ? ` ${classesToCancel.length} clase${classesToCancel.length!==1?'s':''} cancelada${classesToCancel.length!==1?'s':''}.` : '';
+            showMessage(`✅ ${count} día${count!==1?'s':''} bloqueado${count!==1?'s':''} correctamente.${cancelMsg}`, 'success');
             setReason(''); setStartDate(today); setEndDate(today);
         } catch (err) {
             showMessage(`Error: ${err.message}`, 'error');

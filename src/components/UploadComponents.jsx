@@ -163,7 +163,7 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, 
   );
 }
 
-export function ProfilePictureUploader({ db, appId, student, setStudent }) {
+export function ProfilePictureUploader({ db, appId, student, setStudent, size = 'lg' }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
@@ -212,8 +212,11 @@ export function ProfilePictureUploader({ db, appId, student, setStudent }) {
   // Preparamos la URL del avatar de fallback
   const fallbackAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.fullName || student.name || 'SP')}&background=fecdd3&color=9f1239&bold=true`;
 
+  const isSm = size === 'sm';
+  const avatarClass = isSm ? 'h-10 w-10' : 'h-32 w-32';
+
   return (
-    <div className="flex flex-col items-center gap-2 mt-4">
+    <div className={isSm ? 'flex-shrink-0' : 'flex flex-col items-center gap-2 mt-4'}>
       <input
         type="file"
         accept="image/*"
@@ -223,23 +226,23 @@ export function ProfilePictureUploader({ db, appId, student, setStudent }) {
       />
       <button
         onClick={triggerFileSelect}
-        className="relative h-32 w-32 rounded-full group bg-gray-200"
+        className={`relative ${avatarClass} rounded-full group bg-gray-200 flex-shrink-0`}
         title="Cambiar foto de perfil"
         disabled={uploading}
       >
-        <img 
-            src={student.photoURL || fallbackAvatarUrl} 
-            alt="Perfil" 
-            className="h-full w-full rounded-full object-cover" 
+        <img
+            src={student.photoURL || fallbackAvatarUrl}
+            alt="Perfil"
+            className="h-full w-full rounded-full object-cover"
             // Si la URL de la foto falla, carga el avatar de fallback
             onError={(e) => { if (e.target.src !== fallbackAvatarUrl) e.target.src = fallbackAvatarUrl; }}
         />
         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full flex items-center justify-center transition-opacity">
-          {!uploading && <span className="text-white text-xs font-bold opacity-0 group-hover:opacity-100">Cambiar</span>}
-          {uploading && <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
+          {!uploading && !isSm && <span className="text-white text-xs font-bold opacity-0 group-hover:opacity-100">Cambiar</span>}
+          {uploading && <div className={`${isSm ? 'w-4 h-4 border-2' : 'w-6 h-6 border-2'} border-white border-t-transparent rounded-full animate-spin`}></div>}
         </div>
       </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && !isSm && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 }
