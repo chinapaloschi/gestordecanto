@@ -49,8 +49,9 @@ export function UpdateButton({ className = "" }) {
         reg.addEventListener('updatefound', () => setHasUpdate(true));
       } catch {}
     })();
-    const off = typeof setupPWAUpdateOnResume === 'function' ? setupPWAUpdateOnResume() : null;
-    return () => { if (typeof off === 'function') off(); };
+    // Nota: la aplicación automática de la actualización (SKIP_WAITING + reload)
+    // la maneja únicamente UpdateBanner — este botón solo detecta y aplica al click,
+    // para no competir por el mismo service worker "waiting".
   }, [probe]);
 
   return (<button
@@ -334,35 +335,6 @@ async function applyWaitingSW(waiting) {
   window.location.reload();
   return true;
 }
-
-// Chequea actualización cuando la app vuelve al frente (PWA iOS reanuda desde freeze)
-async function checkForUpdateOnResume() {
-  try {
-    const waiting = await getSWWaiting();
-    if (waiting) {
-      await applyWaitingSW(waiting);
-      return;
-    }
-  } catch (e) {}
-}
-function setupPWAUpdateOnResume() {
-  const onVisible = async () => {
-    if (document.visibilityState === "visible") {
-      await checkForUpdateOnResume();
-    }
-  };
-  const onPageShow = async (e) => {
-    // En iOS/Safari, pageshow con persisted=true indica bfcache/reanudado
-    await checkForUpdateOnResume();
-  };
-  document.addEventListener("visibilitychange", onVisible);
-  window.addEventListener("pageshow", onPageShow);
-  return () => {
-    document.removeEventListener("visibilitychange", onVisible);
-    window.removeEventListener("pageshow", onPageShow);
-  };
-}
-
 
 // === SW helper: actualizar PWA sin perder sesión ===
 async function refreshApp() {
