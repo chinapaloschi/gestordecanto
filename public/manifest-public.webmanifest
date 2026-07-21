@@ -6,8 +6,8 @@
   "start_url": "/#/checkin?a=1:786390581865:web:ed47531cf7415ae5ca18f8",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#3D0F22",
-  "theme_color": "#3D0F22",
+  "background_color": "#111827",
+  "theme_color": "#be185d",
   "lang": "es-AR",
   "icons": [
     { "src": "/icon-16.png",   "sizes": "16x16",   "type": "image/png" },

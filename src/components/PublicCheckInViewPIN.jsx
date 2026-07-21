@@ -1114,42 +1114,42 @@ const renderCalendarGrid = () => {
       )}
 
       {student && student.photoURL && (
-        <div className="min-h-screen bg-paper font-body text-ink flex flex-col">
+        <div className="min-h-screen bg-gray-50 font-body text-gray-900 flex flex-col">
 
           {/* Header */}
-          <div className="bg-gradient-to-br from-curtain to-velvet px-4 pb-3 flex-shrink-0"
+          <div className="bg-gradient-to-r from-rose-700 to-pink-600 px-4 pb-3 flex-shrink-0"
             style={{ paddingTop: 'max(3rem, calc(env(safe-area-inset-top) + 0.75rem))' }}>
             <div className="flex items-center gap-3">
-              <UpdateButton className="!bg-white/10 !border-white/20 !text-brass hover:!bg-white/20 flex-shrink-0" />
-              <div className="relative flex-shrink-0 rounded-full ring-2 ring-brass/60 ring-offset-2 ring-offset-velvet">
+              <UpdateButton className="!bg-white/10 !border-white/20 !text-rose-100 hover:!bg-white/20 flex-shrink-0" />
+              <div className="relative flex-shrink-0 rounded-full ring-2 ring-white/50 ring-offset-2 ring-offset-rose-700">
                 <ProfilePictureUploader db={db} appId={appId} student={student} setStudent={setStudent} size="sm" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-display italic text-paper text-lg truncate leading-tight">{student.name}</p>
-                <p className="font-ticket text-[10px] text-brass/80 tracking-[0.15em] uppercase mt-0.5">Hoy · {hoyStr}</p>
+                <p className="font-display italic text-white text-lg truncate leading-tight">{student.name}</p>
+                <p className="font-ticket text-[10px] text-rose-200 tracking-[0.15em] uppercase mt-0.5">Hoy · {hoyStr}</p>
               </div>
             </div>
-            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-white/10">
+            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-white/15">
               {hasPaidThisMonth
-                ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sage bg-paper/95 px-2.5 py-1 rounded-full whitespace-nowrap">
+                ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-white/95 px-2.5 py-1 rounded-full whitespace-nowrap">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
                     Al día
                   </span>
                 : publicTotalToday > 0
-                  ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-paper bg-alert/90 px-2.5 py-1 rounded-full whitespace-nowrap">
+                  ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-white bg-white/20 border border-white/30 px-2.5 py-1 rounded-full whitespace-nowrap animate-pulse">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                       Debe
                     </span>
                   : <span />}
               <button onClick={cambiarUsuario}
-                className="text-[11px] font-medium text-brass/80 hover:text-brass transition whitespace-nowrap flex-shrink-0">
+                className="text-[11px] font-medium text-rose-200 hover:text-white transition whitespace-nowrap flex-shrink-0">
                 Cambiar usuario
               </button>
             </div>
           </div>
 
           {/* Tab bar debajo del header */}
-          <div className="bg-white border-b border-ink/10 flex flex-shrink-0">
+          <div className="bg-white border-b border-gray-100 flex flex-shrink-0">
             {[
               { id: 'inicio',       label: 'Inicio',       d: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
               { id: 'clases',       label: 'Clases',       d: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
@@ -1158,7 +1158,7 @@ const renderCalendarGrid = () => {
               { id: 'mensajes',     label: 'Mensajes',     d: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
             ].map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors border-b-2 ${activeTab === tab.id ? 'border-velvet text-velvet' : 'border-transparent text-ink/35'}`}>
+                className={`flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors border-b-2 ${activeTab === tab.id ? 'border-rose-500 text-rose-600' : 'border-transparent text-gray-400'}`}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={activeTab === tab.id ? 2.5 : 1.8} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d={tab.d}/>
                 </svg>
@@ -1216,52 +1216,52 @@ const renderCalendarGrid = () => {
                 <div className="space-y-1.5">
                   <a href={`${window.location.origin}/escanear-presente.html`}
                     onClick={(e) => { e.preventDefault(); openInRealBrowser('/escanear-presente.html'); }}
-                    className="w-full block rounded-xl p-4 shadow-sm bg-gradient-to-br from-sage to-emerald-700 text-left active:scale-[0.98] transition">
+                    className="w-full block rounded-xl p-4 shadow-sm bg-gradient-to-br from-green-600 to-emerald-500 text-left active:scale-[0.98] transition">
                     <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-5 h-5 text-paper" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                      <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
                           <rect x="3" y="7" width="18" height="13" rx="2.5"/><circle cx="12" cy="13.5" r="3.3"/><path strokeLinecap="round" d="M8 7l1.3-2h5.4L16 7"/>
                         </svg>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-paper font-semibold text-sm">Escanear QR para dar presente</p>
-                        <p className="text-paper/75 text-xs mt-0.5">Tu clase de hoy es a las {todayScannableClass.time} hs</p>
+                        <p className="text-white font-semibold text-sm">Escanear QR para dar presente</p>
+                        <p className="text-green-100 text-xs mt-0.5">Tu clase de hoy es a las {todayScannableClass.time} hs</p>
                       </div>
-                      <svg className="w-4 h-4 text-paper/60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-white/70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
                       </svg>
                     </div>
                   </a>
-                  <p className="text-[10px] text-ink/40 text-center px-2">Si no se abre la cámara, mantené presionado este botón y elegí "Abrir en Safari".</p>
+                  <p className="text-[10px] text-gray-400 text-center px-2">Si no se abre la cámara, mantené presionado este botón y elegí "Abrir en Safari".</p>
                 </div>
               )}
 
               {/* Banner pago */}
               {showPaid && (
-                <div className="bg-white rounded-xl border border-sage/20 p-4 flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-sage/10 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-[18px] h-[18px] text-sage" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <div className="bg-white rounded-xl border border-green-100 p-4 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-[18px] h-[18px] text-green-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
                   </div>
-                  <div><p className="font-display font-semibold text-ink text-sm">Cuota al día</p><p className="text-xs text-ink/50 mt-0.5">Tu pago de este mes fue recibido. Gracias.</p></div>
+                  <div><p className="font-display font-semibold text-green-800 text-sm">Cuota al día</p><p className="text-xs text-green-600 mt-0.5">Tu pago de este mes fue recibido. Gracias.</p></div>
                 </div>
               )}
               {showDue && (
-                <div className={`rounded-xl p-4 flex items-center gap-3 ${aplicaRecargo ? 'bg-alert/10 border border-alert/30' : 'bg-brass/10 border border-brass/30'}`}>
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${aplicaRecargo ? 'bg-alert/20' : 'bg-brass/20'}`}>
-                    <svg className={`w-[18px] h-[18px] ${aplicaRecargo ? 'text-alert' : 'text-brass'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                <div className={`rounded-xl p-4 flex items-center gap-3 ${aplicaRecargo ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${aplicaRecargo ? 'bg-red-100' : 'bg-amber-100'}`}>
+                    <svg className={`w-[18px] h-[18px] ${aplicaRecargo ? 'text-red-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                   </div>
                   <div>
-                    <p className={`font-display font-semibold text-sm ${aplicaRecargo ? 'text-alert' : 'text-ink'}`}>{aplicaRecargo ? 'Cuota vencida — 10% de recargo' : 'Cuota pendiente'}</p>
-                    <p className="text-xs text-ink/50 mt-0.5">Total hoy: <strong className="font-ticket text-ink/80">${new Intl.NumberFormat('es-AR').format(publicTotalToday)}</strong></p>
+                    <p className={`font-display font-semibold text-sm ${aplicaRecargo ? 'text-red-800' : 'text-amber-800'}`}>{aplicaRecargo ? 'Cuota vencida — 10% de recargo' : 'Cuota pendiente'}</p>
+                    <p className={`text-xs mt-0.5 ${aplicaRecargo ? 'text-red-700' : 'text-amber-700'}`}>Total hoy: <strong className="font-ticket">${new Intl.NumberFormat('es-AR').format(publicTotalToday)}</strong></p>
                   </div>
                 </div>
               )}
 
               {/* CTA pago */}
               {showCta && (
-                <div className="bg-white rounded-xl border border-ink/10 overflow-hidden">
-                  <div className="bg-curtain text-paper px-4 py-2.5 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-brass" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path strokeLinecap="round" d="M2 10h20"/></svg>
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="bg-rose-600 text-white px-4 py-2.5 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-rose-100" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path strokeLinecap="round" d="M2 10h20"/></svg>
                     <p className="font-display font-semibold text-sm">Pagar mi cuota</p>
                   </div>
                   <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} />
@@ -1270,31 +1270,31 @@ const renderCalendarGrid = () => {
 
               {/* Próxima clase — boleta de función */}
               {showNext && (
-                <div className="relative rounded-2xl border border-ink/10 shadow-md bg-white">
-                  <div className={`rounded-t-2xl px-5 pt-4 pb-5 ${isToday ? 'bg-gradient-to-br from-curtain to-velvet' : 'bg-white'}`}>
+                <div className="relative rounded-2xl border border-gray-100 shadow-md bg-white">
+                  <div className={`rounded-t-2xl px-5 pt-4 pb-5 ${isToday ? 'bg-gradient-to-r from-rose-700 to-pink-600' : 'bg-white'}`}>
                     <div className="flex items-center justify-between">
-                      <p className={`font-ticket text-[10px] tracking-[0.2em] uppercase ${isToday ? 'text-brass' : 'text-ink/40'}`}>
+                      <p className={`font-ticket text-[10px] tracking-[0.2em] uppercase ${isToday ? 'text-rose-200' : 'text-gray-400'}`}>
                         Próxima clase{label ? ` · ${label}` : ''}
                       </p>
-                      <svg className={`w-4 h-4 flex-shrink-0 ${isToday ? 'text-brass' : 'text-ink/25'}`} fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                      <svg className={`w-4 h-4 flex-shrink-0 ${isToday ? 'text-rose-200' : 'text-gray-300'}`} fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
                         <circle cx="9" cy="18" r="3"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 18V4l7 2v12"/>
                       </svg>
                     </div>
-                    <p className={`font-display italic text-2xl mt-1.5 capitalize leading-snug ${isToday ? 'text-paper' : 'text-ink'}`}>{ds}</p>
+                    <p className={`font-display italic text-2xl mt-1.5 capitalize leading-snug ${isToday ? 'text-white' : 'text-gray-900'}`}>{ds}</p>
                   </div>
 
                   {/* Perforación */}
                   <div className="relative">
-                    <div className="absolute -left-[9px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] rounded-full bg-paper border border-ink/10"/>
-                    <div className="absolute -right-[9px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] rounded-full bg-paper border border-ink/10"/>
-                    <div className="mx-5 border-t border-dashed border-ink/15"/>
+                    <div className="absolute -left-[9px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] rounded-full bg-gray-50 border border-gray-100"/>
+                    <div className="absolute -right-[9px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] rounded-full bg-gray-50 border border-gray-100"/>
+                    <div className="mx-5 border-t border-dashed border-gray-200"/>
                   </div>
 
                   <div className="rounded-b-2xl px-5 py-3 flex items-center justify-between bg-white">
-                    <p className="font-ticket text-lg font-semibold text-ink tracking-wide">{next.time}<span className="text-ink/35 text-xs font-body ml-1">hs</span></p>
+                    <p className="font-ticket text-lg font-semibold text-gray-900 tracking-wide">{next.time}<span className="text-gray-400 text-xs font-body ml-1">hs</span></p>
                     <div className="text-right">
-                      <p className="font-ticket text-[9px] text-ink/35 uppercase tracking-[0.15em]">Estudio de Canto</p>
-                      <p className="text-xs text-ink/60">Sandra Paloschi</p>
+                      <p className="font-ticket text-[9px] text-gray-400 uppercase tracking-[0.15em]">Estudio de Canto</p>
+                      <p className="text-xs text-rose-600">Sandra Paloschi</p>
                     </div>
                   </div>
                 </div>
@@ -1302,36 +1302,36 @@ const renderCalendarGrid = () => {
 
               {/* Stats del mes */}
               {showStats && (
-                <div className="bg-white rounded-xl border border-ink/10 p-4 space-y-4">
+                <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
                   <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-ink/[0.03] rounded-lg p-3 border-b-2 border-brass/50">
-                      <p className="font-ticket text-2xl font-semibold text-ink">{abonadas}</p>
-                      <p className="text-[10px] font-semibold text-ink/45 mt-0.5 uppercase tracking-wide">Abonadas</p>
+                    <div className="bg-blue-50 rounded-lg p-3 border-b-2 border-blue-300">
+                      <p className="font-ticket text-2xl font-semibold text-blue-800">{abonadas}</p>
+                      <p className="text-[10px] font-semibold text-blue-600 mt-0.5 uppercase tracking-wide">Abonadas</p>
                     </div>
-                    <div className="bg-ink/[0.03] rounded-lg p-3 border-b-2 border-sage/60">
-                      <p className="font-ticket text-2xl font-semibold text-ink">{asistidas}</p>
-                      <p className="text-[10px] font-semibold text-ink/45 mt-0.5 uppercase tracking-wide">Asistidas</p>
+                    <div className="bg-green-50 rounded-lg p-3 border-b-2 border-green-400">
+                      <p className="font-ticket text-2xl font-semibold text-green-800">{asistidas}</p>
+                      <p className="text-[10px] font-semibold text-green-600 mt-0.5 uppercase tracking-wide">Asistidas</p>
                     </div>
-                    <div className="bg-ink/[0.03] rounded-lg p-3 border-b-2 border-ink/15">
-                      <p className="font-ticket text-2xl font-semibold text-ink">{restantes}</p>
-                      <p className="text-[10px] font-semibold text-ink/45 mt-0.5 uppercase tracking-wide">Restantes</p>
+                    <div className="bg-rose-50 rounded-lg p-3 border-b-2 border-rose-300">
+                      <p className="font-ticket text-2xl font-semibold text-rose-800">{restantes}</p>
+                      <p className="text-[10px] font-semibold text-rose-600 mt-0.5 uppercase tracking-wide">Restantes</p>
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] font-medium text-ink/40 uppercase tracking-wide">
+                    <div className="flex justify-between text-[10px] font-medium text-gray-400 uppercase tracking-wide">
                       <span>Asistencia del mes</span>
-                      <span className={`font-ticket font-semibold ${pct >= 80 ? 'text-sage' : pct >= 50 ? 'text-brass' : 'text-alert'}`}>{pct}%</span>
+                      <span className={`font-ticket font-semibold ${pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>{pct}%</span>
                     </div>
                     {eqBars.length > 0 && (
                       <div className="flex items-end gap-[3px] h-8">
                         {eqBars.map((h, i) => (
-                          <div key={i} className={`flex-1 rounded-sm ${h === 1 ? 'bg-sage' : h < 1 && h > 0.2 ? 'bg-alert/70' : 'bg-brass/25'}`} style={{ height: `${Math.max(h * 100, 10)}%` }}/>
+                          <div key={i} className={`flex-1 rounded-sm ${h === 1 ? 'bg-green-500' : h < 1 && h > 0.2 ? 'bg-red-400' : 'bg-rose-100'}`} style={{ height: `${Math.max(h * 100, 10)}%` }}/>
                         ))}
                       </div>
                     )}
                     <div className="flex gap-3 text-[10px] pt-0.5">
-                      {asistidas > 0 && <span className="text-sage font-semibold">✓ {asistidas} presente{asistidas!==1?'s':''}</span>}
-                      {ausentes  > 0 && <span className="text-alert font-semibold">✕ {ausentes} ausente{ausentes!==1?'s':''}</span>}
+                      {asistidas > 0 && <span className="text-green-600 font-semibold">✓ {asistidas} presente{asistidas!==1?'s':''}</span>}
+                      {ausentes  > 0 && <span className="text-red-500 font-semibold">✕ {ausentes} ausente{ausentes!==1?'s':''}</span>}
                     </div>
                   </div>
                 </div>
@@ -1339,13 +1339,13 @@ const renderCalendarGrid = () => {
 
               {/* Clases sin marcar */}
               {showSinMarcar && (
-                <div className="bg-white rounded-xl border border-brass/30 p-4 flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-brass/15 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-[18px] h-[18px] text-brass" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path strokeLinecap="round" d="M8 9h8M8 13h5"/></svg>
+                <div className="bg-white rounded-xl border border-amber-200 p-4 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-amber-50 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-[18px] h-[18px] text-amber-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path strokeLinecap="round" d="M8 9h8M8 13h5"/></svg>
                   </div>
                   <div>
-                    <p className="font-display font-semibold text-ink text-sm">{sinMarcar.length} clase{sinMarcar.length>1?'s':''} sin marcar</p>
-                    <p className="text-xs text-ink/50">Marcalas en la pestaña Clases.</p>
+                    <p className="font-display font-semibold text-amber-800 text-sm">{sinMarcar.length} clase{sinMarcar.length>1?'s':''} sin marcar</p>
+                    <p className="text-xs text-amber-600">Marcalas en la pestaña Clases.</p>
                   </div>
                 </div>
               )}
@@ -1353,15 +1353,15 @@ const renderCalendarGrid = () => {
               {/* Estado vacío — evita que la pestaña quede en blanco */}
               {!hayAlgo && (
                 checkingPayment ? (
-                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-ink/35">
-                    <div className="w-8 h-8 border-2 border-brass/30 border-t-velvet rounded-full animate-spin"/>
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+                    <div className="w-8 h-8 border-2 border-rose-200 border-t-rose-500 rounded-full animate-spin"/>
                     <p className="text-xs font-medium">Cargando tu información...</p>
                   </div>
                 ) : (
-                  <div className="bg-white rounded-xl border border-ink/10 p-6 text-center">
-                    <svg className="w-7 h-7 mx-auto mb-2 text-brass" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24"><circle cx="9" cy="18" r="3"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 18V4l7 2v12"/></svg>
-                    <p className="font-display font-semibold text-ink text-sm">Todo en orden</p>
-                    <p className="text-xs text-ink/45 mt-1">No tenés pagos pendientes ni clases para mostrar este mes.</p>
+                  <div className="bg-white rounded-xl border border-gray-100 p-6 text-center">
+                    <svg className="w-7 h-7 mx-auto mb-2 text-rose-400" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24"><circle cx="9" cy="18" r="3"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 18V4l7 2v12"/></svg>
+                    <p className="font-display font-semibold text-gray-700 text-sm">Todo en orden</p>
+                    <p className="text-xs text-gray-400 mt-1">No tenés pagos pendientes ni clases para mostrar este mes.</p>
                   </div>
                 )
               )}

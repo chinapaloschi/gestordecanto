@@ -213,7 +213,7 @@ export function ProfilePictureUploader({ db, appId, student, setStudent, size = 
   const fallbackAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.fullName || student.name || 'SP')}&background=fecdd3&color=9f1239&bold=true`;
 
   const isSm = size === 'sm';
-  const avatarClass = isSm ? 'h-10 w-10' : 'h-32 w-32';
+  const avatarClass = isSm ? 'h-16 w-16' : 'h-32 w-32';
 
   return (
     <div className={isSm ? 'flex-shrink-0' : 'flex flex-col items-center gap-2 mt-4'}>
