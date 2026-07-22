@@ -59,7 +59,7 @@
   <button class="closebtn" onclick="goHome()">Cerrar</button>
 
   <canvas id="canvas" style="display:none;"></canvas>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" integrity="sha384-hStSInNIZ8ljtOVrmrgf7zdHMapaLBWoSnPTtF0nzsybp4+LuhDz6sHuEVpWIX8o" crossorigin="anonymous"></script>
   <script>
     var HOME_URL = 'https://estudiosandrapaloschi.web.app/#/checkin?a=1:786390581865:web:ed47531cf7415ae5ca18f8';
     var ATTENDANCE_CODE = 'SANDRA-PALOSCHI-SALA-PRESENTE';
@@ -123,7 +123,8 @@
       } else {
         try {
           var u = new URL(clean);
-          target = clean;
+          // Solo navegamos a http/https — bloquea javascript:, data:, vbscript:, etc.
+          if (u.protocol === 'http:' || u.protocol === 'https:') target = clean;
         } catch (e) { /* no es URL ni el código esperado */ }
       }
 

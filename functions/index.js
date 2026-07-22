@@ -105,6 +105,68 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
   return { status: "ok", message: "Presente registrado." };
 });
 
+// ---------------- 2b) Login de alumno por DNI (+ PIN opcional) ----------------
+// Reemplaza las lecturas directas del cliente a `students`/`pinIndex` (que
+// permitían enumerar DNIs sin límite) por una única función server-side con
+// rate-limit por DNI y por IP. Si el alumno tiene un campo `pin` propio
+// configurado, se exige; si no, se acepta solo el DNI (comportamiento actual,
+// sin romper el acceso de alumnos existentes).
+const LOGIN_MAX_ATTEMPTS_DNI = 8;
+const LOGIN_MAX_ATTEMPTS_IP = 30;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 minutos
+
+function withinWindow(entry, now) {
+  return entry && entry.windowStart && (now - entry.windowStart) < LOGIN_WINDOW_MS;
+}
+
+exports.loginStudent = functions.https.onCall(async (data, context) => {
+  const appId = String(data?.appId || "");
+  const dni = String(data?.dni || "").replace(/\D/g, "");
+  const pin = String(data?.pin || "").replace(/\D/g, "");
+  assertC(appId.length > 0, "Falta appId.");
+  assertC(dni.length >= 7 && dni.length <= 8, "DNI inválido.");
+
+  const db = admin.firestore();
+  const now = Date.now();
+  const ip = String(context.rawRequest?.ip || "unknown").slice(0, 64);
+  const dniAttemptRef = db.doc(`artifacts/${appId}/loginAttempts/dni_${dni}`);
+  const ipAttemptRef = db.doc(`artifacts/${appId}/loginAttempts/ip_${ip}`);
+
+  await db.runTransaction(async (tx) => {
+    const [dniSnap, ipSnap] = await Promise.all([tx.get(dniAttemptRef), tx.get(ipAttemptRef)]);
+    const dniData = dniSnap.exists ? dniSnap.data() : null;
+    const ipData = ipSnap.exists ? ipSnap.data() : null;
+
+    if (withinWindow(dniData, now) && dniData.count >= LOGIN_MAX_ATTEMPTS_DNI) {
+      throw new functions.https.HttpsError("resource-exhausted", "Demasiados intentos. Probá de nuevo en unos minutos.");
+    }
+    if (withinWindow(ipData, now) && ipData.count >= LOGIN_MAX_ATTEMPTS_IP) {
+      throw new functions.https.HttpsError("resource-exhausted", "Demasiados intentos. Probá de nuevo en unos minutos.");
+    }
+
+    const dniWindowStart = withinWindow(dniData, now) ? dniData.windowStart : now;
+    const ipWindowStart = withinWindow(ipData, now) ? ipData.windowStart : now;
+    tx.set(dniAttemptRef, { windowStart: dniWindowStart, count: (withinWindow(dniData, now) ? (dniData.count || 0) : 0) + 1, lastAttemptAt: now }, { merge: true });
+    tx.set(ipAttemptRef, { windowStart: ipWindowStart, count: (withinWindow(ipData, now) ? (ipData.count || 0) : 0) + 1, lastAttemptAt: now }, { merge: true });
+  });
+
+  const q = await db.collection(`artifacts/${appId}/students`).where("dni", "==", dni).limit(1).get();
+  assertC(!q.empty, "DNI no encontrado.");
+
+  const studentDoc = q.docs[0];
+  const studentData = studentDoc.data() || {};
+  assertC(studentData.isArchived !== true, "DNI no encontrado.");
+
+  if (studentData.pin) {
+    assertC(pin.length === 4 && pin === String(studentData.pin), "PIN incorrecto.");
+  }
+
+  // Login correcto: resetear el contador de intentos por DNI.
+  await dniAttemptRef.set({ windowStart: now, count: 0, lastAttemptAt: now }, { merge: true });
+
+  return { id: studentDoc.id, ...studentData };
+});
+
 // ---------------- 3) Descarga de YouTube via yt-dlp (cliente tv_embedded) ----------------
 const https_mod = require("https");
 const { spawn }  = require("child_process");
@@ -474,7 +536,8 @@ exports.reindexPins = functions.https.onCall(async (data, context) => {
 // 5) NOTIFICACIONES PUSH (Firebase Cloud Messaging)
 // ──────────────────────────────────────────────────────────────────────────────
 exports.sendPushNotification = functions.https.onCall(async (data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "No autenticado.");
+  assertC(context.auth && context.auth.token && context.auth.token.email, "No autenticado.");
+  assertC(ALLOWED_EMAILS.has(context.auth.token.email), "No autorizado.");
 
   const { studentIds, title, body, appId: dataAppId, url } = data;
 
@@ -633,7 +696,8 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
 
 // Manual: siempre envía (sin bloqueo por log)
 exports.sendManualReminders = functions.https.onCall(async (data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'No autenticado.');
+  assertC(context.auth && context.auth.token && context.auth.token.email, "No autenticado.");
+  assertC(ALLOWED_EMAILS.has(context.auth.token.email), "No autorizado.");
   const appId   = data?.appId   || DEFAULT_APP_ID;
   const dateKey = data?.dateKey || tomorrowKey();
   return await _sendRemindersForDate(appId, dateKey, 'manual', false);

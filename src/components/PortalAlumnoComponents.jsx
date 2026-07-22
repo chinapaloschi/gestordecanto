@@ -896,29 +896,15 @@ React.useEffect(() => {
     e.preventDefault(); setError('');
     const digits = (dni||'').replace(/\D+/g,'');
     const last4 = (pin||'').replace(/\D+/g,'').slice(-4);
-    if (digits.length < 4 || last4.length !== 4) { setError('Revisá DNI y PIN (últimos 4).'); return; }
+    if (digits.length < 7 || digits.length > 8 || last4.length !== 4) { setError('Revisá DNI y PIN (últimos 4).'); return; }
     setBusy(true);
     try {
-      const col = fsCollection(db, `artifacts/${appId}/pinIndex/${last4}/entries`);
-      const snap = await getDocs(col);
-      if (snap.empty) { setError('No se encontró alumno para ese DNI/PIN.'); setBusy(false); return; }
-      let ok = null;
-      for (const d of snap.docs) {
-        const entry = d.data(); const sid = entry?.studentId; if (!sid) continue;
-        const sref = doc(db, `artifacts/${appId}/students/${sid}`);
-        const ss = await getDoc(sref);
-        if (ss.exists()) {
-          const st = { id: sid, ...ss.data() };
-          const storedDni = String(st?.dni || '').replace(/\D+/g,'');
-          if (storedDni === digits && last4 === storedDni.slice(-4)) {
-            ok = { id: sid, name: st.name || st.fullName || '', dni: storedDni, pin4: last4 };
-            break;
-          }
-        }
-      }
-      if (!ok) { setError('DNI o PIN incorrectos.'); setBusy(false); return; }
+      const loginFn = httpsCallable(getFunctions(), 'loginStudent');
+      const res = await loginFn({ appId, dni: digits, pin: last4 });
+      const ok = res.data;
+      if (!ok || !ok.id) { setError('DNI o PIN incorrectos.'); setBusy(false); return; }
       savePortalSession({ student: ok, ts: Date.now() }); setStudent(ok);
-    } catch (err) { console.error(err); setError('No se pudo iniciar sesión.'); }
+    } catch (err) { setError(err?.message || 'No se pudo iniciar sesión.'); }
     finally { setBusy(false); }
   };
 

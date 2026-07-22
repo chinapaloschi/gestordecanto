@@ -2,6 +2,8 @@
 
 import { collection as fsCollection, doc, getDoc, getDocs, updateDoc, addDoc as fsAddDoc, query, where, orderBy, onSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore';
 
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
 import { auth } from '../firebaseConfig.js';
 
 import { Modal, ModalHeader } from './Modal.jsx';
@@ -182,11 +184,7 @@ React.useEffect(() => {
 
   const initAuth = async () => {
 
-    console.log("[Portal] Inicializando sesión anónima...");
-
     await waitForAuthReady();
-
-    console.log("[Portal] Sesión lista, UID:", auth.currentUser?.uid);
 
   };
 
@@ -530,29 +528,13 @@ const getCurrentWeekRange = () => {
     setAutoLoginChecked(true); // evita que el auto-login lo vuelva a meter de inmediato
   };
 
-  const findByDni = async (dni) => {
-
-    const qDni = query(fsCollection(db, `artifacts/${appId}/students`), where('dni', '==', dni));
-
-    const s = await getDocs(qDni);
-
-    if (s.empty) return null;
-
-    const data = s.docs[0].data();
-
-    return { id: s.docs[0].id, fullName: data.fullName || data.name || '' };
-
-  };
-
-
-
   const continuar = async () => {
 
     if (!db || !appId) { setStatus({ step:'ok', msg:'No se pudo cargar el estudio.' }); return; }
 
     const dni = onlyDigits(dniInput);
 
-    if (!dni) { setStatus({ step:'ok', msg:'Ingresá tu DNI.' }); return; return; }
+    if (dni.length < 7 || dni.length > 8) { setStatus({ step:'ok', msg:'Ingresá tu DNI completo (7 u 8 dígitos).' }); return; }
 
     setSaving(true);
 
@@ -560,15 +542,12 @@ const getCurrentWeekRange = () => {
 
     try {
 
-      let st = await findByDni(dni);
+      const loginFn = httpsCallable(getFunctions(), 'loginStudent');
+      const res = await loginFn({ appId, dni });
+      const studentData = res.data;
 
-      if (!st) { setStatus({ step:'ok', msg:'DNI no encontrado.' }); return; }
+      if (studentData && studentData.id) {
 
-      const studentSnap = await getDoc(doc(db, `artifacts/${appId}/students`, st.id));
-
-      if (studentSnap.exists()) {
-
-        const studentData = { id: studentSnap.id, ...studentSnap.data() };
         setStudent(studentData);
         setStatus({ step: 'confirm', msg: 'Hacé clic en la clase de hoy para marcar tu presente.' });
         try { localStorage.setItem(STUDENT_SESSION_KEY, studentData.id); } catch {}
@@ -595,9 +574,8 @@ const getCurrentWeekRange = () => {
 
     } catch (err) {
 
-      console.error("Login portal público:", err);
-
-      setStatus({ step: 'ok', msg: 'Ocurrió un error al iniciar sesión.' });
+      const msg = err?.message || 'Ocurrió un error al iniciar sesión.';
+      setStatus({ step: 'ok', msg });
 
     } finally {
 
@@ -617,17 +595,19 @@ const saveAttendance = async (classId, status) => {
 
   try {
 
-    const clsRef = doc(db, `artifacts/${appId}/scheduledClasses/${classId}`);
-
-    await updateDoc(clsRef, { 
-
-      attendanceStatus: status, 
-
-      attendanceCheckedAt: new Date(), 
-
-      attendanceSource: 'public' 
-
-    });
+    if (status === 'presente') {
+      // Marcar presente pasa por la Cloud Function, que valida server-side
+      // que la clase sea de este alumno y sea la de hoy antes de escribir.
+      const confirmFn = httpsCallable(getFunctions(), 'confirmAttendance');
+      await confirmFn({ appId, studentId: student.id, classId });
+    } else {
+      const clsRef = doc(db, `artifacts/${appId}/scheduledClasses/${classId}`);
+      await updateDoc(clsRef, {
+        attendanceStatus: status,
+        attendanceCheckedAt: new Date(),
+        attendanceSource: 'public'
+      });
+    }
 
     setFrozenIds(prev => Array.from(new Set([...(prev||[]), classId])));
 
