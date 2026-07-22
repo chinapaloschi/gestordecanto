@@ -163,7 +163,7 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, 
   );
 }
 
-export function ProfilePictureUploader({ db, appId, student, setStudent, size = 'lg' }) {
+export function ProfilePictureUploader({ db, appId, student, setStudent, size = 'lg', ringClassName = '' }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
@@ -226,7 +226,7 @@ export function ProfilePictureUploader({ db, appId, student, setStudent, size = 
       />
       <button
         onClick={triggerFileSelect}
-        className={`relative ${avatarClass} rounded-full group bg-gray-200 flex-shrink-0`}
+        className={`relative ${avatarClass} rounded-full group bg-gray-200 flex-shrink-0 ${ringClassName}`}
         title="Cambiar foto de perfil"
         disabled={uploading}
       >

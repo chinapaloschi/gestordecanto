@@ -1121,9 +1121,7 @@ const renderCalendarGrid = () => {
             style={{ paddingTop: 'max(3rem, calc(env(safe-area-inset-top) + 0.75rem))' }}>
             <div className="flex items-center gap-3">
               <UpdateButton className="!bg-white/10 !border-white/20 !text-rose-100 hover:!bg-white/20 flex-shrink-0" />
-              <div className="relative flex-shrink-0 rounded-full ring-2 ring-white/70">
-                <ProfilePictureUploader db={db} appId={appId} student={student} setStudent={setStudent} size="sm" />
-              </div>
+              <ProfilePictureUploader db={db} appId={appId} student={student} setStudent={setStudent} size="sm" ringClassName="border-2 border-white/80" />
               <div className="flex-1 min-w-0">
                 <p className="font-display italic text-white text-lg truncate leading-tight">{student.name}</p>
                 <p className="font-ticket text-[10px] text-rose-200 tracking-[0.15em] uppercase mt-0.5">Hoy · {hoyStr}</p>
