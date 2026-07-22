@@ -9,7 +9,7 @@ export const GracePeriodNotice = ({ shouldShow }) => {
           </svg>
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-amber-900">Aviso sobre tus clases</h3>
+          <h3 className="font-display font-semibold text-sm text-amber-900">Aviso sobre tus clases</h3>
           <p className="text-sm text-amber-800 mt-1">
             Estás viendo tus clases programadas hasta el día 8. La lista completa de clases del mes aparecerá aquí una vez que se procese tu pago.
           </p>
@@ -26,7 +26,10 @@ export const NextMonthInfoBox = ({ pkg }) => {
   const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
   return (
     <div className="rounded-lg sm:rounded-xl border border-blue-200 bg-blue-50 p-4 mt-4 text-center">
-      <p className="font-semibold text-blue-800">✅ ¡Ya tenés tu abono para {capitalizedMonth} programado!</p>
+      <p className="font-display font-semibold text-blue-800 flex items-center justify-center gap-1.5">
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+        Ya tenés tu abono para {capitalizedMonth} programado
+      </p>
       <p className="text-xs text-blue-700 mt-1">Si no vas a poder asistir, por favor avisanos con anticipación para poder liberar tu lugar.</p>
     </div>
   );

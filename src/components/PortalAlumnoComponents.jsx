@@ -237,15 +237,18 @@ export function PublicMessages({ db, appId, student }) {
   return (
     <div className="rounded-xl border border-rose-100 bg-white shadow-sm mt-4 overflow-hidden">
       <div className="px-4 py-2.5 bg-rose-50 border-b border-rose-100 flex items-center gap-2">
-        <span className="text-base">💬</span>
-        <span className="text-sm font-bold text-rose-900">Mensajes del Estudio</span>
+        <svg className="w-4 h-4 text-rose-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        <span className="font-display font-semibold text-sm text-rose-900">Mensajes del Estudio</span>
         <span className="ml-auto text-[11px] text-rose-400 font-semibold">{visible.length} mensaje{visible.length !== 1 ? 's' : ''}</span>
       </div>
       <ul className="divide-y divide-gray-50">
         {visible.map(m => (
           <li key={m.id} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group">
-            <div className="flex-shrink-0 mt-0.5 text-base">
-              {m.scope === 'directo' ? '👤' : '📣'}
+            <div className="flex-shrink-0 mt-0.5 w-7 h-7 rounded-full bg-rose-50 flex items-center justify-center">
+              {m.scope === 'directo'
+                ? <svg className="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                : <svg className="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+              }
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[11px] text-gray-400 mb-0.5">

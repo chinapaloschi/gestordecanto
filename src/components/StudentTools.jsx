@@ -11,14 +11,14 @@ import { ChromaticTuner } from './PitchPanel.jsx';
 function ToolCard({ icon, title, children }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-xl border border-gray-200 overflow-hidden bg-white shadow-sm">
+    <div className={`rounded-xl border overflow-hidden bg-white transition-colors ${open ? 'border-rose-200' : 'border-gray-100'}`}>
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
       >
-        <span className="text-xl flex-shrink-0">{icon}</span>
-        <span className="flex-1 font-bold text-gray-800 text-sm">{title}</span>
-        <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+        <span className="w-9 h-9 rounded-full bg-rose-50 flex items-center justify-center text-base flex-shrink-0">{icon}</span>
+        <span className="flex-1 font-display font-semibold text-gray-800 text-sm">{title}</span>
+        <svg className={`w-4 h-4 flex-shrink-0 transition-transform ${open ? 'rotate-180 text-rose-500' : 'text-gray-300'}`}
           fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
         </svg>
@@ -1994,9 +1994,14 @@ function SolfegeReader() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Export principal
 // ─────────────────────────────────────────────────────────────────────────────
+function ToolSectionLabel({ children }) {
+  return <p className="font-ticket text-[10px] font-semibold text-gray-400 uppercase tracking-[0.15em] px-1 pt-2 first:pt-0">{children}</p>;
+}
+
 export function StudentTools({ db, appId, student }) {
   return (
     <div className="space-y-2">
+      <ToolSectionLabel>Afinación y oído</ToolSectionLabel>
       <ToolCard icon="🎵" title="Afinador en tiempo real">
         <ChromaticTuner />
       </ToolCard>
@@ -2009,6 +2014,14 @@ export function StudentTools({ db, appId, student }) {
       <ToolCard icon="🎶" title="Lector de notas (solfeo)">
         <SolfegeReader />
       </ToolCard>
+      <ToolCard icon="🎼" title="Detector de rango vocal">
+        <VocalRangeDetector db={db} appId={appId} student={student} />
+      </ToolCard>
+      <ToolCard icon="〰️" title="Analizador de vibrato">
+        <VibratoAnalyzer />
+      </ToolCard>
+
+      <ToolSectionLabel>Práctica y calentamiento</ToolSectionLabel>
       <ToolCard icon="🥁" title="Metrónomo">
         <Metronome />
       </ToolCard>
@@ -2021,23 +2034,19 @@ export function StudentTools({ db, appId, student }) {
       <ToolCard icon="🫁" title="Respiración guiada">
         <BreathingGuide />
       </ToolCard>
+      <ToolCard icon="⏱️" title="Contador de práctica">
+        <PracticeTimer db={db} appId={appId} student={student} />
+      </ToolCard>
+
+      <ToolSectionLabel>Grabación y seguimiento</ToolSectionLabel>
       <ToolCard icon="📊" title="Nivel de voz (VU Meter)">
         <VUMeter />
-      </ToolCard>
-      <ToolCard icon="🎼" title="Detector de rango vocal">
-        <VocalRangeDetector db={db} appId={appId} student={student} />
-      </ToolCard>
-      <ToolCard icon="〰️" title="Analizador de vibrato">
-        <VibratoAnalyzer />
       </ToolCard>
       <ToolCard icon="🎙️" title="Grabador de voz">
         <VoiceRecorder db={db} appId={appId} student={student} />
       </ToolCard>
       <ToolCard icon="🆚" title="Comparador antes/después">
         <BeforeAfterComparator />
-      </ToolCard>
-      <ToolCard icon="⏱️" title="Contador de práctica">
-        <PracticeTimer db={db} appId={appId} student={student} />
       </ToolCard>
     </div>
   );

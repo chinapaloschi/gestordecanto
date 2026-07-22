@@ -927,7 +927,7 @@ const renderCalendarGrid = () => {
   return (
     <div className="mb-4">
       {/* Header */}
-      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 capitalize">{monthLabel}</p>
+      <p className="font-display italic text-sm text-gray-500 mb-3 capitalize">{monthLabel}</p>
 
       {/* Encabezados de columna */}
       <div className="grid grid-cols-7 mb-1">
@@ -1350,27 +1350,30 @@ const renderCalendarGrid = () => {
           {/* ════════ TAB: PAGOS ════════ */}
           {activeTab === 'pagos' && <div className="space-y-3">
             {hasPaidThisMonth ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0 text-xl">✅</div>
-                <div><p className="font-bold text-green-800 text-sm">¡Cuota al día!</p><p className="text-xs text-green-600">Tu pago fue recibido.</p></div>
+              <div className="bg-white rounded-xl border border-green-100 p-4 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-[18px] h-[18px] text-green-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <div><p className="font-display font-semibold text-green-800 text-sm">Cuota al día</p><p className="text-xs text-green-600 mt-0.5">Tu pago fue recibido.</p></div>
               </div>
             ) : publicTotalToday > 0 ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                 <div className="bg-rose-600 text-white px-4 py-2.5 flex items-center gap-2">
-                  <span>💳</span><p className="font-bold text-sm">Pagar mi cuota</p>
+                  <svg className="w-4 h-4 text-rose-100" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path strokeLinecap="round" d="M2 10h20"/></svg>
+                  <p className="font-display font-semibold text-sm">Pagar mi cuota</p>
                 </div>
                 <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} />
               </div>
             ) : null}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Historial de pagos</p>
+            <div className="bg-white rounded-xl border border-gray-100 p-4">
+              <p className="text-[11px] font-ticket font-semibold text-gray-400 uppercase tracking-wider mb-3">Historial de pagos</p>
               <PublicPaymentsList db={db} appId={appId} student={student} />
             </div>
           </div>}{/* FIN PAGOS */}
 
           {/* ════════ TAB: MENSAJES ════════ */}
           {activeTab === 'mensajes' && <div className="space-y-3">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div className="bg-white rounded-xl border border-gray-100 p-4">
               <PublicMessages db={db} appId={appId} student={student} />
             </div>
             <SocialMediaLinks />
@@ -1384,12 +1387,14 @@ const renderCalendarGrid = () => {
           {/* ════════ TAB: CLASES ════════ */}
           {activeTab === 'clases' && <div className="space-y-3">
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
               <button onClick={() => setOpenHist(p => !p)}
                 className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition text-left">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base">📄</div>
-                  <span className="font-semibold text-sm text-gray-800">Historial de pagos</span>
+                  <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m-7-8h8a2 2 0 012 2v8a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2z"/></svg>
+                  </div>
+                  <span className="font-display font-semibold text-sm text-gray-800">Historial de pagos</span>
                 </div>
                 <svg className={`w-4 h-4 text-gray-300 transition-transform ${openHist ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
               </button>
@@ -1399,7 +1404,7 @@ const renderCalendarGrid = () => {
             <GracePeriodNotice shouldShow={showGracePeriodNotice} />
             <NextMonthInfoBox pkg={nextMonthPackage} />
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div className="bg-white rounded-xl border border-gray-100 p-4">
                 {renderCalendarGrid()}
 
 
@@ -1425,7 +1430,7 @@ const renderCalendarGrid = () => {
 
                   return (
                     <div className="mt-4">
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">
+                      <p className="font-display italic text-sm text-gray-500 mb-3">
                         Tus clases · {classes.length} este mes
                       </p>
                       <div className="space-y-4">
@@ -1502,7 +1507,7 @@ const renderCalendarGrid = () => {
       {/* Matrícula anual - solo en diciembre */}
 {new Date().getMonth() === 11 && (
   <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-    <p className="font-semibold text-amber-900 text-sm">📌 Matrícula Anual</p>
+    <p className="font-display font-semibold text-amber-900 text-sm">Matrícula Anual</p>
     <p className="text-xs text-amber-800 mt-1">Para reservar tu vacante del año entrante se abona una matrícula única del 50% de tu cuota mensual.</p>
   </div>
 )}
