@@ -242,7 +242,7 @@ export function ProfilePictureUploader({ db, appId, student, setStudent, size = 
           {uploading && <div className={`${isSm ? 'w-4 h-4 border-2' : 'w-6 h-6 border-2'} border-white border-t-transparent rounded-full animate-spin`}></div>}
         </div>
       </button>
-      {error && !isSm && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className={`text-red-600 ${isSm ? 'text-[10px] mt-1' : 'text-xs'}`}>{error}</p>}
     </div>
   );
 }
