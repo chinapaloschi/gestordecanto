@@ -102,18 +102,6 @@ export const PublicCheckInViewPIN = ({ db, onClose }) => {
 
   const [student, setStudent] = React.useState(null);
   const [autoLoginChecked, setAutoLoginChecked] = React.useState(false);
-  const [photoSkipped, setPhotoSkipped] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!student?.id) { setPhotoSkipped(false); return; }
-    try { setPhotoSkipped(localStorage.getItem(`photo_skip_${student.id}`) === '1'); }
-    catch { setPhotoSkipped(false); }
-  }, [student?.id]);
-
-  const skipPhotoForNow = () => {
-    try { localStorage.setItem(`photo_skip_${student.id}`, '1'); } catch {}
-    setPhotoSkipped(true);
-  };
 
   const [status, setStatus] = React.useState({ step: 'ok', msg: 'Completá tu DNI para ingresar.' });
 
@@ -1118,23 +1106,21 @@ const renderCalendarGrid = () => {
       )}
 
       {/* ══ APP ══ */}
-      {student && !student.photoURL && !photoSkipped && (
+      {student && !student.photoURL && (
         <div className="min-h-screen bg-gradient-to-br from-rose-950 via-rose-800 to-pink-700 flex items-center justify-center px-4"
           style={{ paddingTop: 'max(1.5rem, calc(env(safe-area-inset-top) + 1rem))' }}>
           <div className="bg-white rounded-3xl shadow-xl p-6 max-w-sm w-full text-center space-y-3">
             <p className="text-3xl">📸</p>
-            <h2 className="font-display font-semibold text-lg text-gray-900">Sumá tu foto de perfil</h2>
-            <p className="text-sm text-gray-500">Ayuda a que Sandra te reconozca más fácil. Si ahora no podés, lo hacés después tocando tu avatar.</p>
+            <h2 className="font-display font-semibold text-lg text-gray-900">¡Sumá tu foto de perfil!</h2>
+            <p className="text-sm text-gray-500">Para continuar necesitamos una foto tuya — así Sandra puede reconocerte. Es obligatoria para usar la app.</p>
             <ProfilePictureUploader db={db} appId={appId} student={student} setStudent={setStudent} />
-            <button onClick={skipPhotoForNow}
-              className="text-xs font-semibold text-rose-500 hover:text-rose-600 transition">Más tarde</button>
             <button onClick={cambiarUsuario}
-              className="block mx-auto text-xs font-semibold text-gray-400 hover:text-gray-600 transition">Cambiar usuario</button>
+              className="text-xs font-semibold text-gray-400 hover:text-gray-600 transition">Cambiar usuario</button>
           </div>
         </div>
       )}
 
-      {student && (student.photoURL || photoSkipped) && (
+      {student && student.photoURL && (
         <div className="min-h-screen bg-gray-50 font-body text-gray-900 flex flex-col">
 
           {/* Header */}
@@ -1213,8 +1199,7 @@ const renderCalendarGrid = () => {
             const showStats = totalMes > 0;
             const showSinMarcar = sinMarcar.length > 0;
             const showScanCta = !!todayScannableClass;
-            const showPhotoReminder = !student.photoURL;
-            const hayAlgo = showPaid || showDue || showCta || showNext || showStats || showSinMarcar || showScanCta || showPhotoReminder;
+            const hayAlgo = showPaid || showDue || showCta || showNext || showStats || showSinMarcar || showScanCta;
 
             let isToday = false, isTomorrow = false, ds = '', label = null;
             if (next) {
@@ -1230,17 +1215,6 @@ const renderCalendarGrid = () => {
               .map(c => isPresent(c.status) ? 1 : isAbsent(c.status) ? 0.32 : 0.14);
 
             return <div className="space-y-3">
-
-              {/* Recordatorio de foto de perfil (si la saltearon al entrar) */}
-              {showPhotoReminder && (
-                <div className="rounded-xl border border-rose-100 bg-rose-50 p-3 flex items-center gap-3">
-                  <ProfilePictureUploader db={db} appId={appId} student={student} setStudent={setStudent} size="sm" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-display font-semibold text-rose-900 text-sm">Sumá tu foto de perfil</p>
-                    <p className="text-xs text-rose-500">Tocá el círculo para agregarla cuando quieras.</p>
-                  </div>
-                </div>
-              )}
 
               {/* CTA: marcar presente escaneando el QR de la sala (se abre en una pestaña aparte: en iOS, la cámara dentro de la app instalada en pantalla de inicio no funciona) */}
               {showScanCta && (
