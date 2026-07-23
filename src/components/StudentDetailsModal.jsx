@@ -124,6 +124,7 @@ export const StudentDetailsModal = ({
   const [showReceipts,      setShowReceipts]      = useState(false);
   const [showDeleteDebt,    setShowDeleteDebt]    = useState(false);
   const [deletingDebt,      setDeletingDebt]      = useState(false);
+  const [pinBusy,           setPinBusy]           = useState(false);
 
   // Data fetched
   const [nextClass,      setNextClass]      = useState(null);
@@ -307,6 +308,32 @@ export const StudentDetailsModal = ({
     } finally {
       setDeletingDebt(false);
     }
+  };
+
+  const generatePin = async () => {
+    if (pinBusy) return;
+    setPinBusy(true);
+    const newPin = String(Math.floor(1000 + Math.random() * 9000));
+    try {
+      await updateDoc(doc(db, `artifacts/${appId}/students`, localStudent.id), { pin: newPin });
+      setLocalStudent(p => ({ ...p, pin: newPin }));
+      showMessage(`PIN generado: ${newPin}. Compartíselo al alumno — desde ahora lo va a necesitar para entrar al portal.`, 'success');
+    } catch (err) {
+      showMessage('Error al generar el PIN: ' + err.message, 'error');
+    } finally { setPinBusy(false); }
+  };
+
+  const removePin = async () => {
+    if (pinBusy) return;
+    if (!window.confirm('¿Quitar el PIN? El alumno va a poder entrar solo con su DNI de nuevo.')) return;
+    setPinBusy(true);
+    try {
+      await updateDoc(doc(db, `artifacts/${appId}/students`, localStudent.id), { pin: null });
+      setLocalStudent(p => ({ ...p, pin: null }));
+      showMessage('PIN quitado.', 'success');
+    } catch (err) {
+      showMessage('Error al quitar el PIN: ' + err.message, 'error');
+    } finally { setPinBusy(false); }
   };
 
   const toggleManualReceipt = async (val) => {
@@ -704,6 +731,35 @@ export const StudentDetailsModal = ({
             {localStudent.email && <p>Email: {localStudent.email}</p>}
             {localStudent.birthDate && (
               <p>Nacimiento: {new Date(localStudent.birthDate + 'T12:00:00').toLocaleDateString('es-AR')}</p>
+            )}
+          </div>
+
+          {/* PIN del portal */}
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+            <div>
+              <p className={labelCls}>PIN del portal</p>
+              {localStudent.pin ? (
+                <p className="text-sm font-black tracking-widest text-gray-800">{localStudent.pin}</p>
+              ) : (
+                <p className="text-xs text-gray-400">Sin asignar — entra solo con DNI</p>
+              )}
+            </div>
+            {localStudent.pin ? (
+              <div className="flex gap-1.5">
+                <button onClick={generatePin} disabled={pinBusy}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-100 disabled:opacity-50 transition">
+                  Regenerar
+                </button>
+                <button onClick={removePin} disabled={pinBusy}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-red-200 text-red-500 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 transition">
+                  Quitar
+                </button>
+              </div>
+            ) : (
+              <button onClick={generatePin} disabled={pinBusy}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 disabled:opacity-50 transition">
+                {pinBusy ? 'Generando...' : 'Generar PIN'}
+              </button>
             )}
           </div>
 

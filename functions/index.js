@@ -158,7 +158,8 @@ exports.loginStudent = functions.https.onCall(async (data, context) => {
   assertC(studentData.isArchived !== true, "DNI no encontrado.");
 
   if (studentData.pin) {
-    assertC(pin.length === 4 && pin === String(studentData.pin), "PIN incorrecto.");
+    assertC(pin.length === 4, "PIN_REQUIRED");
+    assertC(pin === String(studentData.pin), "PIN incorrecto.");
   }
 
   // Login correcto: resetear el contador de intentos por DNI.

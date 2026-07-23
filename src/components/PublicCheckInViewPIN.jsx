@@ -97,6 +97,8 @@ export const PublicCheckInViewPIN = ({ db, onClose }) => {
   const [unpaidFlexCredits, setUnpaidFlexCredits] = React.useState([]);
 
   const [dniInput, setDniInput] = React.useState('');
+  const [pinInput, setPinInput] = React.useState('');
+  const [needsPin, setNeedsPin] = React.useState(false);
 
   const [student, setStudent] = React.useState(null);
   const [autoLoginChecked, setAutoLoginChecked] = React.useState(false);
@@ -525,6 +527,8 @@ const getCurrentWeekRange = () => {
     try { localStorage.removeItem(STUDENT_SESSION_KEY); } catch {}
     setStudent(null);
     setDniInput('');
+    setPinInput('');
+    setNeedsPin(false);
     setAutoLoginChecked(true); // evita que el auto-login lo vuelva a meter de inmediato
   };
 
@@ -536,6 +540,8 @@ const getCurrentWeekRange = () => {
 
     if (dni.length < 7 || dni.length > 8) { setStatus({ step:'ok', msg:'Ingresá tu DNI completo (7 u 8 dígitos).' }); return; }
 
+    if (needsPin && onlyDigits(pinInput).length !== 4) { setStatus({ step:'ok', msg:'Ingresá tu PIN (4 dígitos).' }); return; }
+
     setSaving(true);
 
     setStatus({ step: 'ok', msg: '' });
@@ -543,7 +549,7 @@ const getCurrentWeekRange = () => {
     try {
 
       const loginFn = httpsCallable(getFunctions(), 'loginStudent');
-      const res = await loginFn({ appId, dni });
+      const res = await loginFn({ appId, dni, pin: onlyDigits(pinInput) });
       const studentData = res.data;
 
       if (studentData && studentData.id) {
@@ -574,8 +580,13 @@ const getCurrentWeekRange = () => {
 
     } catch (err) {
 
-      const msg = err?.message || 'Ocurrió un error al iniciar sesión.';
-      setStatus({ step: 'ok', msg });
+      if ((err?.message || '').includes('PIN_REQUIRED')) {
+        setNeedsPin(true);
+        setStatus({ step: 'ok', msg: 'Este DNI tiene un PIN asignado — ingresalo para continuar.' });
+      } else {
+        const msg = err?.message || 'Ocurrió un error al iniciar sesión.';
+        setStatus({ step: 'ok', msg });
+      }
 
     } finally {
 
@@ -1058,6 +1069,22 @@ const renderCalendarGrid = () => {
                     className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none text-gray-900 font-medium transition text-xl text-center tracking-widest"
                   />
                 </div>
+                {needsPin && (
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">PIN</label>
+                    <input
+                      id="pin-input"
+                      value={pinInput}
+                      onChange={(e) => setPinInput(onlyDigits(e.target.value).slice(0, 4))}
+                      onKeyDown={(e) => e.key === 'Enter' && continuar()}
+                      placeholder="••••"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      autoFocus
+                      className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none text-gray-900 font-medium transition text-xl text-center tracking-[0.5em]"
+                    />
+                  </div>
+                )}
                 {status?.msg && status.msg !== 'Completá tu DNI para ingresar.' && (
                   <p className="text-red-500 text-sm font-medium">{status.msg}</p>
                 )}
