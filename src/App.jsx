@@ -5,7 +5,6 @@ import { ROUTES } from './constants.js';
 import PublicLenceriaCatalogo from './PublicLenceriaCatalogo';
 import { AuthGate } from './components/AuthComponents.jsx';
 import { MainApp } from './components/MainApp.jsx';
-import { PortalAlumno } from './components/PortalAlumnoComponents.jsx';
 import { PublicCheckInViewPIN } from './components/PublicCheckInViewPIN.jsx';
 import { PublicEventsPortal } from './components/PublicEventsPortal.jsx';
 import { PublicTicketView } from './components/PublicTicketView.jsx';
@@ -59,6 +58,14 @@ export default function App() {
 
   const h = (hash || '').toLowerCase();
 
+  // /#/portal quedó sin ningún link visible en la app y duplicaba toda la
+  // superficie de /#/checkin — redirigimos en vez de servir esa pantalla.
+  React.useEffect(() => {
+    if (h.startsWith(ROUTES.PORTAL)) {
+      window.location.hash = `${ROUTES.CHECKIN}?a=${appId}`;
+    }
+  }, [h]);
+
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -75,7 +82,7 @@ export default function App() {
   if (h.startsWith(ROUTES.INSCRIPCION)) return <InscripcionPage db={db} appId={appId} />;
   if (h.startsWith(ROUTES.CATALOGO)) return <PublicLenceriaCatalogo db={db} appId={appId} />;
   if (h.startsWith(ROUTES.MUESTRAS)) return <PublicEventsPortal db={db} appId={appId} />;
-  if (h.startsWith(ROUTES.PORTAL))   return <PortalAlumno db={db} appId={appId} />;
+  if (h.startsWith(ROUTES.PORTAL))   return null; // redirigiendo a /#/checkin (ver useEffect arriba)
   if (h.startsWith(ROUTES.CHECKIN))  return <PublicCheckInViewPIN db={db} />;
   if (h.startsWith(ROUTES.TICKET))   return <PublicTicketView db={db} />;
 
