@@ -89,7 +89,7 @@ export const PublicCheckInViewPIN = ({ db }) => {
   const [saving, setSaving] = React.useState(false);
 
   const [toast, setToast] = React.useState({ open: false, kind: "success", text: "" });
-  const [openHist, setOpenHist] = React.useState(false);
+  const [openProfile, setOpenProfile] = React.useState(false);
   const [openRepertoire, setOpenRepertoire] = React.useState(false);
   const [openNotes, setOpenNotes] = React.useState(false);
   const [repertoire, setRepertoire] = React.useState([]);
@@ -1331,6 +1331,38 @@ const renderCalendarGrid = () => {
                 </div>
               )}
 
+              {/* Mi perfil — datos registrados, solo lectura */}
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <button onClick={() => setOpenProfile(p => !p)}
+                  className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition text-left">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                    </div>
+                    <span className="font-display font-semibold text-sm text-gray-800">Mi perfil</span>
+                  </div>
+                  <svg className={`w-4 h-4 text-gray-300 transition-transform ${openProfile ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                {openProfile && (
+                  <div className="p-4 border-t border-gray-100 space-y-2.5">
+                    {[
+                      ['Nombre', student.name || student.fullName],
+                      ['DNI', student.dni],
+                      ['WhatsApp', student.whatsapp],
+                      ['Email', student.email],
+                      ['Clasificación vocal', student.vocal && student.vocal !== 'Sin definir' ? student.vocal : null],
+                      ['Nivel', student.level],
+                    ].filter(([, v]) => !!v).map(([label, value]) => (
+                      <div key={label} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-gray-400 text-xs uppercase tracking-wide font-ticket">{label}</span>
+                        <span className="font-semibold text-gray-800 text-right">{value}</span>
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-gray-400 pt-1">¿Algún dato desactualizado? Avisale a Sandra para corregirlo.</p>
+                  </div>
+                )}
+              </div>
+
               {/* Estado vacío — evita que la pestaña quede en blanco */}
               {!hayAlgo && (
                 checkingPayment ? (
@@ -1389,20 +1421,6 @@ const renderCalendarGrid = () => {
 
           {/* ════════ TAB: CLASES ════════ */}
           {activeTab === 'clases' && <div className="space-y-3">
-
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              <button onClick={() => setOpenHist(p => !p)}
-                className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition text-left">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m-7-8h8a2 2 0 012 2v8a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2z"/></svg>
-                  </div>
-                  <span className="font-display font-semibold text-sm text-gray-800">Historial de pagos</span>
-                </div>
-                <svg className={`w-4 h-4 text-gray-300 transition-transform ${openHist ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
-              </button>
-              {openHist && <div className="p-3 border-t border-gray-100"><PublicPaymentsList db={db} appId={appId} student={student} /></div>}
-            </div>
 
             {classNotesList.length > 0 && (
               <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
