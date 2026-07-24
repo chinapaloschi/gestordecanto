@@ -4,6 +4,17 @@ import { ref as stRef, uploadBytesResumable, getDownloadURL } from 'firebase/sto
 import { storage } from '../firebaseConfig.js';
 import { detectPitch, freqToNoteInfo, NOTE_ES } from '../utils/pitchDetector.js';
 import { ChromaticTuner } from './PitchPanel.jsx';
+import { Toast } from './Toast.jsx';
+
+// Aviso liviano propio de la app en vez de alert()/confirm() nativos del navegador.
+function useLocalToast() {
+  const [toast, setToast] = useState(null); // { text, kind }
+  const notify = (text, kind = 'success') => {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), 2500);
+  };
+  return [toast, notify];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Card wrapper colapsable
@@ -269,6 +280,7 @@ function guessVoiceType(lowestNum, highestNum) {
 }
 
 function VocalRangeDetector({ db, appId, student }) {
+  const [toast, notify] = useLocalToast();
   const [phase,    setPhase]    = useState('idle'); // idle | scanning-low | scanning-high | done
   const [lowNote,  setLowNote]  = useState(null);
   const [highNote, setHighNote] = useState(null);
@@ -329,7 +341,7 @@ function VocalRangeDetector({ db, appId, student }) {
         else                  setHighNote(info);
         setPhase(type === 'low' ? 'idle' : 'done');
       }, 4000);
-    } catch { setPhase('idle'); alert('No se pudo acceder al micrófono.'); }
+    } catch { setPhase('idle'); notify('No se pudo acceder al micrófono.', 'error'); }
   };
 
   useEffect(() => () => stopMic(), []);
@@ -341,8 +353,8 @@ function VocalRangeDetector({ db, appId, student }) {
       await updateDoc(doc(db, `artifacts/${appId}/students/${student.id}`), {
         vocalRange: { lowestNoteNum: lowNote.noteNum, lowestNote: lowNote.name + lowNote.octave, highestNoteNum: highNote.noteNum, highestNote: highNote.name + highNote.octave, updatedAt: new Date().toISOString() }
       });
-      alert('Rango guardado correctamente.');
-    } catch (e) { alert('Error: ' + e.message); }
+      notify('Rango guardado correctamente.');
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
     finally { setSaving(false); }
   };
 
@@ -362,6 +374,7 @@ function VocalRangeDetector({ db, appId, student }) {
 
   return (
     <div className="space-y-4">
+      <Toast open={!!toast} kind={toast?.kind}>{toast?.text}</Toast>
       <p className="text-xs text-gray-500 text-center">Cantá tu nota más grave y más aguda sostenidas. El sistema detecta automáticamente.</p>
 
       {/* Display */}
@@ -580,6 +593,7 @@ function getSupportedMimeType() {
 }
 
 function VoiceRecorder({ db, appId, student }) {
+  const [toast, notify] = useLocalToast();
   const [isRec,      setIsRec]      = useState(false);
   const [recTime,    setRecTime]    = useState(0);
   const [recordings, setRecordings] = useState([]);
@@ -651,8 +665,8 @@ function VoiceRecorder({ db, appId, student }) {
         studentId: student.id,
         status: 'pending_review',
       });
-      alert('Grabación enviada a Sandra. ¡Ella la escuchará pronto!');
-    } catch (e) { alert('Error al enviar: ' + e.message); }
+      notify('Grabación enviada a Sandra. ¡Ella la escuchará pronto!');
+    } catch (e) { notify('Error al enviar: ' + e.message, 'error'); }
     finally { setSending(null); }
   };
 
@@ -660,6 +674,7 @@ function VoiceRecorder({ db, appId, student }) {
 
   return (
     <div className="space-y-4">
+      <Toast open={!!toast} kind={toast?.kind}>{toast?.text}</Toast>
       <p className="text-xs text-gray-500 text-center">Grabá hasta 60 segundos. Escuchate y opcionalmente enviá la grabación a Sandra.</p>
 
       {/* Rec button */}
@@ -917,8 +932,15 @@ function BeforeAfterComparator() {
     }
   };
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
   const handleDelete = async (id) => {
-    if (!window.confirm('¿Eliminar esta grabación? No se puede deshacer.')) return;
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      setTimeout(() => setConfirmDeleteId(cur => (cur === id ? null : cur)), 3000);
+      return;
+    }
+    setConfirmDeleteId(null);
     try {
       stopPlayback();
       await comparatorDelete(id);
@@ -1019,7 +1041,12 @@ function BeforeAfterComparator() {
                   <p className="text-sm font-bold text-gray-800 truncate">{r.name}</p>
                   <p className="text-[10px] text-gray-400">{fmtDate(r.createdAt)} · {fmt(r.duration)}</p>
                 </div>
-                <button onClick={() => handleDelete(r.id)} className="flex-shrink-0 px-2 py-1.5 rounded-lg bg-white border border-gray-200 text-red-500 hover:bg-red-50 transition text-xs font-bold" title="Eliminar grabación">🗑</button>
+                <button onClick={() => handleDelete(r.id)}
+                  className={`flex-shrink-0 px-2 py-1.5 rounded-lg border transition text-xs font-bold whitespace-nowrap
+                    ${confirmDeleteId === r.id ? 'bg-red-600 border-red-600 text-white' : 'bg-white border-gray-200 text-red-500 hover:bg-red-50'}`}
+                  title="Eliminar grabación">
+                  {confirmDeleteId === r.id ? '¿Seguro? 🗑' : '🗑'}
+                </button>
               </div>
               <audio src={r.url} controls className="w-full h-8" />
             </div>
@@ -1035,6 +1062,7 @@ function BeforeAfterComparator() {
 // 4. CONTADOR DE PRÁCTICA
 // ─────────────────────────────────────────────────────────────────────────────
 function PracticeTimer({ db, appId, student }) {
+  const [toast, notify] = useLocalToast();
   const [running,  setRunning]  = useState(false);
   const [elapsed,  setElapsed]  = useState(0);
   const [weekMins, setWeekMins] = useState(null);
@@ -1082,8 +1110,8 @@ function PracticeTimer({ db, appId, student }) {
       });
       setWeekMins(prev => (prev ?? 0) + Math.round(elapsed / 60));
       setElapsed(0);
-      alert(`¡Práctica guardada! ${Math.floor(elapsed/60)}m ${elapsed%60}s esta sesión.`);
-    } catch (e) { alert('Error: ' + e.message); }
+      notify(`¡Práctica guardada! ${Math.floor(elapsed/60)}m ${elapsed%60}s esta sesión.`);
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
   };
 
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
@@ -1092,6 +1120,7 @@ function PracticeTimer({ db, appId, student }) {
 
   return (
     <div className="space-y-4">
+      <Toast open={!!toast} kind={toast?.kind}>{toast?.text}</Toast>
       {/* Weekly summary */}
       {weekMins !== null && (
         <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">

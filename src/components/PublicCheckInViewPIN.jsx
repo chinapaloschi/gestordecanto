@@ -81,6 +81,7 @@ export const PublicCheckInViewPIN = ({ db }) => {
   const [needsPin, setNeedsPin] = React.useState(false);
 
   const [student, setStudent] = React.useState(null);
+  const [pendingAutoStudent, setPendingAutoStudent] = React.useState(null);
   const [autoLoginChecked, setAutoLoginChecked] = React.useState(false);
 
   const [status, setStatus] = React.useState({ step: 'ok', msg: 'Completá tu DNI para ingresar.' });
@@ -496,7 +497,9 @@ const getCurrentWeekRange = () => {
   }, []);
 
   // Sesión guardada: si el alumno ya inició sesión antes en este teléfono,
-  // entrar directo sin pedir DNI de nuevo.
+  // le preguntamos "¿sos vos?" antes de entrar directo — un celular puede
+  // estar compartido entre hermanos, y así evitamos que uno entre sin querer
+  // a la cuenta del otro.
   React.useEffect(() => {
     if (!db || !appId || student || autoLoginChecked) return;
     setAutoLoginChecked(true);
@@ -506,15 +509,7 @@ const getCurrentWeekRange = () => {
       try {
         const snap = await getDoc(doc(db, `artifacts/${appId}/students`, savedId));
         if (snap.exists()) {
-          const studentData = { id: snap.id, ...snap.data() };
-          setStudent(studentData);
-          setStatus({ step: 'confirm', msg: '' });
-          registerNotifications({
-            app: firebaseApp, db, auth, appId,
-            studentId: studentData.id,
-            vapidKey: FCM_VAPID_KEY,
-            onToast: (msg, kind) => { if (kind === 'error') console.warn('[Push]', msg); },
-          }).catch(() => {});
+          setPendingAutoStudent({ id: snap.id, ...snap.data() });
         } else {
           localStorage.removeItem(STUDENT_SESSION_KEY);
         }
@@ -522,6 +517,25 @@ const getCurrentWeekRange = () => {
     })();
 
   }, [db, appId, student, autoLoginChecked]);
+
+  const confirmAutoStudent = () => {
+    const studentData = pendingAutoStudent;
+    if (!studentData) return;
+    setPendingAutoStudent(null);
+    setStudent(studentData);
+    setStatus({ step: 'confirm', msg: '' });
+    registerNotifications({
+      app: firebaseApp, db, auth, appId,
+      studentId: studentData.id,
+      vapidKey: FCM_VAPID_KEY,
+      onToast: (msg, kind) => { if (kind === 'error') console.warn('[Push]', msg); },
+    }).catch(() => {});
+  };
+
+  const rejectAutoStudent = () => {
+    try { localStorage.removeItem(STUDENT_SESSION_KEY); } catch {}
+    setPendingAutoStudent(null);
+  };
 
 
 
@@ -1006,8 +1020,32 @@ const renderCalendarGrid = () => {
         </div>
       )}
 
+      {/* ══ ¿SOS VOS? — confirmación en dispositivo compartido ══ */}
+      {!student && !refreshing && pendingAutoStudent && (
+        <div className="min-h-screen bg-gradient-to-br from-rose-950 via-rose-800 to-pink-700 flex items-center justify-center px-4"
+          style={{ paddingTop: 'max(1.5rem, calc(env(safe-area-inset-top) + 1rem))' }}>
+          <div className="bg-white rounded-3xl shadow-xl p-6 max-w-sm w-full text-center space-y-4">
+            <div className="w-16 h-16 rounded-full bg-rose-50 mx-auto overflow-hidden flex items-center justify-center">
+              {pendingAutoStudent.photoURL
+                ? <img src={pendingAutoStudent.photoURL} alt="" className="w-full h-full object-cover object-top" />
+                : <svg className="w-7 h-7 text-rose-300" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>}
+            </div>
+            <div>
+              <p className="text-gray-400 text-sm">¿Sos vos,</p>
+              <h2 className="font-display font-semibold text-xl text-gray-900">{pendingAutoStudent.name || pendingAutoStudent.fullName}?</h2>
+            </div>
+            <button onClick={confirmAutoStudent}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-500 text-white font-bold shadow-lg active:scale-[0.98] transition-all">
+              Sí, soy yo
+            </button>
+            <button onClick={rejectAutoStudent}
+              className="text-xs font-semibold text-gray-400 hover:text-gray-600 transition">No, cambiar de usuario</button>
+          </div>
+        </div>
+      )}
+
       {/* ══ LOGIN ══ */}
-      {!student && !refreshing && (
+      {!student && !refreshing && !pendingAutoStudent && (
         <div className="min-h-screen bg-gradient-to-br from-rose-950 via-rose-800 to-pink-700 flex flex-col items-center justify-center p-6"
           style={{ paddingTop: 'max(1.5rem, calc(env(safe-area-inset-top) + 1rem))' }}>
           <div className="w-full max-w-sm">

@@ -4,14 +4,21 @@ import { ref as stRef, uploadBytesResumable, getDownloadURL } from 'firebase/sto
 import { doc, updateDoc } from 'firebase/firestore';
 import { storage, db } from '../firebaseConfig.js';
 import { formatMoneyAr } from '../utils/money.js';
-import { waitForAuthReady, updateReceiptStatus, markStudentReceiptsAsSeen } from '../utils/authHelpers.js';
+import { waitForAuthReady } from '../utils/authHelpers.js';
 import { BANK_INFO, copyToClipboard } from './PublicPortalComponents.jsx';
 import { __uploadReceiptInline__PATCH__ } from '../utils/authHelpers.js';
+import { Toast } from './Toast.jsx';
 export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, receipts = [] }) {
   const [file, setFile] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [toast, setToast] = React.useState(null);
   const fileInputRef = React.useRef(null);
+
+  const notify = (text, kind = 'success') => {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), 2500);
+  };
 
   const thisMonth = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
   const thisMonthReceipt = receipts.find(r => {
@@ -37,8 +44,8 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, 
     const f = e.target.files?.[0];
     if (!f) return;
     const okTypes = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
-    if (!okTypes.includes(f.type)) { alert("Formato no soportado. Subí PDF o imagen (PNG/JPG/WebP)."); e.target.value = ""; return; }
-    if (f.size > 15 * 1024 * 1024) { alert("El archivo supera 15MB."); e.target.value = ""; return; }
+    if (!okTypes.includes(f.type)) { notify("Formato no soportado. Subí PDF o imagen (PNG/JPG/WebP).", "error"); e.target.value = ""; return; }
+    if (f.size > 15 * 1024 * 1024) { notify("El archivo supera 15MB.", "error"); e.target.value = ""; return; }
     setFile(f);
   };
 
@@ -53,11 +60,11 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, 
         createdAt: serverTimestamp(), size: file.size, mime: file.type,
         status: "pending", filename, contentType: file.type,
       });
-      alert("¡Comprobante enviado! Sandra lo revisará pronto.");
+      notify("¡Comprobante enviado! Sandra lo revisará pronto.");
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (e) {
-      alert(`Error al guardar: ${e.message}`);
+      notify(`Error al guardar: ${e.message}`, "error");
     } finally {
       setBusy(false);
     }
@@ -65,6 +72,7 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, 
 
   return (
     <div className="px-4 py-4 space-y-4">
+      <Toast open={!!toast} kind={toast?.kind}>{toast?.text}</Toast>
 
       {/* Banner estado */}
       {isApproved && (
