@@ -1231,7 +1231,7 @@ const renderCalendarGrid = () => {
 
             const showPaid = hasPaidThisMonth;
             const showDue = !hasPaidThisMonth && publicTotalToday > 0;
-            const showCta = !hasPaidThisMonth && (publicTotalToday > 0 || student.manualReceiptEnabled);
+            const showCta = publicTotalToday > 0;
             const showNext = !!next;
             const showStats = totalMes > 0;
             const showSinMarcar = sinMarcar.length > 0;
