@@ -165,7 +165,8 @@ exports.loginStudent = functions.https.onCall(async (data, context) => {
   // Login correcto: resetear el contador de intentos por DNI.
   await dniAttemptRef.set({ windowStart: now, count: 0, lastAttemptAt: now }, { merge: true });
 
-  return { id: studentDoc.id, ...studentData };
+  const { pin: _omitPin, ...safeStudentData } = studentData;
+  return { id: studentDoc.id, ...safeStudentData };
 });
 
 // ---------------- 3) Descarga de YouTube via yt-dlp (cliente tv_embedded) ----------------

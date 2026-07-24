@@ -14,7 +14,7 @@ import { Toast } from './Toast.jsx';
 
 import { formatMoneyAr, parseMoneyAr } from '../utils/money.js';
 
-import { formatDateToDDMMYYYY, mapClassTypeToSpanish, daysOfWeekFull } from '../utils/classHelpers.js';
+import { formatDateToDDMMYYYY } from '../utils/classHelpers.js';
 
 import { useMergedValidatedPayments } from '../hooks/useMergedValidatedPayments.js';
 
@@ -22,7 +22,7 @@ import { useHasPaidThisMonth } from '../hooks/useHasPaidThisMonth.js';
 
 import { useLatestPackagePaid } from '../hooks/useLatestPackagePaid.js';
 
-import { TransferBox, UnpaidPackageBanner, PublicBillingInfo, PublicPaymentsList, PublicTicketsSection } from './PublicPortalComponents.jsx';
+import { PublicPaymentsList, PublicTicketsSection } from './PublicPortalComponents.jsx';
 
 import { GracePeriodNotice, NextMonthInfoBox } from './PublicPortalWidgets.jsx';
 
@@ -32,7 +32,7 @@ import { BrandLogo } from './AuthComponents.jsx';
 
 import { ROUTES } from '../constants.js';
 
-import { waitForAuthReady, updateReceiptStatus, markStudentReceiptsAsSeen } from '../utils/authHelpers.js';
+import { waitForAuthReady } from '../utils/authHelpers.js';
 
 import { ASSET_VER, APP_BUILD, ATTENDANCE_QR_CODE } from '../constants.js';
 
@@ -54,7 +54,6 @@ import { registerNotifications } from '../notifications.js';
 import { FCM_VAPID_KEY } from '../constants.js';
 
 import { isPresent, isAbsent } from '../utils/studentHelpers.js';
-import { useNewReceiptsFlag } from '../hooks/useNewReceiptsFlag.js';
 import { UpdateBanner } from './UpdateBanner.jsx';
 
 // Abre una URL forzando que escape al Safari "real" (con cámara funcionando)
@@ -74,12 +73,8 @@ function openInRealBrowser(path) {
   }
 }
 
-export const PublicCheckInViewPIN = ({ db, onClose }) => {
+export const PublicCheckInViewPIN = ({ db }) => {
 
-  
-
-  const [calculandoMonto, setCalculandoMonto] = React.useState(true);
-  const [showTuner, setShowTuner] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState('inicio');
 
   const LOGO_URL = `/nuevologo.gif?v=${ASSET_VER}`;
@@ -112,6 +107,7 @@ export const PublicCheckInViewPIN = ({ db, onClose }) => {
   const [openRepertoire, setOpenRepertoire] = React.useState(false);
   const [openNotes, setOpenNotes] = React.useState(false);
   const [repertoire, setRepertoire] = React.useState([]);
+  const [receipts, setReceipts] = React.useState([]);
   const [classNotesList, setClassNotesList] = React.useState([]);
   const [pullDist, setPullDist] = React.useState(0);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -184,8 +180,6 @@ const [presentSuccess, setPresentSuccess] = useState(false);
 
   const [appId, setLocalAppId] = React.useState(null);
 
-  const [token, setToken] = React.useState(null);
-
 React.useEffect(() => {
 
   const initAuth = async () => {
@@ -210,11 +204,7 @@ React.useEffect(() => {
 
   const [blockedSlots, setBlockedSlots] = React.useState([]);
 
-  const [allMonthClasses, setAllMonthClasses] = React.useState([]); 
-
-
-
-  const hasNewReceipt = useNewReceiptsFlag(db, appId, student?.id);
+  const [allMonthClasses, setAllMonthClasses] = React.useState([]);
 
 const getCurrentWeekRange = () => {
 
@@ -243,18 +233,6 @@ const getCurrentWeekRange = () => {
   };
 
 };
-
-  // Helpers de fechas
-
-  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-
-  const getFirstDayOfMonth = (year, month) => {
-
-    const day = new Date(year, month, 1).getDay();
-
-    return day === 0 ? 6 : day - 1; // Ajuste para que Lunes sea 0
-
-  };
 
 
 
@@ -397,6 +375,18 @@ const getCurrentWeekRange = () => {
     return unsub;
   }, [db, appId, student?.id]);
 
+  // Comprobantes de pago del alumno (para mostrarle el estado: en revisión / aprobado / rechazado)
+  React.useEffect(() => {
+    if (!db || !appId || !student?.id) return;
+    const qRec = query(
+      fsCollection(db, `artifacts/${appId}/students/${student.id}/receipts`),
+      orderBy('createdAt', 'desc'),
+      limit(5)
+    );
+    const unsub = onSnapshot(qRec, snap => setReceipts(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    return unsub;
+  }, [db, appId, student?.id]);
+
   // Material y notas de las últimas clases
   React.useEffect(() => {
     if (!db || !appId || !student?.id) return;
@@ -521,8 +511,6 @@ const getCurrentWeekRange = () => {
       const getParam = (name) => new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '').get(name);
 
       setLocalAppId(getParam('a'));
-
-      setToken(getParam('t'));
 
       const present = getParam('present');
       if (present) setPendingPresent(present);
@@ -805,7 +793,7 @@ for (const r of rows) {
 
     topicLink: r.topicLink || null,
 
-    realType: r.classType || r.studentType || 'individual'
+    realType: r.studentType || r.classType || 'individual'
 
 });
 
@@ -1043,8 +1031,6 @@ const renderCalendarGrid = () => {
   );
 
 };
-
-  const mainCardClasses = hasNewReceipt ? "border-amber-300 ring-2 ring-amber-300 bg-amber-50" : "border-rose-50";
 
   const showGracePeriodNotice = !hasPaidThisMonth && (new Date().getDate() <= 8) && (monthlyByType.individual?.length > 0 || monthlyByType.grupal?.length > 0);
 
@@ -1306,7 +1292,7 @@ const renderCalendarGrid = () => {
                     <svg className="w-4 h-4 text-rose-100" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path strokeLinecap="round" d="M2 10h20"/></svg>
                     <p className="font-display font-semibold text-sm">Pagar mi cuota</p>
                   </div>
-                  <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} />
+                  <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} receipts={receipts} />
                 </div>
               )}
 
@@ -1426,7 +1412,7 @@ const renderCalendarGrid = () => {
                   <svg className="w-4 h-4 text-rose-100" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path strokeLinecap="round" d="M2 10h20"/></svg>
                   <p className="font-display font-semibold text-sm">Pagar mi cuota</p>
                 </div>
-                <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} />
+                <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} receipts={receipts} />
               </div>
             ) : null}
             <div className="bg-white rounded-xl border border-gray-100 p-4">
@@ -1550,9 +1536,10 @@ const renderCalendarGrid = () => {
 
 
 
-                {monthlyByType.individual?.length > 0 && (() => {
+                {(monthlyByType.individual?.length > 0 || monthlyByType.grupal?.length > 0 || monthlyByType.otras?.length > 0) && (() => {
                   const today = new Date(); today.setHours(0,0,0,0);
-                  const classes = monthlyByType.individual;
+                  const classes = [...(monthlyByType.individual || []), ...(monthlyByType.grupal || []), ...(monthlyByType.otras || [])]
+                    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
 
                   // Agrupar por semana
                   const weeks = [];
