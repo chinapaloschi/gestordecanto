@@ -34,7 +34,7 @@ import { ROUTES } from '../constants.js';
 
 import { waitForAuthReady } from '../utils/authHelpers.js';
 
-import { ASSET_VER, APP_BUILD, ATTENDANCE_QR_CODE } from '../constants.js';
+import { ASSET_VER, APP_BUILD } from '../constants.js';
 
 import { Button, UpdateButton } from './AuthComponents.jsx';
 
@@ -56,22 +56,7 @@ import { FCM_VAPID_KEY } from '../constants.js';
 import { isPresent, isAbsent } from '../utils/studentHelpers.js';
 import { UpdateBanner } from './UpdateBanner.jsx';
 
-// Abre una URL forzando que escape al Safari "real" (con cámara funcionando)
-// cuando la app corre instalada en la pantalla de inicio de iOS (modo standalone).
-// En ese modo, window.open() NO escapa — sigue atrapado en el mismo contenedor
-// restringido donde la cámara no funciona. El esquema "x-safari-https://" es la
-// forma conocida de forzar la apertura en Safari desde una app instalada.
 const STUDENT_SESSION_KEY = 'sp_checkin_student_id';
-
-function openInRealBrowser(path) {
-  const url = `${window.location.origin}${path}`;
-  const isIOSStandalone = typeof window.navigator.standalone !== 'undefined' && window.navigator.standalone === true;
-  if (isIOSStandalone) {
-    window.location.href = url.replace(/^https?:\/\//, 'x-safari-https://');
-  } else {
-    window.open(url, '_blank');
-  }
-}
 
 export const PublicCheckInViewPIN = ({ db }) => {
 
@@ -172,11 +157,6 @@ export const PublicCheckInViewPIN = ({ db }) => {
 
 const [showAttendanceOptions, setShowAttendanceOptions] = useState(false);
 
-const [pendingPresent, setPendingPresent] = useState(null); // código del QR de sala leído por URL
-const [presentDone, setPresentDone] = useState(false);
-const [presentSuccess, setPresentSuccess] = useState(false);
-
-  
 
   const [appId, setLocalAppId] = React.useState(null);
 
@@ -512,9 +492,6 @@ const getCurrentWeekRange = () => {
 
       setLocalAppId(getParam('a'));
 
-      const present = getParam('present');
-      if (present) setPendingPresent(present);
-
     } catch (e) { console.error(e); }
   }, []);
 
@@ -826,42 +803,6 @@ for (const r of rows) {
     return () => unsub();
 
   }, [db, appId, student?.id, todayKey]);
-
-  // Clase de hoy habilitada para marcar presente escaneando el QR de la sala.
-  // (Sin restricción horaria: cualquier clase de hoy que no esté marcada.)
-  const todayScannableClass = useMemo(() => {
-    for (const cls of allMonthClasses) {
-      if (cls.classDate !== todayKey) continue;
-      if (isPresent(cls.attendanceStatus) || isAbsent(cls.attendanceStatus)) continue;
-      return { id: cls.id, time: cls.startTime || '' };
-    }
-    return null;
-  }, [allMonthClasses, todayKey]);
-
-  // Marcar presente automáticamente cuando el alumno abre el portal desde el
-  // QR de la sala (cámara nativa del teléfono → URL con ?present=CODE).
-  React.useEffect(() => {
-    if (!pendingPresent || presentDone) return;
-    if (!student?.id) return; // todavía no logueó → esperamos a que ponga el DNI
-    if (pendingPresent !== ATTENDANCE_QR_CODE) {
-      setPendingPresent(null);
-      showToast('El código del cartel no es válido.', 'error');
-      return;
-    }
-    if (!todayScannableClass) {
-      // Logueado pero no hay clase en la ventana horaria
-      // (esperamos a que carguen las clases; si igual no hay, avisamos una vez)
-      if (allMonthClasses.length > 0) {
-        setPendingPresent(null);
-        showToast('No tenés una clase ahora para marcar presente.', 'info');
-      }
-      return;
-    }
-    setPresentDone(true);
-    setPendingPresent(null);
-    saveAttendance(todayScannableClass.id, 'presente');
-    setPresentSuccess(true);
-  }, [pendingPresent, presentDone, student?.id, todayScannableClass, allMonthClasses.length]);
 
 // Abrir popup de eventos al iniciar sesión si hay eventos no confirmados
 
@@ -1221,8 +1162,7 @@ const renderCalendarGrid = () => {
             const showNext = !!next;
             const showStats = totalMes > 0;
             const showSinMarcar = sinMarcar.length > 0;
-            const showScanCta = !!todayScannableClass;
-            const hayAlgo = showPaid || showDue || showCta || showNext || showStats || showSinMarcar || showScanCta;
+            const hayAlgo = showPaid || showDue || showCta || showNext || showStats || showSinMarcar;
 
             let isToday = false, isTomorrow = false, ds = '', label = null;
             if (next) {
@@ -1238,31 +1178,6 @@ const renderCalendarGrid = () => {
               .map(c => isPresent(c.status) ? 1 : isAbsent(c.status) ? 0.32 : 0.14);
 
             return <div className="space-y-3">
-
-              {/* CTA: marcar presente escaneando el QR de la sala (se abre en una pestaña aparte: en iOS, la cámara dentro de la app instalada en pantalla de inicio no funciona) */}
-              {showScanCta && (
-                <div className="space-y-1.5">
-                  <a href={`${window.location.origin}/escanear-presente.html`}
-                    onClick={(e) => { e.preventDefault(); openInRealBrowser('/escanear-presente.html'); }}
-                    className="w-full block rounded-xl p-4 shadow-sm bg-gradient-to-br from-green-600 to-emerald-500 text-left active:scale-[0.98] transition">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-                          <rect x="3" y="7" width="18" height="13" rx="2.5"/><circle cx="12" cy="13.5" r="3.3"/><path strokeLinecap="round" d="M8 7l1.3-2h5.4L16 7"/>
-                        </svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white font-semibold text-sm">Escanear QR para dar presente</p>
-                        <p className="text-green-100 text-xs mt-0.5">Tu clase de hoy es a las {todayScannableClass.time} hs</p>
-                      </div>
-                      <svg className="w-4 h-4 text-white/70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-                      </svg>
-                    </div>
-                  </a>
-                  <p className="text-[10px] text-gray-400 text-center px-2">Si no se abre la cámara, mantené presionado este botón y elegí "Abrir en Safari".</p>
-                </div>
-              )}
 
               {/* Banner pago */}
               {showPaid && (
@@ -1691,18 +1606,6 @@ const renderCalendarGrid = () => {
 
             </div>
           </Modal>
-
-      <Modal isOpen={presentSuccess} onClose={() => setPresentSuccess(false)} size="sm">
-        <div className="p-8 text-center">
-          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4 text-4xl">✅</div>
-          <h3 className="text-xl font-black text-green-800 mb-2">¡Presente registrado!</h3>
-          <p className="text-sm text-gray-600 mb-6">Tu asistencia a la clase de hoy quedó marcada. ¡Que tengas una linda clase! 🎵</p>
-          <button onClick={() => setPresentSuccess(false)}
-            className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition">
-            Listo
-          </button>
-        </div>
-      </Modal>
 
       <Modal isOpen={showAttendanceOptions} onClose={() => setShowAttendanceOptions(false)} size="sm">
 

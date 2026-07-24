@@ -4,11 +4,6 @@ export const ASSET_VER = "9";
 // Subir este número en cada deploy del portal.
 export const APP_BUILD = "v30";
 
-// ─── QR de presente en sala ────────────────────────────────────────────────
-// Código fijo impreso en el cartel de la sala. Leerlo desde el portal público
-// marca la asistencia del alumno a la clase de hoy (dentro de la ventana horaria).
-export const ATTENDANCE_QR_CODE = "SANDRA-PALOSCHI-SALA-PRESENTE";
-
 // ─── FCM Push Notifications ───────────────────────────────────────────────────
 // Para obtener la VAPID key:
 // Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair
