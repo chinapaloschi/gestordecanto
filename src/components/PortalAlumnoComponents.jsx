@@ -30,6 +30,7 @@ import { ASSET_VER } from '../constants.js';
 import { IconTrash } from './Icons.jsx';
 import { isPresent, isAbsent } from '../utils/studentHelpers.js';
 import { ReceiptsCenter } from './ReceiptsComponents.jsx';
+import { VoiceNotesCenter } from './VoiceNotesCenter.jsx';
 import { ALLOWED_EMAILS } from './AuthComponents.jsx';
 import { ChromaticTuner } from './PitchPanel.jsx';
 export const TicketMiniCard = ({ appId, eventId, eventMeta, attendee }) => {
@@ -766,6 +767,9 @@ export function FloatingAdminMessagesButton({ db, appId, students, showMessage }
 
       {/* Botón fijo para Comprobantes (se mantiene) */}
       <ReceiptsCenter db={db} appId={appId} students={students} />
+
+      {/* Botón fijo para Grabaciones de voz */}
+      <VoiceNotesCenter db={db} appId={appId} students={students} />
     </>
   );
 }

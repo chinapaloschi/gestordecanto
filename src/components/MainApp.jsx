@@ -1567,6 +1567,10 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
                       <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M2 6a2 2 0 012-2h16a2 2 0 012 2v12l-4-4H4a2 2 0 01-2-2V6z"/></svg>
                       Mensajes
                     </button>
+                    <button onClick={() => { const el = document.querySelector('button[title="Grabaciones"]'); if(el) el.click(); }} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition text-sm font-medium">
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg>
+                      Grabaciones
+                    </button>
                   </div>
 
                   {/* AGENDA */}

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { collection as fsCollection, addDoc, doc, updateDoc, serverTimestamp, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection as fsCollection, addDoc, doc, updateDoc, serverTimestamp, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { ref as stRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebaseConfig.js';
 import { detectPitch, freqToNoteInfo, NOTE_ES } from '../utils/pitchDetector.js';
@@ -599,9 +599,22 @@ function VoiceRecorder({ db, appId, student }) {
   const [recordings, setRecordings] = useState([]);
   const [sending,    setSending]    = useState(null);
   const [recError,   setRecError]   = useState('');
+  const [sentNotes,  setSentNotes]  = useState([]);
   const mrRef    = useRef(null);
   const chunksRef = useRef([]);
   const timerRef  = useRef(null);
+
+  // Historial de grabaciones ya enviadas a Sandra, con su estado
+  useEffect(() => {
+    if (!db || !appId || !student?.id) return;
+    const q = query(
+      fsCollection(db, `artifacts/${appId}/students/${student.id}/voiceNotes`),
+      orderBy('createdAt', 'desc'),
+      limit(10)
+    );
+    const unsub = onSnapshot(q, snap => setSentNotes(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    return unsub;
+  }, [db, appId, student?.id]);
 
   const startRec = async () => {
     setRecError('');
@@ -714,6 +727,26 @@ function VoiceRecorder({ db, appId, student }) {
             </div>
           ))}
           <p className="text-[10px] text-gray-400 text-center">📨 = Enviar a Sandra</p>
+        </div>
+      )}
+
+      {/* Mis envíos */}
+      {sentNotes.length > 0 && (
+        <div className="space-y-1.5 pt-2 border-t border-gray-100">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Mis envíos</p>
+          {sentNotes.map(n => {
+            const heard = n.status !== 'pending_review';
+            let dateLabel = '';
+            try { dateLabel = (n.createdAt?.toDate ? n.createdAt.toDate() : new Date(n.createdAt)).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }); } catch {}
+            return (
+              <div key={n.id} className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+                <span className="text-xs text-gray-500">{dateLabel} · {fmt(n.durationSecs || 0)}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${heard ? 'text-green-700 bg-green-100' : 'text-amber-700 bg-amber-100'}`}>
+                  {heard ? 'Escuchada por Sandra' : 'Esperando escucha'}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
