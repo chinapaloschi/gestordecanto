@@ -664,7 +664,7 @@ function VoiceRecorder({ db, appId, student }) {
     setSending(idx);
     try {
       const filename = `voz_${student.id}_${Date.now()}.webm`;
-      const storePath = `artifacts/${appId}/studentVoice/${student.id}/${filename}`;
+      const storePath = `artifacts/${appId}/students/${student.id}/voiceNotes/${filename}`;
       const storageRef = stRef(storage, storePath);
       await new Promise((res, rej) => {
         const task = uploadBytesResumable(storageRef, rec.blob);
