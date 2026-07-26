@@ -1,0 +1,63 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // --- Funciones de Ayuda ---
+    function isPublicAppPath(appId) {
+     return appId == '1:786390581865:web:ed47531cf7415ae5ca18f8';
+    }
+
+    function isAllowedReceiptType() {
+      return request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType == 'application/pdf' ||
+             request.resource.contentType == 'application/octet-stream';
+    }
+
+    function isStaff() {
+      return request.auth != null &&
+             request.auth.token.email in [
+               'sandrupaloschi@gmail.com',
+               'gracielamargheritis8@gmail.com',
+               'javicampa010@gmail.com'
+             ];
+    }
+
+    // --- Reglas Específicas ---
+
+    // FOTOS DE PERFIL
+    match /students/{studentId}/profilePicture.jpg {
+      allow read: if true;
+      allow write: if request.auth != null
+                    && request.resource.size < 5 * 1024 * 1024
+                    && request.resource.contentType.matches('image/.*');
+    }
+
+    // COMPROBANTES
+    match /artifacts/{appId}/students/{studentId}/receipts/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                     && isPublicAppPath(appId)
+                     && request.resource.size < 15 * 1024 * 1024
+                     && isAllowedReceiptType();
+    }
+
+    // GRABACIONES DE VOZ (Herramientas → Grabador de voz → "Enviar a Sandra")
+    match /artifacts/{appId}/students/{studentId}/voiceNotes/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                     && isPublicAppPath(appId)
+                     && request.resource.size < 15 * 1024 * 1024
+                     && request.resource.contentType.matches('audio/.*');
+    }
+
+    // --- REGLA PARA LENCERÍA (CON EL AJUSTE PARA GALERÍAS) ---
+    // Permite lectura pública de todas las fotos, pero solo el staff puede subir/borrar.
+    match /artifacts/{appId}/lenceriaStock/{itemId}/{allPaths=**} {
+       allow read: if true;
+       allow write: if isStaff()
+                     && request.resource.size < 5 * 1024 * 1024
+                     && request.resource.contentType.matches('image/.*');
+     }
+
+  }
+}
