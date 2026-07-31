@@ -1274,18 +1274,39 @@ const handleOpenRenewSubscriptionModal = async (student) => {
         };
         const fallbackPayment = [...allPaymentsForStudent].sort((a, b) => paymentDateMs(b) - paymentDateMs(a))[0] || null;
 
+        // Si el pago se hizo del día 9 en adelante, MarkPaymentForm ya le
+        // sumó el 10% de recargo por mora al monto guardado — para la
+        // renovación queremos proponer la cuota BASE, no arrastrar ese
+        // recargo puntual como si fuera el nuevo precio de siempre.
+        const stripLateSurcharge = (amount, paymentDoc) => {
+            if (!amount || !paymentDoc) return amount;
+            const raw = paymentDoc.paidAt || paymentDoc.paymentDate || paymentDoc.fechaPago;
+            let day = null;
+            try {
+                if (raw?.toDate) day = raw.toDate().getDate();
+                else if (typeof raw === 'object' && typeof raw.seconds === 'number') day = new Date(raw.seconds * 1000).getDate();
+                else if (raw) day = new Date(raw).getDate();
+            } catch {}
+            if (day === null || day < 9) return amount;
+            const base = amount / 1.1;
+            const roundedBase = Math.round(base);
+            // Si sacándole el 10% da un número redondo, asumimos que sí tenía recargo
+            if (Math.abs(base - roundedBase) < 0.5 && roundedBase % 100 === 0) return roundedBase;
+            return amount;
+        };
+
         const getPaymentAmountForSlot = async (slot) => {
             const withRef = [...slot.classes].filter(c => c.monthlyPaymentRefId)
                 .sort((a, b) => b.classDate.localeCompare(a.classDate));
             for (const cls of withRef) {
                 const found = allPaymentsForStudent.find(p => p.id === cls.monthlyPaymentRefId);
-                if (found) return Number(found.amount ?? found.monto ?? found.total ?? 0) || 0;
+                if (found) return stripLateSurcharge(Number(found.amount ?? found.monto ?? found.total ?? 0) || 0, found);
                 try {
                     const snap = await getDoc(doc(db, `artifacts/${appId}/payments/${cls.monthlyPaymentRefId}`));
-                    if (snap.exists()) return Number(snap.data().amount ?? snap.data().monto ?? 0) || 0;
+                    if (snap.exists()) return stripLateSurcharge(Number(snap.data().amount ?? snap.data().monto ?? 0) || 0, snap.data());
                 } catch {}
             }
-            return fallbackPayment ? (Number(fallbackPayment.amount ?? fallbackPayment.monto ?? fallbackPayment.total ?? 0) || 0) : 0;
+            return fallbackPayment ? stripLateSurcharge(Number(fallbackPayment.amount ?? fallbackPayment.monto ?? fallbackPayment.total ?? 0) || 0, fallbackPayment) : 0;
         };
 
         const buildPeriodLabel = (lastClassDate) => {
