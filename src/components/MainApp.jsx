@@ -1204,80 +1204,92 @@ const calendarStripeStyles = `
 
 
 // ▼▼▼ REEMPLAZÁ ESTA FUNCIÓN COMPLETA EN TU MainApp ▼▼▼
+// Especificación acordada con Sandra para "Renovar" (2026-07-31):
+// 1. La fuente de verdad es el CALENDARIO, no los pagos: se agrupan las
+//    clases agendadas del alumno por (tipo, día de semana, horario) —
+//    cada grupo es un "abono" distinto (puede tener varios a la vez, ej.
+//    Coral + Individual).
+// 2. Un grupo cuenta como abono ACTIVO solo si su clase más reciente fue
+//    en los últimos 45 días — así un abono discontinuado hace meses
+//    (ej. una clase Coral de hace un año) no vuelve a aparecer solo.
+// 3. Se cuentan las clases sin importar si quedaron canceladas o cayeron
+//    en un día bloqueado — lo que importa es qué día/horario tenía.
+// 4. El próximo período a generar es el mes siguiente al de la última
+//    clase de ESE grupo (no el mes actual).
+// 5. El monto de cada abono sale del último pago vinculado (monthlyPaymentRefId)
+//    a una clase de ESE grupo específico — así Coral e Individual no se
+//    mezclan de precio. Si ninguna clase del grupo tiene pago vinculado,
+//    se usa como aproximación el pago más reciente del alumno en general.
+const RENEWAL_ACTIVE_WINDOW_DAYS = 45;
+
 const handleOpenRenewSubscriptionModal = async (student) => {
     try {
-        // allPayments (cargado a nivel app) solo trae la colección GLOBAL
-        // artifacts/{appId}/payments — pero el historial de pagos que ve el
-        // alumno también incluye una subcolección propia por alumno
-        // (artifacts/{appId}/students/{id}/payments). Buscamos en ambos.
-        const subSnap = await getDocs(fsCollection(db, `artifacts/${appId}/students/${student.id}/payments`));
-        const subPayments = subSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const globalForStudent = (Array.isArray(allPayments) ? allPayments : []).filter(p => p.studentId === student.id);
-        const combined = [...globalForStudent, ...subPayments];
+        const studentClasses = (Array.isArray(scheduledClasses) ? scheduledClasses : [])
+            .filter(c => c.studentId === student.id && c.classDate && c.startTime);
 
-        // "¿Es un abono mensual?" — misma heurística flexible que usa el
-        // historial de pagos del alumno (isValidMonthlyPayment): no todos los
-        // pagos reales tienen isPaidForPackage bien puesto, pero casi todos
-        // tienen el concepto con "mensual"/"paquete".
-        const isMonthlyLike = (p) => {
-            const concept = String(p?.concept || p?.concepto || '').toLowerCase();
-            return p?.isPaidForPackage === true || /paquete|mensual/.test(concept) || p?.paymentMethod === 'monthly_package_payment';
-        };
+        // Agrupar por tipo + día de semana + horario
+        const slotMap = new Map();
+        for (const c of studentClasses) {
+            const dow = String(new Date(c.classDate + 'T12:00:00').getDay());
+            const classType = c.studentType || c.classType || 'individual';
+            const key = `${classType}-${dow}-${c.startTime}`;
+            if (!slotMap.has(key)) {
+                slotMap.set(key, { classType, dayOfWeek: dow, startTime: c.startTime, duration: c.duration || 60, classes: [] });
+            }
+            slotMap.get(key).classes.push(c);
+        }
+
+        const now = new Date();
+        const cutoffMs = now.getTime() - RENEWAL_ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+        const activeSlots = Array.from(slotMap.values())
+            .map(slot => {
+                const sorted = [...slot.classes].sort((a, b) => a.classDate.localeCompare(b.classDate));
+                const lastClass = sorted[sorted.length - 1];
+                return { ...slot, lastClassDate: lastClass.classDate };
+            })
+            .filter(slot => new Date(slot.lastClassDate + 'T12:00:00').getTime() >= cutoffMs);
+
+        if (activeSlots.length === 0) {
+            alert(`Este alumno no tiene ninguna clase agendada en los últimos ${RENEWAL_ACTIVE_WINDOW_DAYS} días, así que no hay ningún abono activo para renovar.\n\nUsá "Programar" para armarle uno nuevo.`);
+            return;
+        }
+
+        // Pago más reciente del alumno en general — respaldo si un abono
+        // puntual no tiene ningún pago vinculado directamente.
+        const globalForStudent = (Array.isArray(allPayments) ? allPayments : []).filter(p => p.studentId === student.id);
+        let subPayments = [];
+        try {
+            const subSnap = await getDocs(fsCollection(db, `artifacts/${appId}/students/${student.id}/payments`));
+            subPayments = subSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch (e) { console.warn('No se pudo leer la subcolección de pagos', e); }
+        const allPaymentsForStudent = [...globalForStudent, ...subPayments];
         const paymentDateMs = (p) => {
-            const raw = p.paidAt || p.paymentDate || p.fechaPago || p.date || p.createdAt;
+            const raw = p?.paidAt || p?.paymentDate || p?.fechaPago || p?.date || p?.createdAt;
             if (!raw) return 0;
             if (typeof raw?.toDate === 'function') return raw.toDate().getTime();
             if (typeof raw === 'object' && typeof raw.seconds === 'number') return raw.seconds * 1000;
             const d = new Date(raw);
             return isNaN(d.getTime()) ? 0 : d.getTime();
         };
+        const fallbackPayment = [...allPaymentsForStudent].sort((a, b) => paymentDateMs(b) - paymentDateMs(a))[0] || null;
 
-        const monthlyPayments = combined.filter(isMonthlyLike).sort((a, b) => paymentDateMs(b) - paymentDateMs(a));
-
-        console.log('[DEBUG Renovar]', student.name, '— TODOS los pagos encontrados (ordenados por fecha):',
-            [...combined].sort((a, b) => paymentDateMs(b) - paymentDateMs(a)).map(p => ({
-                id: p.id, amount: p.amount, concept: p.concept || p.concepto, paymentMethod: p.paymentMethod,
-                isPaidForPackage: p.isPaidForPackage, dayOfWeek: p.dayOfWeek, classType: p.classType,
-                periodStartDate: p.periodStartDate, periodEndDate: p.periodEndDate,
-                paidAt: p.paidAt, paymentDate: p.paymentDate, fechaPago: p.fechaPago, date: p.date, createdAt: p.createdAt,
-                fechaResuelta: paymentDateMs(p) ? new Date(paymentDateMs(p)).toLocaleString('es-AR') : '(sin fecha)',
-                pasaFiltroMensual: isMonthlyLike(p),
-            }))
-        );
-
-        if (monthlyPayments.length === 0) {
-            alert('Este alumno no tiene ningún abono mensual registrado para renovar.\n\nSi querés crear uno nuevo, usá "Marcar Pago" y elegí la modalidad de abono mensual.');
-            return;
-        }
-
-        // El pago real más reciente — no necesariamente el que tenga mejor
-        // estructura de datos, sino el que efectivamente se cobró último.
-        const lastPayment = monthlyPayments[0];
-
-        // Para saber qué día/horario/tipo de clase corresponde a ESE pago,
-        // buscamos las clases agendadas que quedaron vinculadas a él — eso
-        // es siempre confiable, sin importar cómo se haya registrado el pago.
-        let linkedClasses = [];
-        try {
-            const qLinked = query(fsCollection(db, `artifacts/${appId}/scheduledClasses`), where('monthlyPaymentRefId', '==', lastPayment.id));
-            const snapLinked = await getDocs(qLinked);
-            linkedClasses = snapLinked.docs.map(d => ({ id: d.id, ...d.data() }));
-        } catch (e) { console.warn('No se pudieron buscar clases vinculadas al pago', e); }
-
-        // Agrupar por día+horario (puede haber más de una franja semanal en el mismo abono)
-        const slotMap = new Map();
-        for (const c of linkedClasses) {
-            if (!c.classDate || !c.startTime) continue;
-            const dow = String(new Date(c.classDate + 'T12:00:00').getDay());
-            const key = `${dow}-${c.startTime}`;
-            if (!slotMap.has(key)) {
-                slotMap.set(key, { dayOfWeek: dow, startTime: c.startTime, duration: c.duration || 60, classType: c.studentType || c.classType || 'individual', dates: [] });
+        const getPaymentAmountForSlot = async (slot) => {
+            const withRef = [...slot.classes].filter(c => c.monthlyPaymentRefId)
+                .sort((a, b) => b.classDate.localeCompare(a.classDate));
+            for (const cls of withRef) {
+                const found = allPaymentsForStudent.find(p => p.id === cls.monthlyPaymentRefId);
+                if (found) return Number(found.amount ?? found.monto ?? found.total ?? 0) || 0;
+                try {
+                    const snap = await getDoc(doc(db, `artifacts/${appId}/payments/${cls.monthlyPaymentRefId}`));
+                    if (snap.exists()) return Number(snap.data().amount ?? snap.data().monto ?? 0) || 0;
+                } catch {}
             }
-            slotMap.get(key).dates.push(c.classDate);
-        }
+            return fallbackPayment ? (Number(fallbackPayment.amount ?? fallbackPayment.monto ?? fallbackPayment.total ?? 0) || 0) : 0;
+        };
 
-        const buildPeriodLabel = (periodEndDate) => {
-            const labelDate = new Date(periodEndDate + 'T12:00:00');
+        const buildPeriodLabel = (lastClassDate) => {
+            const labelDate = new Date(lastClassDate + 'T12:00:00');
             labelDate.setDate(labelDate.getDate() + 5);
             const nextPeriodMonth = labelDate.toLocaleDateString('es-ES', { month: 'long' });
             const nextPeriodYear = labelDate.getFullYear();
@@ -1285,55 +1297,23 @@ const handleOpenRenewSubscriptionModal = async (student) => {
             return { formattedLabel: label.charAt(0).toUpperCase() + label.slice(1), isDecember: nextPeriodMonth.toLowerCase() === 'diciembre' };
         };
 
-        let packagesToRenew = [];
-
-        if (slotMap.size > 0) {
-            const allDates = linkedClasses.map(c => c.classDate).filter(Boolean).sort();
-            const periodStartDate = allDates[0];
-            const periodEndDate = allDates[allDates.length - 1];
-            const { formattedLabel, isDecember } = buildPeriodLabel(periodEndDate);
-            const totalAmount = Number(lastPayment.amount ?? lastPayment.monto ?? lastPayment.total ?? 0) || 0;
-            const slots = Array.from(slotMap.values());
-            const perSlotAmount = slots.length > 1 ? Math.round(totalAmount / slots.length) : totalAmount;
-
-            packagesToRenew = slots.map(slot => {
-                let amountForRenewal = perSlotAmount;
-                let matricula = 0;
-                if (isDecember && amountForRenewal > 0) {
-                    matricula = Math.round(amountForRenewal * 0.50);
-                    amountForRenewal += matricula;
-                    showMessage(`¡Se incluyó la Matrícula Anual! (${formattedLabel})`, 'info');
-                }
-                return {
-                    classType: slot.classType, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, duration: slot.duration,
-                    amount: amountForRenewal, baseAmount: amountForRenewal - matricula, matricula,
-                    periodStartDate, periodEndDate, nextPeriodLabel: formattedLabel, isDecemberRenewal: isDecember,
-                };
-            });
-        } else if (lastPayment.periodStartDate && lastPayment.dayOfWeek !== undefined && lastPayment.classType && lastPayment.periodEndDate) {
-            // Fallback: no encontramos clases vinculadas, pero el pago trae
-            // los campos estructurales del camino viejo — los usamos igual.
-            const { formattedLabel, isDecember } = buildPeriodLabel(lastPayment.periodEndDate);
-            let amountForRenewal = Number(lastPayment.amount) || 0;
+        const packagesToRenew = [];
+        for (const slot of activeSlots) {
+            const { formattedLabel, isDecember } = buildPeriodLabel(slot.lastClassDate);
+            let amountForRenewal = await getPaymentAmountForSlot(slot);
             let matricula = 0;
             if (isDecember && amountForRenewal > 0) {
                 matricula = Math.round(amountForRenewal * 0.50);
                 amountForRenewal += matricula;
                 showMessage(`¡Se incluyó la Matrícula Anual! (${formattedLabel})`, 'info');
             }
-            packagesToRenew = [{
-                classType: lastPayment.classType, dayOfWeek: lastPayment.dayOfWeek, startTime: lastPayment.startTime, duration: lastPayment.duration,
+            const sortedDates = slot.classes.map(c => c.classDate).sort();
+            packagesToRenew.push({
+                classType: slot.classType, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, duration: slot.duration,
                 amount: amountForRenewal, baseAmount: amountForRenewal - matricula, matricula,
-                periodStartDate: lastPayment.periodStartDate, periodEndDate: lastPayment.periodEndDate,
+                periodStartDate: sortedDates[0], periodEndDate: slot.lastClassDate,
                 nextPeriodLabel: formattedLabel, isDecemberRenewal: isDecember,
-            }];
-        }
-
-        if (packagesToRenew.length === 0) {
-            const amountStr = new Intl.NumberFormat('es-AR').format(Number(lastPayment.amount) || 0);
-            const dateStr = paymentDateMs(lastPayment) ? new Date(paymentDateMs(lastPayment)).toLocaleDateString('es-AR') : 'fecha desconocida';
-            alert(`Encontré el último pago de ${student.name} ($${amountStr}, ${dateStr}) pero no hay ninguna clase agendada vinculada a ese pago, así que no puedo saber qué día/horario le corresponde.\n\nUsá "Programar" para armarle el abono del mes siguiente a mano.`);
-            return;
+            });
         }
 
         packagesToRenew.sort((a, b) => {
@@ -1351,7 +1331,6 @@ const handleOpenRenewSubscriptionModal = async (student) => {
         showMessage('No se pudo abrir la ventana de renovación.', 'error');
     }
 };
-// ▲▲▲ FIN DE LA FUNCIÓN A REEMPLAZAR ▲▲▲
 
 const handleDeleteRenewalPackage = async (student, pkg) => {
     if (!window.confirm(`¿Eliminar el abono "${mapClassTypeToSpanish ? mapClassTypeToSpanish(pkg.classType) : pkg.classType} ${pkg.startTime}" del historial de renovación?\n\nSe eliminarán todos los registros de pago de ese horario para este alumno. Los pagos pasados no se podrán recuperar.`)) return;
