@@ -1234,6 +1234,17 @@ const handleOpenRenewSubscriptionModal = async (student) => {
 
         const monthlyPayments = combined.filter(isMonthlyLike).sort((a, b) => paymentDateMs(b) - paymentDateMs(a));
 
+        console.log('[DEBUG Renovar]', student.name, '— TODOS los pagos encontrados (ordenados por fecha):',
+            [...combined].sort((a, b) => paymentDateMs(b) - paymentDateMs(a)).map(p => ({
+                id: p.id, amount: p.amount, concept: p.concept || p.concepto, paymentMethod: p.paymentMethod,
+                isPaidForPackage: p.isPaidForPackage, dayOfWeek: p.dayOfWeek, classType: p.classType,
+                periodStartDate: p.periodStartDate, periodEndDate: p.periodEndDate,
+                paidAt: p.paidAt, paymentDate: p.paymentDate, fechaPago: p.fechaPago, date: p.date, createdAt: p.createdAt,
+                fechaResuelta: paymentDateMs(p) ? new Date(paymentDateMs(p)).toLocaleString('es-AR') : '(sin fecha)',
+                pasaFiltroMensual: isMonthlyLike(p),
+            }))
+        );
+
         if (monthlyPayments.length === 0) {
             alert('Este alumno no tiene ningún abono mensual registrado para renovar.\n\nSi querés crear uno nuevo, usá "Marcar Pago" y elegí la modalidad de abono mensual.');
             return;
