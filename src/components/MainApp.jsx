@@ -1206,98 +1206,125 @@ const calendarStripeStyles = `
 // ▼▼▼ REEMPLAZÁ ESTA FUNCIÓN COMPLETA EN TU MainApp ▼▼▼
 const handleOpenRenewSubscriptionModal = async (student) => {
     try {
-        // Nota: no exigimos isPaidForPackage === true acá — esa marca solo se
-        // activa si el pago se confirmó pasando exactamente por "Marcar Pago".
-        // Un abono resuelto por otro camino (comprobante aprobado, condonado,
-        // etc.) puede estar perfectamente al día y esa marca seguir en false.
-        // Para renovar solo necesitamos la estructura del último abono, no su
-        // estado de pago puntual.
-        //
-        // Además: allPayments (cargado a nivel app) solo trae la colección
-        // GLOBAL artifacts/{appId}/payments — pero el historial de pagos que
-        // ve el alumno también incluye una subcolección propia por alumno
-        // (artifacts/{appId}/students/{id}/payments). Un pago puede existir
-        // solo ahí y nunca aparecer en allPayments. Buscamos en ambos lados.
+        // allPayments (cargado a nivel app) solo trae la colección GLOBAL
+        // artifacts/{appId}/payments — pero el historial de pagos que ve el
+        // alumno también incluye una subcolección propia por alumno
+        // (artifacts/{appId}/students/{id}/payments). Buscamos en ambos.
         const subSnap = await getDocs(fsCollection(db, `artifacts/${appId}/students/${student.id}/payments`));
         const subPayments = subSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
         const globalForStudent = (Array.isArray(allPayments) ? allPayments : []).filter(p => p.studentId === student.id);
-
         const combined = [...globalForStudent, ...subPayments];
 
-        console.log('[DEBUG Renovar]', student.name, '— global:', globalForStudent.length, globalForStudent, '— subcolección:', subPayments.length, subPayments);
+        // "¿Es un abono mensual?" — misma heurística flexible que usa el
+        // historial de pagos del alumno (isValidMonthlyPayment): no todos los
+        // pagos reales tienen isPaidForPackage bien puesto, pero casi todos
+        // tienen el concepto con "mensual"/"paquete".
+        const isMonthlyLike = (p) => {
+            const concept = String(p?.concept || p?.concepto || '').toLowerCase();
+            return p?.isPaidForPackage === true || /paquete|mensual/.test(concept) || p?.paymentMethod === 'monthly_package_payment';
+        };
+        const paymentDateMs = (p) => {
+            const raw = p.paidAt || p.paymentDate || p.fechaPago || p.date || p.createdAt;
+            if (!raw) return 0;
+            if (typeof raw?.toDate === 'function') return raw.toDate().getTime();
+            if (typeof raw === 'object' && typeof raw.seconds === 'number') return raw.seconds * 1000;
+            const d = new Date(raw);
+            return isNaN(d.getTime()) ? 0 : d.getTime();
+        };
 
-        const allStudentPackages = combined
-            .filter(p =>
-                p.paymentMethod === 'monthly_package_payment' ||
-                // Pagos viejos donde MarkPaymentForm sobreescribió paymentMethod
-                // pero conservaron los campos estructurales del abono
-                (p.periodStartDate && p.dayOfWeek !== undefined && p.classType)
-            );
+        const monthlyPayments = combined.filter(isMonthlyLike).sort((a, b) => paymentDateMs(b) - paymentDateMs(a));
 
-        if (allStudentPackages.length === 0) {
-            alert('Este alumno no tiene ningún abono mensual registrado para renovar.\n\nSi querés crear uno nuevo, usá "Marcar Pago" y elegí la modalidad de abono mensual.\n\n(Abrí la consola del navegador con F12 para ver el detalle de diagnóstico.)');
+        if (monthlyPayments.length === 0) {
+            alert('Este alumno no tiene ningún abono mensual registrado para renovar.\n\nSi querés crear uno nuevo, usá "Marcar Pago" y elegí la modalidad de abono mensual.');
             return;
         }
 
-        // Solo el último abono PAGADO por cada clave de horario
-        const latestPackagesMap = new Map();
+        // El pago real más reciente — no necesariamente el que tenga mejor
+        // estructura de datos, sino el que efectivamente se cobró último.
+        const lastPayment = monthlyPayments[0];
 
-        for (const payment of allStudentPackages) {
-            const key = `${payment.classType}-${payment.dayOfWeek}-${payment.startTime}`;
-            const existing = latestPackagesMap.get(key);
+        // Para saber qué día/horario/tipo de clase corresponde a ESE pago,
+        // buscamos las clases agendadas que quedaron vinculadas a él — eso
+        // es siempre confiable, sin importar cómo se haya registrado el pago.
+        let linkedClasses = [];
+        try {
+            const qLinked = query(fsCollection(db, `artifacts/${appId}/scheduledClasses`), where('monthlyPaymentRefId', '==', lastPayment.id));
+            const snapLinked = await getDocs(qLinked);
+            linkedClasses = snapLinked.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch (e) { console.warn('No se pudieron buscar clases vinculadas al pago', e); }
 
-            if (!existing || new Date(payment.periodStartDate) > new Date(existing.periodStartDate)) {
-                latestPackagesMap.set(key, payment);
+        // Agrupar por día+horario (puede haber más de una franja semanal en el mismo abono)
+        const slotMap = new Map();
+        for (const c of linkedClasses) {
+            if (!c.classDate || !c.startTime) continue;
+            const dow = String(new Date(c.classDate + 'T12:00:00').getDay());
+            const key = `${dow}-${c.startTime}`;
+            if (!slotMap.has(key)) {
+                slotMap.set(key, { dayOfWeek: dow, startTime: c.startTime, duration: c.duration || 60, classType: c.studentType || c.classType || 'individual', dates: [] });
             }
+            slotMap.get(key).dates.push(c.classDate);
         }
 
-        const packagesToRenew = Array.from(latestPackagesMap.values()).map(latestPayment => {
-            const lastPeriodEndDate = new Date(latestPayment.periodEndDate + 'T23:59:59');
-            const labelDate = new Date(lastPeriodEndDate);
+        const buildPeriodLabel = (periodEndDate) => {
+            const labelDate = new Date(periodEndDate + 'T12:00:00');
             labelDate.setDate(labelDate.getDate() + 5);
-
-            // Determinar el próximo período a generar
             const nextPeriodMonth = labelDate.toLocaleDateString('es-ES', { month: 'long' });
             const nextPeriodYear = labelDate.getFullYear();
-            const nextPeriodLabel = `${nextPeriodMonth} de ${nextPeriodYear}`;
-            const formattedNextPeriodLabel = nextPeriodLabel.charAt(0).toUpperCase() + nextPeriodLabel.slice(1);
+            const label = `${nextPeriodMonth} de ${nextPeriodYear}`;
+            return { formattedLabel: label.charAt(0).toUpperCase() + label.slice(1), isDecember: nextPeriodMonth.toLowerCase() === 'diciembre' };
+        };
 
-            let amountForRenewal = Number(latestPayment.amount) || 0;
+        let packagesToRenew = [];
 
-            // *** LÓGICA CLAVE DE LA MATRÍCULA ***
-            const isDecemberRenewal = nextPeriodMonth.toLowerCase() === 'diciembre';
+        if (slotMap.size > 0) {
+            const allDates = linkedClasses.map(c => c.classDate).filter(Boolean).sort();
+            const periodStartDate = allDates[0];
+            const periodEndDate = allDates[allDates.length - 1];
+            const { formattedLabel, isDecember } = buildPeriodLabel(periodEndDate);
+            const totalAmount = Number(lastPayment.amount ?? lastPayment.monto ?? lastPayment.total ?? 0) || 0;
+            const slots = Array.from(slotMap.values());
+            const perSlotAmount = slots.length > 1 ? Math.round(totalAmount / slots.length) : totalAmount;
+
+            packagesToRenew = slots.map(slot => {
+                let amountForRenewal = perSlotAmount;
+                let matricula = 0;
+                if (isDecember && amountForRenewal > 0) {
+                    matricula = Math.round(amountForRenewal * 0.50);
+                    amountForRenewal += matricula;
+                    showMessage(`¡Se incluyó la Matrícula Anual! (${formattedLabel})`, 'info');
+                }
+                return {
+                    classType: slot.classType, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, duration: slot.duration,
+                    amount: amountForRenewal, baseAmount: amountForRenewal - matricula, matricula,
+                    periodStartDate, periodEndDate, nextPeriodLabel: formattedLabel, isDecemberRenewal: isDecember,
+                };
+            });
+        } else if (lastPayment.periodStartDate && lastPayment.dayOfWeek !== undefined && lastPayment.classType && lastPayment.periodEndDate) {
+            // Fallback: no encontramos clases vinculadas, pero el pago trae
+            // los campos estructurales del camino viejo — los usamos igual.
+            const { formattedLabel, isDecember } = buildPeriodLabel(lastPayment.periodEndDate);
+            let amountForRenewal = Number(lastPayment.amount) || 0;
             let matricula = 0;
-            
-            if (isDecemberRenewal && amountForRenewal > 0) {
-                // Matrícula es el 50% de la cuota base
+            if (isDecember && amountForRenewal > 0) {
                 matricula = Math.round(amountForRenewal * 0.50);
                 amountForRenewal += matricula;
-                
-                showMessage(`¡Se incluyó la Matrícula Anual! (${formattedNextPeriodLabel})`, 'info');
+                showMessage(`¡Se incluyó la Matrícula Anual! (${formattedLabel})`, 'info');
             }
-            // **********************************
-
-            return {
-                classType: latestPayment.classType,
-                dayOfWeek: latestPayment.dayOfWeek,
-                startTime: latestPayment.startTime,
-                duration: latestPayment.duration,
-                amount: amountForRenewal, // Monto ya con matrícula o sin ella
-                baseAmount: amountForRenewal - matricula, // Solo la cuota (útil para mostrar)
-                matricula: matricula, // Monto de la matrícula (si aplica)
-                periodStartDate: latestPayment.periodStartDate,
-                periodEndDate: latestPayment.periodEndDate,
-                nextPeriodLabel: formattedNextPeriodLabel,
-                isDecemberRenewal: isDecemberRenewal, // Para mensajes en el modal
-            };
-        });
+            packagesToRenew = [{
+                classType: lastPayment.classType, dayOfWeek: lastPayment.dayOfWeek, startTime: lastPayment.startTime, duration: lastPayment.duration,
+                amount: amountForRenewal, baseAmount: amountForRenewal - matricula, matricula,
+                periodStartDate: lastPayment.periodStartDate, periodEndDate: lastPayment.periodEndDate,
+                nextPeriodLabel: formattedLabel, isDecemberRenewal: isDecember,
+            }];
+        }
 
         if (packagesToRenew.length === 0) {
-             showMessage('No se encontraron paquetes de abono válidos para renovar.', 'info');
-             return;
+            const amountStr = new Intl.NumberFormat('es-AR').format(Number(lastPayment.amount) || 0);
+            const dateStr = paymentDateMs(lastPayment) ? new Date(paymentDateMs(lastPayment)).toLocaleDateString('es-AR') : 'fecha desconocida';
+            alert(`Encontré el último pago de ${student.name} ($${amountStr}, ${dateStr}) pero no hay ninguna clase agendada vinculada a ese pago, así que no puedo saber qué día/horario le corresponde.\n\nUsá "Programar" para armarle el abono del mes siguiente a mano.`);
+            return;
         }
-        
+
         packagesToRenew.sort((a, b) => {
              const dayA = parseInt(a.dayOfWeek, 10);
              const dayB = parseInt(b.dayOfWeek, 10);
