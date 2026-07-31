@@ -1361,21 +1361,25 @@ const handleDeleteRenewalPackage = async (student, pkg) => {
 
 const handleRenewSelectedSubscription = async (student, packageToRenew, newAmount) => {
     setShowRenewSubscriptionModal(false);
-    
-    const lastPeriodEndDate = new Date(packageToRenew.periodEndDate + 'T23:59:59');
-    const nextMonthDate = new Date(lastPeriodEndDate);
-    nextMonthDate.setDate(nextMonthDate.getDate() + 1);
+
+    // Mes siguiente al de periodEndDate — calculado por mes/año, no sumando
+    // días. periodEndDate puede ser cualquier día del mes (por ejemplo, la
+    // fecha de la última clase real del abono, no necesariamente el último
+    // día del mes), así que sumarle unos pocos días puede no cruzar al mes
+    // que sigue.
+    const lastPeriodEndDate = new Date(packageToRenew.periodEndDate + 'T12:00:00');
+    const actualMonth = (lastPeriodEndDate.getMonth() + 1) % 12;
+    const actualYear = lastPeriodEndDate.getMonth() === 11 ? lastPeriodEndDate.getFullYear() + 1 : lastPeriodEndDate.getFullYear();
+    const nextMonthDate = new Date(actualYear, actualMonth, 1);
 
     const { classType, dayOfWeek, startTime, duration } = packageToRenew;
-    
+
     // ✅ USA EL NUEVO MONTO DEL MODAL
     const amount = newAmount;
 
     try {
         const batch = writeBatch(db);
         const classesToAdd = [];
-        const actualYear = nextMonthDate.getFullYear();
-        const actualMonth = nextMonthDate.getMonth();
         const daysInMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
 
         for (let d = 1; d <= daysInMonth; d++) {
