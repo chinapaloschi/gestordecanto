@@ -1206,10 +1206,15 @@ const calendarStripeStyles = `
 // ▼▼▼ REEMPLAZÁ ESTA FUNCIÓN COMPLETA EN TU MainApp ▼▼▼
 const handleOpenRenewSubscriptionModal = (student) => {
     try {
+        // Nota: no exigimos isPaidForPackage === true acá — esa marca solo se
+        // activa si el pago se confirmó pasando exactamente por "Marcar Pago".
+        // Un abono resuelto por otro camino (comprobante aprobado, condonado,
+        // etc.) puede estar perfectamente al día y esa marca seguir en false.
+        // Para renovar solo necesitamos la estructura del último abono, no su
+        // estado de pago puntual.
         const allStudentPackages = (Array.isArray(allPayments) ? allPayments : [])
             .filter(p =>
                 p.studentId === student.id &&
-                p.isPaidForPackage === true &&
                 (
                     p.paymentMethod === 'monthly_package_payment' ||
                     // Pagos viejos donde MarkPaymentForm sobreescribió paymentMethod
@@ -1219,7 +1224,7 @@ const handleOpenRenewSubscriptionModal = (student) => {
             );
 
         if (allStudentPackages.length === 0) {
-            alert('Este alumno no tiene abonos mensuales pagados para renovar.\n\nSi querés crear un nuevo abono, usá "Marcar Pago" y elegí la modalidad de abono mensual.');
+            alert('Este alumno no tiene ningún abono mensual registrado para renovar.\n\nSi querés crear uno nuevo, usá "Marcar Pago" y elegí la modalidad de abono mensual.');
             return;
         }
 
