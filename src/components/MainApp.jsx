@@ -1204,7 +1204,7 @@ const calendarStripeStyles = `
 
 
 // ▼▼▼ REEMPLAZÁ ESTA FUNCIÓN COMPLETA EN TU MainApp ▼▼▼
-const handleOpenRenewSubscriptionModal = (student) => {
+const handleOpenRenewSubscriptionModal = async (student) => {
     try {
         // Nota: no exigimos isPaidForPackage === true acá — esa marca solo se
         // activa si el pago se confirmó pasando exactamente por "Marcar Pago".
@@ -1212,19 +1212,31 @@ const handleOpenRenewSubscriptionModal = (student) => {
         // etc.) puede estar perfectamente al día y esa marca seguir en false.
         // Para renovar solo necesitamos la estructura del último abono, no su
         // estado de pago puntual.
-        const allStudentPackages = (Array.isArray(allPayments) ? allPayments : [])
+        //
+        // Además: allPayments (cargado a nivel app) solo trae la colección
+        // GLOBAL artifacts/{appId}/payments — pero el historial de pagos que
+        // ve el alumno también incluye una subcolección propia por alumno
+        // (artifacts/{appId}/students/{id}/payments). Un pago puede existir
+        // solo ahí y nunca aparecer en allPayments. Buscamos en ambos lados.
+        const subSnap = await getDocs(fsCollection(db, `artifacts/${appId}/students/${student.id}/payments`));
+        const subPayments = subSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        const globalForStudent = (Array.isArray(allPayments) ? allPayments : []).filter(p => p.studentId === student.id);
+
+        const combined = [...globalForStudent, ...subPayments];
+
+        console.log('[DEBUG Renovar]', student.name, '— global:', globalForStudent.length, globalForStudent, '— subcolección:', subPayments.length, subPayments);
+
+        const allStudentPackages = combined
             .filter(p =>
-                p.studentId === student.id &&
-                (
-                    p.paymentMethod === 'monthly_package_payment' ||
-                    // Pagos viejos donde MarkPaymentForm sobreescribió paymentMethod
-                    // pero conservaron los campos estructurales del abono
-                    (p.periodStartDate && p.dayOfWeek !== undefined && p.classType)
-                )
+                p.paymentMethod === 'monthly_package_payment' ||
+                // Pagos viejos donde MarkPaymentForm sobreescribió paymentMethod
+                // pero conservaron los campos estructurales del abono
+                (p.periodStartDate && p.dayOfWeek !== undefined && p.classType)
             );
 
         if (allStudentPackages.length === 0) {
-            alert('Este alumno no tiene ningún abono mensual registrado para renovar.\n\nSi querés crear uno nuevo, usá "Marcar Pago" y elegí la modalidad de abono mensual.');
+            alert('Este alumno no tiene ningún abono mensual registrado para renovar.\n\nSi querés crear uno nuevo, usá "Marcar Pago" y elegí la modalidad de abono mensual.\n\n(Abrí la consola del navegador con F12 para ver el detalle de diagnóstico.)');
             return;
         }
 
