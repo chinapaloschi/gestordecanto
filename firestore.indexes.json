@@ -12,9 +12,41 @@
       "collectionGroup": "scheduledClasses",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "monthlyPaymentRefId", "order": "ASCENDING" },
+        { "fieldPath": "classDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledClasses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "studentId", "order": "ASCENDING" },
+        { "fieldPath": "classDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledClasses",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "studentId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "classDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledClasses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "studentType", "order": "ASCENDING" },
+        { "fieldPath": "classDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isPaidForPackage", "order": "ASCENDING" },
+        { "fieldPath": "paidAt", "order": "ASCENDING" }
       ]
     }
   ],

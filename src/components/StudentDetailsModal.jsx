@@ -160,7 +160,7 @@ export const StudentDetailsModal = ({
     try {
       const newPaid = paidSoFar + 1;
       const updates = { clasesPagadas: increment(1) };
-      if (newPaid >= total) { updates.isPaidForPackage = true; updates.paidAt = new Date(); }
+      if (newPaid >= total) { updates.isPaidForPackage = true; updates.paidAt = new Date(); updates.paymentDate = new Date(); }
       await updateDoc(doc(db, `artifacts/${appId}/payments`, fc.id), updates);
       setFlexCredits(prev => prev.map(c => c.id === fc.id
         ? { ...c, clasesPagadas: newPaid, ...(newPaid >= total ? { isPaidForPackage: true } : {}) }

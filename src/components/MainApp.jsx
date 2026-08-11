@@ -683,7 +683,7 @@ const closeAddStudentForm = useCallback(() => {
         const qPaid = query(
             fsCollection(db, `artifacts/${appId}/payments`),
             where('isPaidForPackage', '==', true),
-            where('recordedAt', '>=', cutoff12m)
+            where('paidAt', '>=', cutoff12m)
         );
         unsubs.push(onSnapshot(qPaid, snap => {
             snap.docs.forEach(d => paidSet.set(d.id, { id: d.id, ...d.data() }));
@@ -1108,20 +1108,25 @@ const studentsWithStats = React.useMemo(() => {
             .reverse();
         const lastClassDate = attendedClasses[0] || null;
 
-        // Último pago registrado (por recordedAt, luego por date)
+        // Último pago registrado (por paidAt/paymentDate, luego recordedAt/date como último recurso)
         const paidPayments = studentPayments.filter(p => p.isPaidForPackage === true);
         let lastPaymentDate = null;
         if (paidPayments.length > 0) {
+            const resolvePaidDate = (p) =>
+                p.paidAt?.toDate?.() || (p.paidAt ? new Date(p.paidAt) : null) ||
+                (p.paymentDate?.toDate?.() ? p.paymentDate.toDate() : null) ||
+                (p.paymentDate ? new Date(p.paymentDate) : null) ||
+                p.recordedAt?.toDate?.() || (p.recordedAt ? new Date(p.recordedAt) : null) ||
+                (p.date ? new Date(p.date + 'T00:00:00') : null);
             const sorted = paidPayments.slice().sort((a, b) => {
-                const ta = a.recordedAt?.toDate?.() || (a.recordedAt ? new Date(a.recordedAt) : null) || (a.date ? new Date(a.date + 'T00:00:00') : null);
-                const tb = b.recordedAt?.toDate?.() || (b.recordedAt ? new Date(b.recordedAt) : null) || (b.date ? new Date(b.date + 'T00:00:00') : null);
+                const ta = resolvePaidDate(a);
+                const tb = resolvePaidDate(b);
                 if (!ta && !tb) return 0;
                 if (!ta) return 1;
                 if (!tb) return -1;
                 return tb - ta;
             });
-            const latest = sorted[0];
-            const d = latest.recordedAt?.toDate?.() || (latest.recordedAt ? new Date(latest.recordedAt) : null) || (latest.date ? new Date(latest.date + 'T00:00:00') : null);
+            const d = resolvePaidDate(sorted[0]);
             if (d) lastPaymentDate = d.toISOString().split('T')[0];
         }
 
