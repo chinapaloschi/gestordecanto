@@ -17,6 +17,7 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
     const [showReminderModal, setShowReminderModal] = useState(false);
     const [sendingReminder, setSendingReminder] = useState(false);
     const [reminderSent, setReminderSent] = useState(false);
+    const [reminderResult, setReminderResult] = useState(null);
     const [selectedDay, setSelectedDay] = useState(null); // YYYY-MM-DD
     const [showDayPanel, setShowDayPanel] = useState(false);
     const [quickSchedule, setQuickSchedule] = useState(null); // { date, time, student? }
@@ -46,6 +47,25 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
     const handleNext = () => { if (viewMode === 'weekly') { setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; }); } else { setCurrentDate(d => { const n = new Date(d); n.setMonth(n.getMonth() + 1); return n; }); } };
    const getFormattedDate = (date) => toLocalYYYYMMDD(date);
     const handleDragStart = (e, cls) => { if (cls.studentType !== 'individual') { e.preventDefault(); return; } setDraggingClassId(cls.id); e.dataTransfer.setData('text/plain', cls.id); e.dataTransfer.effectAllowed = 'move'; };
+    const timeToMinutes = (t) => { const [h, m] = String(t || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+    // Mismo criterio de superposición que ScheduleClassForm.jsx: sólo se
+    // considera conflicto si al menos una de las dos clases es individual
+    // (una clase grupal se guarda como varios documentos que comparten
+    // horario a propósito, eso no es un choque).
+    const findOverlap = (date, startTime, duration, studentType, excludeIds = []) => {
+        const startMin = timeToMinutes(startTime);
+        const endMin = startMin + (duration || 0);
+        return (scheduledClasses || []).find(c => {
+            if (excludeIds.includes(c.id)) return false;
+            if (c.classDate !== date) return false;
+            if (c.status === 'cancelled') return false;
+            if (!c.startTime) return false;
+            const existingStart = timeToMinutes(c.startTime);
+            const existingEnd = existingStart + (c.duration || 0);
+            const overlaps = startMin < existingEnd && endMin > existingStart;
+            return overlaps && (studentType === 'individual' || c.studentType === 'individual');
+        });
+    };
     const handleDragOver = (e) => { e.preventDefault(); };
     const handleDragEnd = () => { setDraggingClassId(null); };
     const getWeekRange = (startOfWeek, includeWeekend = true) => { const dates = []; let currentDay = new Date(startOfWeek); const dayOfWeek = currentDay.getDay(); const diff = currentDay.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); currentDay.setDate(diff); currentDay.setHours(0, 0, 0, 0); const daysToGenerate = includeWeekend ? 6 : 4; for (let i = 0; i < daysToGenerate; i++) { const date = new Date(currentDay); date.setDate(currentDay.getDate() + i); dates.push(date); } return dates; };
@@ -123,9 +143,16 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
     // --- LÓGICA 1: MOVER SOLO UNA CLASE ---
     const executeMoveSingle = async () => {
         if (!moveData) return;
-        const { classId, newDate, newStartTime, newEndTime } = moveData;
-        
-        // Validar superposición (Simplificado para brevedad, idealmente reutilizar lógica de overlap)
+        const { classId, newDate, newStartTime, newEndTime, draggedClass } = moveData;
+
+        const conflict = findOverlap(newDate, newStartTime, draggedClass?.duration, draggedClass?.studentType, [classId]);
+        if (conflict) {
+            showMessage(`No se puede mover: se superpone con la clase de ${conflict.studentName} (${conflict.startTime}hs).`, 'error');
+            setShowMoveModal(false);
+            setMoveData(null);
+            return;
+        }
+
         try {
             const classDocRef = doc(db, `artifacts/${appId}/scheduledClasses`, classId);
             await updateDoc(classDocRef, { 
@@ -174,40 +201,55 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
             );
             
             const snapshot = await getDocs(q);
-            
+
             if (snapshot.empty) {
                 alert('Error: No encontré las clases del paquete en la base de datos.');
                 return;
             }
 
-            const batch = writeBatch(db);
-            let count = 0;
-
-            snapshot.forEach((docSnap) => {
+            // Antes acá sólo se chequeaban bloqueos para la fecha soltada en
+            // el calendario, no para el resto de la serie corrida — y nunca
+            // se chequeaba superposición. Precalculamos todas las fechas
+            // nuevas primero y validamos las dos cosas antes de escribir nada.
+            const shifted = [];
+            for (const docSnap of snapshot.docs) {
                 const cls = docSnap.data();
-                
-                // Calcular nueva fecha
                 const currentClsDate = new Date(cls.classDate + 'T12:00:00');
                 currentClsDate.setDate(currentClsDate.getDate() + diffDays);
-                const shiftedDateStr = currentClsDate.toISOString().split('T')[0];
-
-                // Calcular nueva hora de fin basada en la duración original de ESA clase
-                // (Importante por si alguna clase dura 90 min y otra 60)
+                const shiftedDateStr = toLocalYYYYMMDD(currentClsDate);
                 const duration = parseInt(cls.duration) || 60;
-                const startParts = newStartTime.split(':').map(Number);
-                const startMinutes = (startParts[0] * 60) + startParts[1];
+                const startMinutes = timeToMinutes(newStartTime);
                 const endTotalMinutes = startMinutes + duration;
                 const endH = Math.floor(endTotalMinutes / 60);
                 const endM = endTotalMinutes % 60;
                 const calculatedEndTime = `${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`;
+                shifted.push({ docSnap, cls, shiftedDateStr, duration, calculatedEndTime });
+            }
 
+            const packageClassIds = shifted.map(s => s.docSnap.id);
+            for (const s of shifted) {
+                if (blockedSlots.some(slot => slot.date === s.shiftedDateStr)) {
+                    showMessage(`No se puede mover el paquete: el ${s.shiftedDateStr} es un día bloqueado.`, 'error');
+                    return;
+                }
+                const conflict = findOverlap(s.shiftedDateStr, newStartTime, s.duration, s.cls.studentType, packageClassIds);
+                if (conflict) {
+                    showMessage(`No se puede mover el paquete: el ${s.shiftedDateStr} se superpone con la clase de ${conflict.studentName} (${conflict.startTime}hs).`, 'error');
+                    return;
+                }
+            }
+
+            const batch = writeBatch(db);
+            let count = 0;
+
+            for (const { docSnap, shiftedDateStr, calculatedEndTime } of shifted) {
                 batch.update(docSnap.ref, {
                     classDate: shiftedDateStr,
-                    startTime: newStartTime, 
+                    startTime: newStartTime,
                     endTime: calculatedEndTime
                 });
                 count++;
-            });
+            }
 
             console.log(`Clases a mover: ${count}`);
 
@@ -289,6 +331,17 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
         return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
     }, []);
 
+    // Antes no había ningún lugar en la app donde ver si el recordatorio
+    // automático de anoche (que avisa las clases de HOY) realmente salió.
+    const [todayReminderLog, setTodayReminderLog] = useState(null);
+    useEffect(() => {
+        if (!showReminderModal || !db || !appId) return;
+        const todayKey = getLocalToday();
+        getDoc(doc(db, `artifacts/${appId}/reminderLog/${todayKey}`))
+            .then(snap => setTodayReminderLog(snap.exists() ? snap.data() : null))
+            .catch(() => setTodayReminderLog(null));
+    }, [showReminderModal, db, appId]);
+
     const tomorrowStudents = useMemo(() => {
         if (!Array.isArray(scheduledClasses)) return [];
         const map = {};
@@ -308,8 +361,14 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
         setSendingReminder(true);
         try {
             const fn = httpsCallable(getFunctions(), 'sendManualReminders');
-            await fn({ appId, dateKey: tomorrowKey });
+            // Antes se descartaba el resultado y sólo se marcaba "enviado" —
+            // no había forma de saber a cuántos alumnos llegó de verdad.
+            const { data } = await fn({ appId, dateKey: tomorrowKey });
             setReminderSent(true);
+            const { sent = 0, total = 0, noToken = 0 } = data || {};
+            setReminderResult({ sent, total, noToken });
+            const detail = noToken > 0 ? ` (${noToken} sin notificaciones activadas)` : '';
+            showMessage(`Recordatorios enviados a ${sent} de ${total} alumnos${detail}.`, sent < total ? 'info' : 'success');
         } catch (e) {
             showMessage('Error al enviar recordatorios: ' + e.message, 'error');
         } finally {
@@ -1138,6 +1197,14 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                             <button onClick={() => setShowReminderModal(false)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 font-bold">×</button>
                         </div>
 
+                        {/* Estado del automático de anoche (avisa las clases de HOY) */}
+                        {todayReminderLog && (
+                            <div className="mx-5 mt-3 p-2.5 rounded-xl border border-gray-200 bg-gray-50 text-xs text-gray-600">
+                                Automático de anoche (clases de hoy): enviado a <b>{todayReminderLog.count ?? 0}</b> de <b>{todayReminderLog.total ?? 0}</b> alumnos
+                                {todayReminderLog.noToken > 0 ? `, ${todayReminderLog.noToken} sin notificaciones activadas` : ''}.
+                            </div>
+                        )}
+
                         {/* Lista de alumnos */}
                         <div className="px-5 py-3 max-h-64 overflow-y-auto">
                             {tomorrowStudents.length === 0 ? (
@@ -1167,7 +1234,9 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                         <div className="px-5 pb-5 pt-2">
                             {reminderSent ? (
                                 <div className="w-full py-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm font-bold text-center">
-                                    ✓ Recordatorios enviados correctamente
+                                    {reminderResult
+                                        ? `✓ Enviado a ${reminderResult.sent} de ${reminderResult.total} alumnos${reminderResult.noToken > 0 ? ` (${reminderResult.noToken} sin notificaciones activadas)` : ''}`
+                                        : '✓ Recordatorios enviados correctamente'}
                                 </div>
                             ) : (
                                 <button

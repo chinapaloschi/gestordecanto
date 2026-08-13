@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import { buildWhatsappLink } from '../utils/whatsapp.js';
 
 const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const MONTH_FULL = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -58,10 +59,8 @@ export function TrialRequestsPanel({ db, appId, onClose, onConvertToStudent }) {
   };
 
   const waLink = (whatsapp, name, date, time) => {
-    const clean = whatsapp.replace(/\D/g, '');
-    const num = clean.startsWith('54') ? clean : `54${clean}`;
-    const msg = encodeURIComponent(`¡Hola ${name}! Te confirmo tu clase en el Estudio de Canto Sandra Paloschi para el ${fmtDate(date)} a las ${time} hs. ¡Cualquier consulta avisame! 🎵`);
-    return `https://wa.me/${num}?text=${msg}`;
+    const msg = `¡Hola ${name}! Te confirmo tu clase en el Estudio de Canto Sandra Paloschi para el ${fmtDate(date)} a las ${time} hs. ¡Cualquier consulta avisame! 🎵`;
+    return buildWhatsappLink(whatsapp, msg) || '#';
   };
 
   const filtered = requests

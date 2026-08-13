@@ -9,6 +9,7 @@ import { formatDateToDDMMYYYY, mapClassTypeToSpanish, daysOfWeekFull } from '../
 import { getLocalToday, toLocalYYYYMMDD, generateTimeOptions } from '../utils/dateHelpers.js';
 import { cancelScheduledClass, hardDeleteScheduledClass, hardDeleteUnpaidMonthlyPackage } from '../utils/classActions.js';
 import { usePricing, getTariff } from '../hooks/usePricing.js';
+import { buildWhatsappLink } from '../utils/whatsapp.js';
 const fldLabel = 'block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5';
 const fldInput = 'w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 transition bg-white';
 
@@ -720,13 +721,11 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                     await batch.commit();
                     showMessage(`✅ ${count} clase${count !== 1 ? 's' : ''} reprogramada${count !== 1 ? 's' : ''} exitosamente.`, 'success');
                     if (sendWhatsapp) {
-                        const waRaw = (currentStudent.whatsapp || currentStudent.contactInfo || '').replace(/\D/g, '');
-                        if (waRaw.length >= 8) {
-                            const fn = (currentStudent.name || '').split(' ')[0];
-                            const dayStr = newDayOfWeek ? (daysOfWeekFull.find(d => d.value === newDayOfWeek)?.label || '') : 'el horario habitual';
-                            const msg = `Hola ${fn}, a partir de ahora tu clase es los ${dayStr} a las ${startTime} hs. ¡Saludos, Sandra! 🎵`;
-                            window.open(`https://wa.me/549${waRaw}?text=${encodeURIComponent(msg)}`, '_blank');
-                        }
+                        const fn = (currentStudent.name || '').split(' ')[0];
+                        const dayStr = newDayOfWeek ? (daysOfWeekFull.find(d => d.value === newDayOfWeek)?.label || '') : 'el horario habitual';
+                        const msg = `Hola ${fn}, a partir de ahora tu clase es los ${dayStr} a las ${startTime} hs. ¡Saludos, Sandra! 🎵`;
+                        const link = buildWhatsappLink(currentStudent.whatsapp || currentStudent.contactInfo || '', msg);
+                        if (link) window.open(link, '_blank');
                     }
                     onClose && onClose(); setLoading(false); return;
                 }
@@ -782,13 +781,11 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
 
                 // WhatsApp notification
                 if (sendWhatsapp) {
-                    const waRaw = (currentStudent.whatsapp || currentStudent.contactInfo || '').replace(/\D/g, '');
-                    if (waRaw.length >= 8) {
-                        const fn = (currentStudent.name || '').split(' ')[0];
-                        const dayStr = new Date(classDate + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
-                        const msg = `Hola ${fn}, tu clase fue reprogramada al ${dayStr} a las ${startTime} hs. ¡Saludos, Sandra! 🎵`;
-                        window.open(`https://wa.me/549${waRaw}?text=${encodeURIComponent(msg)}`, '_blank');
-                    }
+                    const fn = (currentStudent.name || '').split(' ')[0];
+                    const dayStr = new Date(classDate + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+                    const msg = `Hola ${fn}, tu clase fue reprogramada al ${dayStr} a las ${startTime} hs. ¡Saludos, Sandra! 🎵`;
+                    const link = buildWhatsappLink(currentStudent.whatsapp || currentStudent.contactInfo || '', msg);
+                    if (link) window.open(link, '_blank');
                 }
 
             } else if (scheduleType === 'single') {

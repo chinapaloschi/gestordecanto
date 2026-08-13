@@ -1,21 +1,45 @@
-import { collection as fsCollection, doc, getDoc, updateDoc, deleteDoc, query, where, getDocs, runTransaction } from 'firebase/firestore';
+import { collection as fsCollection, doc, getDoc, updateDoc, deleteDoc, query, where, getDocs, runTransaction, increment } from 'firebase/firestore';
 
 export async function cancelScheduledClass({ db, appId, classId, notify = true }) {
   try {
     const classRef = doc(db, `artifacts/${appId}/scheduledClasses/${classId}`);
-    const classSnap = await getDoc(classRef);
-    if (!classSnap.exists()) { if (notify) alert("La clase no existe."); return false; }
-    const data = classSnap.data() || {};
-    if (String(data.status || "").toLowerCase() === "cancelled") {
+    let alreadyCancelled = false;
+    let refunded = false;
+
+    await runTransaction(db, async (tx) => {
+      const classSnap = await tx.get(classRef);
+      if (!classSnap.exists()) throw new Error("La clase no existe.");
+      const data = classSnap.data() || {};
+      if (String(data.status || "").toLowerCase() === "cancelled") {
+        alreadyCancelled = true;
+        return;
+      }
+
+      // Una clase pagada con Abono Flexible no se puede borrar del todo (ver
+      // hardDeleteScheduledClass), así que cancelar es el único camino — sin
+      // esto, cancelarla le hacía perder la clase al alumno sin devolverle
+      // el crédito de su abono.
+      if (data.flexiblePaymentId) {
+        const flexRef = doc(db, `artifacts/${appId}/payments/${data.flexiblePaymentId}`);
+        const flexSnap = await tx.get(flexRef);
+        if (flexSnap.exists() && Number(flexSnap.data()?.clasesUsadas || 0) > 0) {
+          tx.update(flexRef, { clasesUsadas: increment(-1) });
+          refunded = true;
+        }
+      }
+
+      tx.update(classRef, { status: "cancelled" });
+    });
+
+    if (alreadyCancelled) {
       if (notify) alert("La clase ya estaba cancelada.");
       return true;
     }
-    await updateDoc(classRef, { status: "cancelled" });
-    if (notify) alert("Clase cancelada.");
+    if (notify) alert(refunded ? "Clase cancelada. Se devolvió la clase al Abono Flexible." : "Clase cancelada.");
     return true;
   } catch (e) {
     console.error("cancelScheduledClass", e);
-    if (notify) alert("No se pudo cancelar la clase.");
+    if (notify) alert(e.message === "La clase no existe." ? e.message : "No se pudo cancelar la clase.");
     return false;
   }
 }

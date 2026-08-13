@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { formatMoneyAr } from '../utils/money.js';
 import { getInitials } from '../utils/studentHelpers.js';
+import { isValidArgWhatsappNumber, buildWhatsappLink } from '../utils/whatsapp.js';
 
 const WaIcon = () => (
   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -69,8 +70,8 @@ export function StudentListModal({ isOpen, onClose, students = [], onOpenStudent
 
   const openWa = (s, e) => {
     e.stopPropagation();
-    const raw = (s.whatsapp || s.contactInfo || '').replace(/\D/g, '');
-    if (raw.length >= 8) window.open(`https://wa.me/549${raw}`, '_blank');
+    const link = buildWhatsappLink(s.whatsapp || s.contactInfo || '', '');
+    if (link) window.open(link, '_blank');
   };
 
   return (
@@ -158,8 +159,7 @@ export function StudentListModal({ isOpen, onClose, students = [], onOpenStudent
                 const hasDebt  = debt > 0;
                 const nextCls  = fmtNextClass(s);
                 const restantes = s.totalPaidUnconsumedClasses || 0;
-                const waRaw    = (s.whatsapp || s.contactInfo || '').replace(/\D/g, '');
-                const hasWa    = waRaw.length >= 8;
+                const hasWa    = isValidArgWhatsappNumber(s.whatsapp || s.contactInfo || '');
 
                 return (
                   <li

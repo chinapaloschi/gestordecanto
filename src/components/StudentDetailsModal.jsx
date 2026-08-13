@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection as fsCollection, doc, getDocs, deleteDoc, updateDoc, increment, query, where, orderBy, limit } from 'firebase/firestore';
 import { Modal } from './Modal.jsx';
 import { formatMoneyAr } from '../utils/money.js';
+import { isValidArgWhatsappNumber, buildWhatsappLink } from '../utils/whatsapp.js';
 import { formatDateToDDMMYYYY, mapClassTypeToSpanish } from '../utils/classHelpers.js';
 import { ProfilePictureUploader } from './UploadComponents.jsx';
 import { RepertoireModal } from './RepertoireModals.jsx';
@@ -247,12 +248,13 @@ export const StudentDetailsModal = ({
   const firstName = (localStudent.name || '').split(' ')[0];
   const debt = (localStudent.aplicaRecargo ? localStudent.pendingBalanceWithSurcharge : localStudent.pendingBalance) || 0;
   const hasDebt = debt > 0;
-  const waRaw = (localStudent.whatsapp || localStudent.contactInfo || '').replace(/\D/g, '');
-  const hasWa = waRaw.length >= 8;
+  const waNumberRaw = localStudent.whatsapp || localStudent.contactInfo || '';
+  const hasWa = isValidArgWhatsappNumber(waNumberRaw);
 
   const openWa = (msg) => {
-    if (!hasWa) { showMessage('No hay número de WhatsApp guardado. Editá el perfil.', 'error'); return; }
-    window.open(`https://wa.me/549${waRaw}?text=${encodeURIComponent(msg)}`, '_blank');
+    const link = buildWhatsappLink(waNumberRaw, msg);
+    if (!link) { showMessage('No hay número de WhatsApp guardado. Editá el perfil.', 'error'); return; }
+    window.open(link, '_blank');
     setShowWaMenu(false);
   };
 

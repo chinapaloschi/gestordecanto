@@ -1414,22 +1414,56 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
     try {
         const batch = writeBatch(db);
         const classesToAdd = [];
+        const skippedBlockedDays = [];
+        const skippedOverlapDays = [];
         const daysInMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
 
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(actualYear, actualMonth, d);
             if (date.getDay() === parseInt(dayOfWeek)) {
                const formattedDate = toLocalYYYYMMDD(date);
+
+                // Antes Renovar generaba la clase igual sin mirar esto — a
+                // diferencia del formulario de creación manual, que ya hacía
+                // las dos verificaciones. Acá saltamos el día en vez de
+                // abortar toda la renovación, y avisamos al final.
+                if ((blockedSlots || []).some(slot => slot.date === formattedDate)) {
+                    skippedBlockedDays.push(formattedDate);
+                    continue;
+                }
+
                 const tempStartDate = new Date(`${formattedDate}T${startTime}:00`);
                 tempStartDate.setMinutes(tempStartDate.getMinutes() + duration);
                 const endTime = `${tempStartDate.getHours().toString().padStart(2, '0')}:${tempStartDate.getMinutes().toString().padStart(2, '0')}`;
-                
+
+                const newClassStartMinutes = (parseInt(startTime.split(':')[0]) * 60) + parseInt(startTime.split(':')[1]);
+                const newClassEndMinutes = newClassStartMinutes + duration;
+                const overlappingClass = (scheduledClasses || []).find(existingCls => {
+                    if (existingCls.classDate !== formattedDate) return false;
+                    if (existingCls.studentId === student.id) return false;
+                    if (existingCls.status !== 'scheduled' && existingCls.status != null) return false;
+                    if (!existingCls.startTime) return false;
+                    const existingClassStartMinutes = (parseInt(existingCls.startTime.split(':')[0]) * 60) + parseInt(existingCls.startTime.split(':')[1]);
+                    const existingClassEndMinutes = existingClassStartMinutes + (existingCls.duration || 0);
+                    const hasTimeOverlap = (newClassStartMinutes < existingClassEndMinutes && newClassEndMinutes > existingClassStartMinutes);
+                    return hasTimeOverlap && (classType === 'individual' || existingCls.studentType === 'individual');
+                });
+                if (overlappingClass) {
+                    skippedOverlapDays.push(`${formattedDate} (choca con ${overlappingClass.studentName})`);
+                    continue;
+                }
+
                 classesToAdd.push({ studentId: student.id, studentName: student.name, studentType: classType, classDate: formattedDate, startTime, endTime, duration, isPaid: false, userId, scheduledAt: new Date(), scheduleType: 'monthly', attendanceStatus: null, status: 'scheduled' });
             }
         }
 
         if (classesToAdd.length === 0) {
-            showMessage('No se pudieron generar clases para el próximo mes.', 'error');
+            const reason = skippedBlockedDays.length > 0
+                ? ' Todos los días correspondientes estaban bloqueados.'
+                : skippedOverlapDays.length > 0
+                    ? ' Todos los días correspondientes chocaban con otra clase ya agendada.'
+                    : '';
+            showMessage('No se pudieron generar clases para el próximo mes.' + reason, 'error');
             return;
         }
 
@@ -1472,7 +1506,10 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
 
         await batch.commit();
         const monthName = nextMonthDate.toLocaleDateString('es-ES', { month: 'long' });
-        showMessage(`Abono para ${monthName} generado con el monto de $${amount}. Recordá marcar el pago manualmente.`, 'success');
+        const skippedNote = skippedBlockedDays.length > 0 || skippedOverlapDays.length > 0
+            ? ` Ojo: se salteó ${[...skippedBlockedDays.map(d => `${d} (bloqueado)`), ...skippedOverlapDays].join(', ')}.`
+            : '';
+        showMessage(`Abono para ${monthName} generado con el monto de $${amount}. Recordá marcar el pago manualmente.${skippedNote}`, skippedNote ? 'info' : 'success');
 
     } catch (error) {
         console.error("Error renewing subscription:", error);

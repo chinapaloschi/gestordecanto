@@ -3,6 +3,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { DebtDetailsModal } from './DebtDetailsModal.jsx';
 import { getInitials } from '../utils/studentHelpers.js';
 import { formatMoneyAr } from '../utils/money.js';
+import { isValidArgWhatsappNumber, buildWhatsappLink } from '../utils/whatsapp.js';
 import { MaskedAmount } from './MaskedAmount.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -96,11 +97,11 @@ const StudentCardImpl = ({
   const debt       = student.pendingBalanceWithSurcharge || student.pendingBalance || 0;
   const hasDebt    = debt > 0;
   const flexCredit = student.flexCredit || null;
-  const waRaw      = (student.whatsapp || student.contactInfo || '').replace(/\D/g, '');
-  const hasWa      = waRaw.length >= 8;
+  const waNumberRaw = student.whatsapp || student.contactInfo || '';
+  const hasWa      = isValidArgWhatsappNumber(waNumberRaw);
   const firstName  = (student.name || '').split(' ')[0];
 
-  const openWa = (msg) => window.open(`https://wa.me/549${waRaw}?text=${encodeURIComponent(msg)}`, '_blank');
+  const openWa = (msg) => { const link = buildWhatsappLink(waNumberRaw, msg); if (link) window.open(link, '_blank'); };
   const handleWaDebt = (e) => {
     e.stopPropagation();
     const month = new Date().toLocaleDateString('es-AR', { month: 'long' });

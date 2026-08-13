@@ -550,8 +550,9 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
 
   const targetAppId = dataAppId || "1:786390581865:web:ed47531cf7415ae5ca18f8";
 
-  // Recopilar todos los FCM tokens de los alumnos seleccionados
-  const tokens = [];
+  // Recopilar todos los FCM tokens de los alumnos seleccionados (junto con
+  // la referencia al doc, para poder borrar los que FCM rechace)
+  const tokenDocs = [];
   const ids = Array.isArray(studentIds) ? studentIds : [];
 
   for (const sid of ids) {
@@ -560,22 +561,23 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
         .collection(`artifacts/${targetAppId}/students/${sid}/deviceTokens`)
         .where("enabled", "==", true)
         .get();
-      tokensSnap.forEach(d => { if (d.data()?.token) tokens.push(d.data().token); });
+      tokensSnap.forEach(d => { if (d.data()?.token) tokenDocs.push({ token: d.data().token, ref: d.ref }); });
     } catch (e) { console.error(`[Push] token fetch error for ${sid}:`, e.message); }
   }
 
-  if (!tokens.length) return { sent: 0, message: "Sin dispositivos registrados para notificaciones." };
+  if (!tokenDocs.length) return { sent: 0, message: "Sin dispositivos registrados para notificaciones." };
 
   // Enviar usando multicast (lotes de 500)
   let successCount = 0, failureCount = 0;
+  const staleRefs = [];
   const BATCH = 500;
-  for (let i = 0; i < tokens.length; i += BATCH) {
-    const batch = tokens.slice(i, i + BATCH);
+  for (let i = 0; i < tokenDocs.length; i += BATCH) {
+    const batch = tokenDocs.slice(i, i + BATCH);
     try {
       const fullTitle = title.includes('Sandra') ? title : `Estudio de Canto Sandra Paloschi`;
       const targetUrl = url || "https://estudiosandrapaloschi.web.app/#/checkin?a=1:786390581865:web:ed47531cf7415ae5ca18f8";
       const result = await admin.messaging().sendEachForMulticast({
-        tokens: batch,
+        tokens: batch.map(t => t.token),
         notification: { title, body },
         // data.url es leído por el service worker en notificationclick
         data: { url: targetUrl },
@@ -594,7 +596,22 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
       });
       successCount += result.successCount;
       failureCount += result.failureCount;
+      // Antes esto no pasaba nunca para los alumnos (sólo existía para
+      // adminTokens) — un token vencido se reintentaba para siempre sin que
+      // nadie se enterara de que ese alumno en realidad no recibe nada.
+      result.responses.forEach((resp, idx) => {
+        if (!resp.success && (resp.error?.code === 'messaging/registration-token-not-registered' || resp.error?.code === 'messaging/invalid-registration-token')) {
+          staleRefs.push(batch[idx].ref);
+        }
+      });
     } catch (e) { console.error("[Push] multicast error:", e.message); failureCount += batch.length; }
+  }
+
+  if (staleRefs.length) {
+    const batchDel = admin.firestore().batch();
+    staleRefs.forEach(ref => batchDel.delete(ref));
+    await batchDel.commit();
+    console.log(`[Push] Tokens de alumnos inválidos eliminados: ${staleRefs.length}`);
   }
 
   console.log(`[Push] Enviadas: ${successCount}, Fallidas: ${failureCount}`);
@@ -658,6 +675,9 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
 
   const dayName = getSpanishDay(dateKey);
   let totalSent = 0;
+  let noTokenCount = 0;
+  let errorCount = 0;
+  const staleRefs = [];
 
   for (const [studentId, info] of Object.entries(studentMap)) {
     try {
@@ -670,8 +690,8 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
         .collection(`artifacts/${appId}/students/${studentId}/deviceTokens`)
         .where('enabled', '==', true)
         .get();
-      const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
-      if (!tokens.length) continue;
+      const tokenDocs = tokensSnap.docs.filter(d => d.data()?.token);
+      if (!tokenDocs.length) { noTokenCount++; continue; }
 
       const title = 'Estudio de Canto Sandra Paloschi 🎵';
       const timeStr = info.time ? ` a las ${info.time} hs` : '';
@@ -679,8 +699,8 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
       const body = `Hola ${firstName}! 🎵 Te recuerdo que tenés clase${dayStr}${timeStr}. ¡Nos vemos!`;
       const portalUrl = `https://estudiosandrapaloschi.web.app/#/checkin?a=${appId}`;
 
-      await admin.messaging().sendEachForMulticast({
-        tokens,
+      const result = await admin.messaging().sendEachForMulticast({
+        tokens: tokenDocs.map(d => d.data().token),
         notification: { title, body },
         data: { url: portalUrl },
         webpush: {
@@ -688,15 +708,37 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
           fcmOptions: { link: portalUrl },
         },
       });
+      // Igual que en sendPushNotification — antes ningún token de alumno se
+      // limpiaba nunca, así que uno vencido se reintentaba para siempre.
+      result.responses.forEach((resp, idx) => {
+        if (!resp.success && (resp.error?.code === 'messaging/registration-token-not-registered' || resp.error?.code === 'messaging/invalid-registration-token')) {
+          staleRefs.push(tokenDocs[idx].ref);
+        }
+      });
       totalSent++;
     } catch (e) {
+      errorCount++;
       console.error(`[Reminders] Error para ${studentId}:`, e.message);
     }
   }
 
-  await logRef.set({ sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp(), source, count: totalSent });
-  console.log(`[Reminders] Enviados: ${totalSent} de ${Object.keys(studentMap).length} alumnos (${source})`);
-  return { sent: totalSent, total: Object.keys(studentMap).length };
+  if (staleRefs.length) {
+    const batchDel = db.batch();
+    staleRefs.forEach(ref => batchDel.delete(ref));
+    await batchDel.commit();
+    console.log(`[Reminders] Tokens de alumnos inválidos eliminados: ${staleRefs.length}`);
+  }
+
+  const total = Object.keys(studentMap).length;
+  // Antes acá sólo se guardaba `count` (cuántos recibieron el push) — no
+  // había forma de distinguir "no tenía nada que avisar" de "no lo pude
+  // avisar", así que ninguna pantalla podía mostrar el resultado real.
+  await logRef.set({
+    sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp(), source,
+    count: totalSent, total, noToken: noTokenCount, errors: errorCount,
+  });
+  console.log(`[Reminders] Enviados: ${totalSent} de ${total} alumnos (${source}) — sin token: ${noTokenCount}, errores: ${errorCount}`);
+  return { sent: totalSent, total, noToken: noTokenCount, errors: errorCount };
 }
 
 // Manual: siempre envía (sin bloqueo por log)
