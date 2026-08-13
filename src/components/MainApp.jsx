@@ -11,6 +11,7 @@ import { db, auth, storage, firebaseConfig } from '../firebaseConfig.js';
 import { waitForAuthReady, updateReceiptStatus, markStudentReceiptsAsSeen } from '../utils/authHelpers.js';
 
 import { formatMoneyAr, parseMoneyAr } from '../utils/money.js';
+import { sumWithSurcharge, LATE_SURCHARGE_RATE } from '../utils/lateSurcharge.js';
 
 import { formatDateToDDMMYYYY, mapClassTypeToSpanish, daysOfWeekFull } from '../utils/classHelpers.js';
 
@@ -1064,23 +1065,13 @@ const studentsWithStats = React.useMemo(() => {
             ...studentUnpaidFlexCredits.map(p => ({ type: 'flex_credit', ...p })),
         ].sort((a, b) => (a.classDate || a.periodStartDate).localeCompare(b.classDate || b.periodStartDate));
 
-        let pendingBalance = 0;
-        let pendingBalanceWithSurcharge = 0;
-        let aplicaRecargoGeneral = false;
-
-        unpaidItems.forEach(item => {
-            const baseAmount = item.amount || item.price || 0;
-            pendingBalance += baseAmount;
-            const itemDate = new Date((item.periodStartDate || item.classDate) + 'T12:00:00');
-            // Recargo desde el día 9 inclusive (>= 9 es idéntico a > 8 pero más explícito)
-            const esMesActual = itemDate.getFullYear() === hoy.getFullYear() && itemDate.getMonth() === hoy.getMonth();
-            if (esMesActual && hoy.getDate() >= 9) {
-                pendingBalanceWithSurcharge += Math.round(baseAmount * 1.10);
-                aplicaRecargoGeneral = true;
-            } else {
-                pendingBalanceWithSurcharge += baseAmount;
-            }
-        });
+        const pendingBalance = unpaidItems.reduce((sum, item) => sum + (item.amount || item.price || 0), 0);
+        const { total: pendingBalanceWithSurcharge, anyApplied: aplicaRecargoGeneral } = sumWithSurcharge(
+            unpaidItems,
+            item => item.amount || item.price || 0,
+            item => item.periodStartDate || item.classDate,
+            hoy
+        );
 
         const totalPaidUnconsumedClasses = studentClasses.filter(cls =>
             cls.isPaid && !cls.attendanceStatus && (cls.status === 'scheduled' || cls.status === undefined)
@@ -1285,6 +1276,13 @@ const handleOpenRenewSubscriptionModal = async (student) => {
         // recargo puntual como si fuera el nuevo precio de siempre.
         const stripLateSurcharge = (amount, paymentDoc) => {
             if (!amount || !paymentDoc) return amount;
+            // Desde que MarkPaymentForm guarda `surchargeApplied` (ver
+            // [[lateSurcharge.js]]) sabemos con certeza si ese pago llevó
+            // recargo, en vez de tener que adivinarlo. Sólo para pagos
+            // viejos que no tienen el campo caemos a la heurística anterior.
+            if (typeof paymentDoc.surchargeApplied === 'boolean') {
+                return paymentDoc.surchargeApplied ? Math.round(amount / LATE_SURCHARGE_RATE) : amount;
+            }
             const raw = paymentDoc.paidAt || paymentDoc.paymentDate || paymentDoc.fechaPago;
             let day = null;
             try {
@@ -1293,7 +1291,7 @@ const handleOpenRenewSubscriptionModal = async (student) => {
                 else if (raw) day = new Date(raw).getDate();
             } catch {}
             if (day === null || day < 9) return amount;
-            const base = amount / 1.1;
+            const base = amount / LATE_SURCHARGE_RATE;
             const roundedBase = Math.round(base);
             // Si sacándole el 10% da un número redondo, asumimos que sí tenía recargo
             if (Math.abs(base - roundedBase) < 0.5 && roundedBase % 100 === 0) return roundedBase;
@@ -1385,7 +1383,7 @@ const handleDeleteRenewalPackage = async (student, pkg) => {
     }
 };
 
-const handleRenewSelectedSubscription = async (student, packageToRenew, newAmount) => {
+const handleRenewSelectedSubscription = async (student, packageToRenew, newAmount, expectedPaymentMethod) => {
     setShowRenewSubscriptionModal(false);
 
     // Mes siguiente al de periodEndDate — calculado por mes/año, no sumando
@@ -1453,6 +1451,10 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
             numClassesGenerated: classesToAdd.length,
             recordedAt: new Date(),
             paymentMethod: 'monthly_package_payment',
+            // Medio de pago elegido en el modal de renovación (transferencia/
+            // efectivo/mercadopago) — antes se pasaba pero nunca se guardaba,
+            // porque esta función tomaba 3 argumentos y el modal mandaba 4.
+            expectedPaymentMethod: expectedPaymentMethod || 'transferencia',
             isPaidForPackage: false,
             associatedClassIds: classIds,
             userId

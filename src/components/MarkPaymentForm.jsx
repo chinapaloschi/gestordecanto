@@ -5,6 +5,7 @@ import { MoneyInput } from './MoneyInput.jsx';
 import { FacturaModal } from './FacturaModal.jsx';
 import { PostPaymentActionsModal } from './PostPaymentActionsModal.jsx';
 import { formatMoneyAr } from '../utils/money.js';
+import { surchargeApplies, withSurcharge } from '../utils/lateSurcharge.js';
 import { formatDateToDDMMYYYY, mapClassTypeToSpanish } from '../utils/classHelpers.js';
 
 const PAYMENT_METHODS = [
@@ -79,29 +80,17 @@ export const MarkPaymentForm = ({
   const totalConRecargo = React.useMemo(() => {
     const item = itemsToPayForStudent.find(it => it.id === selectedItemToPay);
     const totalBase = item ? __getBaseAmountFromItem(item) : 0;
-    const dd = Number(String(paymentDate || '').split('-')[2] || '1');
-    const paymentYear  = Number(String(paymentDate || '').split('-')[0] || '0');
-    const paymentMonth = Number(String(paymentDate || '').split('-')[1] || '0');
-    // Solo aplica recargo si el ítem pertenece al mismo mes que la fecha de pago
     const itemPeriod = item?.data?.periodStartDate || item?.data?.classDate || '';
-    const itemYear  = Number(String(itemPeriod).split('-')[0] || '0');
-    const itemMonth = Number(String(itemPeriod).split('-')[1] || '0');
-    const esMesActual = itemYear === paymentYear && itemMonth === paymentMonth;
-    const aplicaRecargo = esMesActual && dd >= 9;
-    const totalHoy = aplicaRecargo ? Math.round(totalBase * 1.1) : totalBase;
+    const refDate = paymentDate ? new Date(paymentDate + 'T12:00:00') : new Date();
+    const { amount: totalHoy, applies: aplicaRecargo } = withSurcharge(totalBase, itemPeriod, refDate);
     return { totalHoy, aplicaRecargo, totalBase, recargo: totalHoy - totalBase };
   }, [itemsToPayForStudent, selectedItemToPay, paymentDate]);
 
   const calculateAndSetAmount = (baseAmount, dateString, itemPeriodStart = '') => {
-    let amt = Number(baseAmount) || 0;
-    if (dateString) {
-      const [pYear, pMonth, pDay] = String(dateString).split('-').map(Number);
-      const [iYear, iMonth] = String(itemPeriodStart).split('-').map(Number);
-      // Solo aplica recargo si el ítem es del mismo mes que la fecha de pago
-      const esMesActual = iYear === pYear && iMonth === pMonth;
-      if (esMesActual && pDay >= 9) amt = amt * 1.10;
-    }
-    setAmount(Math.round(amt));
+    const base = Number(baseAmount) || 0;
+    const refDate = dateString ? new Date(dateString + 'T12:00:00') : new Date();
+    const { amount } = withSurcharge(base, itemPeriodStart, refDate);
+    setAmount(Math.round(amount));
   };
 
   useEffect(() => {
@@ -161,7 +150,7 @@ export const MarkPaymentForm = ({
         batch.update(doc(db, `artifacts/${appId}/payments`, selectedItem.id), {
           isPaidForPackage: true, paymentDate: paymentDateObj, amount: parsedAmount,
           paidAt: paymentDateObj, status: 'paid', updatedAt: new Date(),
-          paidVia: paymentMethod,
+          paidVia: paymentMethod, surchargeApplied: totalConRecargo.aplicaRecargo,
           // NO se sobreescribe paymentMethod para preservar 'monthly_package_payment'
         });
         for (const classId of selectedItem.data.associatedClassIds) {
@@ -172,7 +161,7 @@ export const MarkPaymentForm = ({
           isPaidForPackage: true, paymentDate: paymentDateObj, amount: parsedAmount,
           paidAt: paymentDateObj, status: 'paid', updatedAt: new Date(),
           paymentMethod: 'abono_flexible',
-          paidVia: paymentMethod,
+          paidVia: paymentMethod, surchargeApplied: totalConRecargo.aplicaRecargo,
         });
       }
       await batch.commit();

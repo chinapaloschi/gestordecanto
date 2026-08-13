@@ -39,7 +39,11 @@ export const DebtDetailsModal = ({ isOpen, onClose, student, db, appId, showMess
       let docRef;
       let fieldToUpdate;
 
-      if (item.type === 'package') {
+      // 'package' y 'flex_credit' viven en la colección de pagos (su id es un
+      // documento de `payments`); sólo una clase suelta ('class') vive en
+      // `scheduledClasses`. Antes 'flex_credit' caía en el else de acá abajo
+      // y trataba de actualizar un documento de clases que no existe.
+      if (item.type === 'package' || item.type === 'flex_credit') {
         docRef = doc(db, `artifacts/${appId}/payments`, item.id);
         fieldToUpdate = 'amount';
       } else {

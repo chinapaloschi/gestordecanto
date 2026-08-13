@@ -13,6 +13,7 @@ import { MoneyInput } from './MoneyInput.jsx';
 import { Toast } from './Toast.jsx';
 
 import { formatMoneyAr, parseMoneyAr } from '../utils/money.js';
+import { sumWithSurcharge } from '../utils/lateSurcharge.js';
 
 import { formatDateToDDMMYYYY } from '../utils/classHelpers.js';
 
@@ -399,54 +400,41 @@ const getCurrentWeekRange = () => {
 
     // El recargo del 10% sólo corresponde a la deuda del MES EN CURSO, igual que en
     // el panel (MainApp.jsx `pendingBalanceWithSurcharge`) y en Marcar Pago
-    // (MarkPaymentForm.jsx `totalConRecargo`). Antes, acá se aplicaba a toda la
-    // deuda pendiente (incluida la de meses anteriores) con sólo mirar la fecha de
-    // hoy, mostrando un total más alto del que realmente se cobra.
+    // (MarkPaymentForm.jsx `totalConRecargo`) — misma función compartida, ver
+    // utils/lateSurcharge.js. Antes, acá se aplicaba a toda la deuda pendiente
+    // (incluida la de meses anteriores) con sólo mirar la fecha de hoy, mostrando
+    // un total más alto del que realmente se cobra.
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const today = now.getDate();
 
-    const isCurrentMonthPeriod = (dateStr) => {
-      if (!dateStr) return false;
-      const d = new Date(dateStr + 'T12:00:00');
-      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-    };
-
-    let surchargeApplied = false;
-    const sumWithSurcharge = (items, getAmount, getPeriod) => items.reduce((sum, item) => {
-      const base = getAmount(item);
-      const applies = today >= 9 && isCurrentMonthPeriod(getPeriod(item));
-      if (applies) surchargeApplied = true;
-      return sum + (applies ? Math.round(base * 1.10) : base);
-    }, 0);
-
-    const packageSum = sumWithSurcharge(
+    const { total: packageSum, anyApplied: pkgApplied } = sumWithSurcharge(
       currentMonthUnpaidPackages,
       pkg => Number(pkg.amount ?? pkg.monto ?? pkg.total ?? 0),
-      pkg => pkg.periodStartDate
+      pkg => pkg.periodStartDate,
+      now
     );
 
-    const classSum = sumWithSurcharge(
+    const { total: classSum, anyApplied: clsApplied } = sumWithSurcharge(
       unpaidClasses,
       cls => Number(cls.price ?? cls.amount ?? 0),
-      cls => cls.classDate
+      cls => cls.classDate,
+      now
     );
 
-    const flexSum = sumWithSurcharge(
+    const { total: flexSum, anyApplied: flexApplied } = sumWithSurcharge(
       unpaidFlexCredits,
       fc => {
         const total = fc.amount || 0;
         const montoPorClase = fc.montoPorClase || (fc.clasesTotal ? Math.round(total / fc.clasesTotal) : total);
         return Math.max(total - (fc.clasesPagadas || 0) * montoPorClase, 0);
       },
-      fc => fc.periodStartDate
+      fc => fc.periodStartDate,
+      now
     );
 
     const totalHoy = packageSum + classSum + flexSum;
 
     setPublicTotalToday(totalHoy > 0 ? totalHoy : null);
-    setPublicSurchargeApplies(surchargeApplied);
+    setPublicSurchargeApplies(pkgApplied || clsApplied || flexApplied);
 
   }, [currentMonthUnpaidPackages, unpaidClasses, unpaidFlexCredits]);
 
