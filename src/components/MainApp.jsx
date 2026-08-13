@@ -48,7 +48,11 @@ import { LenceriaStockModal } from './LenceriaStockModal.jsx';
 
 import { MassEventsAdminModal } from './MassEvents.jsx';
 
-import { BlockDaysModal, BackupRestoreModal } from './AdminModals.jsx';
+// Ambas se abren desde modales gateados por `isOpen` (nunca se montan hasta
+// que se abren), así que las cargamos bajo demanda en vez de sumarlas al
+// bundle principal que se descarga en cada sesión.
+const BlockDaysModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.BlockDaysModal })));
+const BackupRestoreModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.BackupRestoreModal })));
 import { AvailableSlotsManager } from './AvailableSlotsManager.jsx';
 import { TrialRequestsPanel } from './TrialRequestsPanel.jsx';
 import { ExercisePacksManager } from './ExercisePacksManager.jsx';
@@ -76,8 +80,6 @@ import { CalendarView } from './CalendarView.jsx';
 import { AudioTransposeModal } from './AudioTransposeModal.jsx';
 
 import { DatePicker } from './DatePicker.jsx';
-
-import { BackupRestoreModal as BackupModal } from './AdminModals.jsx';
 
 import { IconUsers, IconCalendar, IconBanknote, IconHardDrive, IconQrCode, IconTag, IconRefresh, IconCreditCard, IconMusic } from './Icons.jsx';
 import { registerNotifications } from '../notifications.js';
@@ -1252,7 +1254,7 @@ const handleOpenRenewSubscriptionModal = async (student) => {
             .map(slot => {
                 const sorted = [...slot.classes].sort((a, b) => a.classDate.localeCompare(b.classDate));
                 const lastClass = sorted[sorted.length - 1];
-                return { ...slot, lastClassDate: lastClass.classDate };
+                return { ...slot, lastClassDate: lastClass.classDate, topicLink: lastClass.topicLink || null };
             })
             .filter(slot => new Date(slot.lastClassDate + 'T12:00:00').getTime() >= cutoffMs);
 
@@ -1347,6 +1349,7 @@ const handleOpenRenewSubscriptionModal = async (student) => {
                 amount: amountForRenewal, baseAmount: amountForRenewal - matricula, matricula,
                 periodStartDate: sortedDates[0], periodEndDate: slot.lastClassDate,
                 nextPeriodLabel: formattedLabel, isDecemberRenewal: isDecember,
+                topicLink: slot.topicLink || null,
             });
         }
 
@@ -1406,7 +1409,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
     const actualYear = lastPeriodEndDate.getMonth() === 11 ? lastPeriodEndDate.getFullYear() + 1 : lastPeriodEndDate.getFullYear();
     const nextMonthDate = new Date(actualYear, actualMonth, 1);
 
-    const { classType, dayOfWeek, startTime, duration } = packageToRenew;
+    const { classType, dayOfWeek, startTime, duration, topicLink } = packageToRenew;
 
     // ✅ USA EL NUEVO MONTO DEL MODAL
     const amount = newAmount;
@@ -1453,7 +1456,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
                     continue;
                 }
 
-                classesToAdd.push({ studentId: student.id, studentName: student.name, studentType: classType, classDate: formattedDate, startTime, endTime, duration, isPaid: false, userId, scheduledAt: new Date(), scheduleType: 'monthly', attendanceStatus: null, status: 'scheduled' });
+                classesToAdd.push({ studentId: student.id, studentName: student.name, studentType: classType, classDate: formattedDate, startTime, endTime, duration, isPaid: false, userId, scheduledAt: new Date(), scheduleType: 'monthly', attendanceStatus: null, status: 'scheduled', topicLink: topicLink || null });
             }
         }
 
@@ -2230,13 +2233,17 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
 
             <Modal isOpen={showRescheduleClassModal} onClose={() => setShowRescheduleClassModal(false)}>{selectedStudentForReschedule && <ScheduleClassForm db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => {setShowRescheduleClassModal(false); setSelectedStudentForReschedule(null);}} initialSelectedStudent={selectedStudentForReschedule} isRescheduling={true} scheduledClasses={scheduledClasses} blockedSlots={blockedSlots} />}</Modal>
 
-            <Modal size="xl" isOpen={showBackupRestoreModal} onClose={() => setShowBackupRestoreModal(false)}><BackupRestoreModal db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => setShowBackupRestoreModal(false)} /></Modal>
+            <React.Suspense fallback={null}>
+              <Modal size="xl" isOpen={showBackupRestoreModal} onClose={() => setShowBackupRestoreModal(false)}><BackupRestoreModal db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => setShowBackupRestoreModal(false)} /></Modal>
+            </React.Suspense>
 
             <AudioTransposeModal isOpen={showTransposeModal} onClose={() => setShowTransposeModal(false)} />
 
             <FinancialManagementModal isOpen={showFinancialManagementModal} onClose={() => setShowFinancialManagementModal(false)} allPayments={allPayments} extraIncomes={extraIncomes} expenses={expenses} students={students} db={db} userId={userId} appId={appId} showMessage={showMessage} expenseCategories={expenseCategories} />
 
-            <Modal size="xl" isOpen={showBlockDaysModal} onClose={() => setShowBlockDaysModal(false)}><BlockDaysModal db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => setShowBlockDaysModal(false)} blockedSlots={blockedSlots} scheduledClasses={scheduledClasses} /></Modal>
+            <React.Suspense fallback={null}>
+              <Modal size="xl" isOpen={showBlockDaysModal} onClose={() => setShowBlockDaysModal(false)}><BlockDaysModal db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => setShowBlockDaysModal(false)} blockedSlots={blockedSlots} scheduledClasses={scheduledClasses} /></Modal>
+            </React.Suspense>
 
             <Modal size="sm" isOpen={showConfirmDeleteStudentModal} onClose={() => setShowConfirmDeleteStudentModal(false)}>
 

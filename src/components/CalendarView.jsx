@@ -357,15 +357,23 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
         return Object.values(map).sort((a, b) => a.time.localeCompare(b.time));
     }, [scheduledClasses, tomorrowKey, students]);
 
-    const handleSendReminder = async () => {
+    const handleSendReminder = async (force = false) => {
         setSendingReminder(true);
         try {
             const fn = httpsCallable(getFunctions(), 'sendManualReminders');
             // Antes se descartaba el resultado y sólo se marcaba "enviado" —
-            // no había forma de saber a cuántos alumnos llegó de verdad.
-            const { data } = await fn({ appId, dateKey: tomorrowKey });
+            // no había forma de saber a cuántos alumnos llegó de verdad, y
+            // apretar el botón después de las 22hs (cuando ya corrió el
+            // automático) duplicaba el aviso a cada alumno.
+            const { data } = await fn({ appId, dateKey: tomorrowKey, force });
+            const { sent = 0, total = 0, noToken = 0, skipped, reason } = data || {};
+            if (skipped && reason === 'already_sent') {
+                setSendingReminder(false);
+                const resend = window.confirm(`Ya se habían enviado hoy (a ${sent} de ${total} alumnos). ¿Reenviar de todos modos?`);
+                if (resend) await handleSendReminder(true);
+                return;
+            }
             setReminderSent(true);
-            const { sent = 0, total = 0, noToken = 0 } = data || {};
             setReminderResult({ sent, total, noToken });
             const detail = noToken > 0 ? ` (${noToken} sin notificaciones activadas)` : '';
             showMessage(`Recordatorios enviados a ${sent} de ${total} alumnos${detail}.`, sent < total ? 'info' : 'success');
@@ -1240,7 +1248,7 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                                 </div>
                             ) : (
                                 <button
-                                    onClick={handleSendReminder}
+                                    onClick={() => handleSendReminder()}
                                     disabled={sendingReminder || tomorrowStudents.length === 0}
                                     className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold transition disabled:opacity-50 flex items-center justify-center gap-2"
                                 >

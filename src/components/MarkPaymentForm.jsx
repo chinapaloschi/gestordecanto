@@ -144,7 +144,11 @@ export const MarkPaymentForm = ({
 
       if (selectedItem.type === 'single_class') {
         batch.update(doc(db, `artifacts/${appId}/scheduledClasses`, selectedItem.id), {
-          isPaid: true, price: parsedAmount, paymentMethod,
+          // No pisamos `price` (el precio de lista al agendar la clase) —
+          // antes marcar el pago lo reemplazaba con lo que se tipeó acá, así
+          // que un error de tipeo al cobrar borraba el precio original de la
+          // clase. `paidAmount` guarda lo que realmente se cobró.
+          isPaid: true, paidAmount: parsedAmount, paymentMethod, paidAt: paymentDateObj,
         });
       } else if (selectedItem.type === 'monthly_package') {
         batch.update(doc(db, `artifacts/${appId}/payments`, selectedItem.id), {

@@ -698,6 +698,8 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                     }
                     const batch = writeBatch(db);
                     let count = 0;
+                    let skippedOverlap = 0;
+                    const movingIds = availableClassesToReschedule.map(c => c.id);
                     for (const cls of availableClassesToReschedule) {
                         let targetDate = cls.classDate;
                         // Si cambió el día de la semana, calcular la nueva fecha en la misma semana
@@ -712,6 +714,23 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                         const endDt = new Date(`${targetDate}T${startTime}:00`);
                         endDt.setMinutes(endDt.getMinutes() + dur);
                         const newEnd = `${String(endDt.getHours()).padStart(2,'0')}:${String(endDt.getMinutes()).padStart(2,'0')}`;
+
+                        // Antes esto no chequeaba superposición para nada —
+                        // podía doble-reservar el horario de otro alumno sin avisar.
+                        const newStartMinutes = parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]);
+                        const newEndMinutes = newStartMinutes + dur;
+                        const overlappingClass = (scheduledClasses || []).find(existingCls => {
+                            if (movingIds.includes(existingCls.id)) return false;
+                            if (existingCls.classDate !== targetDate) return false;
+                            if (existingCls.status === 'cancelled') return false;
+                            if (!existingCls.startTime) return false;
+                            const existingStart = parseInt(existingCls.startTime.split(':')[0]) * 60 + parseInt(existingCls.startTime.split(':')[1]);
+                            const existingEnd = existingStart + (existingCls.duration || 0);
+                            const hasOverlap = newStartMinutes < existingEnd && newEndMinutes > existingStart;
+                            return hasOverlap && (cls.studentType === 'individual' || existingCls.studentType === 'individual');
+                        });
+                        if (overlappingClass) { skippedOverlap++; continue; }
+
                         batch.update(doc(db, `artifacts/${appId}/scheduledClasses`, cls.id), {
                             classDate: targetDate, startTime, endTime: newEnd,
                             rescheduleReason: rescheduleReason || null, rescheduledAt: new Date(),
@@ -719,7 +738,8 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                         count++;
                     }
                     await batch.commit();
-                    showMessage(`✅ ${count} clase${count !== 1 ? 's' : ''} reprogramada${count !== 1 ? 's' : ''} exitosamente.`, 'success');
+                    const skipNote = skippedOverlap > 0 ? ` ${skippedOverlap} se salteó por chocar con otra clase.` : '';
+                    showMessage(`✅ ${count} clase${count !== 1 ? 's' : ''} reprogramada${count !== 1 ? 's' : ''} exitosamente.${skipNote}`, skippedOverlap > 0 ? 'info' : 'success');
                     if (sendWhatsapp) {
                         const fn = (currentStudent.name || '').split(' ')[0];
                         const dayStr = newDayOfWeek ? (daysOfWeekFull.find(d => d.value === newDayOfWeek)?.label || '') : 'el horario habitual';

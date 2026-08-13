@@ -59,6 +59,65 @@ import { UpdateBanner } from './UpdateBanner.jsx';
 
 const STUDENT_SESSION_KEY = 'sp_checkin_student_id';
 
+// Antes el registro de notificaciones del alumno era completamente
+// silencioso (`.catch(() => {})`) — si fallaba, el alumno quedaba sin
+// recordatorios para siempre sin ningún indicador, a diferencia del panel
+// de Sandra que sí muestra el estado del permiso. Sólo se muestra cuando
+// hay algo para resolver (no se pidió el permiso todavía, o está bloqueado)
+// — si ya está activo, no ocupa lugar en la pantalla principal.
+function NotificationStatusBanner({ appId, studentId, showToast }) {
+  const [status, setStatus] = React.useState(() =>
+    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
+  );
+  const [loading, setLoading] = React.useState(false);
+
+  if (status === 'unsupported' || status === 'granted') return null;
+
+  const activate = async () => {
+    setLoading(true);
+    try {
+      const result = await registerNotifications({
+        app: firebaseApp, db, auth, appId, studentId,
+        vapidKey: FCM_VAPID_KEY,
+        onToast: (msg, kind) => showToast?.(msg, kind === 'error' ? 'error' : 'success'),
+      });
+      const perm = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+      setStatus(perm);
+      if (result.ok && result.persisted) {
+        showToast?.('Notificaciones activadas — vas a recibir el recordatorio de tus clases.', 'success');
+      } else if (perm === 'denied') {
+        showToast?.('Permiso bloqueado. Activalo desde la configuración del navegador.', 'error');
+      }
+    } catch (e) {
+      showToast?.('No se pudo activar: ' + e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isDenied = status === 'denied';
+
+  return (
+    <button onClick={activate} disabled={loading || isDenied}
+      className={`w-full rounded-xl p-3 flex items-center gap-3 text-left transition
+        ${isDenied ? 'bg-red-50 border border-red-200 cursor-not-allowed' : 'bg-amber-50 border border-amber-200 hover:bg-amber-100'}`}>
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isDenied ? 'bg-red-100' : 'bg-amber-100'}`}>
+        {loading
+          ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"/>
+          : <span className="text-sm">{isDenied ? '🔴' : '🔔'}</span>}
+      </div>
+      <div>
+        <p className={`font-display font-semibold text-xs ${isDenied ? 'text-red-800' : 'text-amber-800'}`}>
+          {isDenied ? 'Notificaciones bloqueadas' : 'Activá las notificaciones'}
+        </p>
+        <p className={`text-[11px] mt-0.5 ${isDenied ? 'text-red-600' : 'text-amber-700'}`}>
+          {isDenied ? 'No vas a recibir el recordatorio de tus clases.' : 'Así te llega el recordatorio de tu próxima clase.'}
+        </p>
+      </div>
+    </button>
+  );
+}
+
 export const PublicCheckInViewPIN = ({ db }) => {
 
   const [activeTab, setActiveTab] = React.useState('inicio');
@@ -1274,6 +1333,8 @@ const renderCalendarGrid = () => {
                   </div>
                 </div>
               )}
+
+              <NotificationStatusBanner appId={appId} studentId={student?.id} showToast={showToast} />
 
               {/* CTA pago */}
               {showCta && (

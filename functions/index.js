@@ -643,12 +643,12 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
 
   const logRef = db.doc(`artifacts/${appId}/reminderLog/${dateKey}`);
 
-  // Solo bloquear si viene del automático (no del botón manual)
   if (skipIfAlreadySent) {
     const logSnap = await logRef.get();
     if (logSnap.exists && logSnap.data().sent) {
-      console.log(`[Reminders] Ya enviado para ${dateKey}, saltando (auto).`);
-      return { skipped: true, reason: 'already_sent' };
+      console.log(`[Reminders] Ya enviado para ${dateKey}, saltando.`);
+      const prev = logSnap.data();
+      return { skipped: true, reason: 'already_sent', sent: prev.count || 0, total: prev.total || 0, noToken: prev.noToken || 0 };
     }
   }
 
@@ -741,13 +741,17 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
   return { sent: totalSent, total, noToken: noTokenCount, errors: errorCount };
 }
 
-// Manual: siempre envía (sin bloqueo por log)
+// Manual: por defecto respeta el log del día (si el automático ya corrió,
+// no reenvía) — antes siempre mandaba de nuevo, duplicando el aviso a cada
+// alumno si se apretaba el botón después de las 22hs. `force: true` permite
+// reenviar a propósito si Sandra realmente lo quiere.
 exports.sendManualReminders = functions.https.onCall(async (data, context) => {
   assertC(context.auth && context.auth.token && context.auth.token.email, "No autenticado.");
   assertC(ALLOWED_EMAILS.has(context.auth.token.email), "No autorizado.");
   const appId   = data?.appId   || DEFAULT_APP_ID;
   const dateKey = data?.dateKey || tomorrowKey();
-  return await _sendRemindersForDate(appId, dateKey, 'manual', false);
+  const force   = data?.force === true;
+  return await _sendRemindersForDate(appId, dateKey, 'manual', !force);
 });
 
 // Automático a las 22:00 Argentina — solo envía si no se hizo manual ese día
