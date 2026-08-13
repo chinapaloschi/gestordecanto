@@ -2325,6 +2325,8 @@ db={db}
     renewalData={renewalData}
     onRenew={handleRenewSelectedSubscription}
     onDeletePackage={(pkg) => handleDeleteRenewalPackage(renewalData?.student, pkg)}
+    db={db}
+    appId={appId}
 />
 
 <GlobalRepertoireModal

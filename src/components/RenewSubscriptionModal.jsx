@@ -3,6 +3,7 @@ import { Modal } from './Modal.jsx';
 import { MoneyInput } from './MoneyInput.jsx';
 import { formatMoneyAr } from '../utils/money.js';
 import { mapClassTypeToSpanish, daysOfWeekFull } from '../utils/classHelpers.js';
+import { usePricing, getTariff } from '../hooks/usePricing.js';
 
 const PAYMENT_METHODS = [
   { id: 'transferencia', label: 'Transferencia', icon: '🏦' },
@@ -35,8 +36,9 @@ function countClassesInPeriod(dayOfWeek, nextPeriodLabel) {
 }
 
 // Una card de renovación por paquete
-const RenewalCard = ({ pkg, index, onRenew, onDelete }) => {
+const RenewalCard = ({ pkg, index, onRenew, onDelete, pricing }) => {
   const prevAmount      = pkg.baseAmount || pkg.amount || 0;
+  const tariff           = getTariff(pricing, pkg.classType, pkg.duration);
   const [newAmount, setNewAmount]   = useState(pkg.amount || 0);
   const [payMethod, setPayMethod]   = useState('transferencia');
   const [confirming, setConfirming] = useState(false);
@@ -163,6 +165,14 @@ const RenewalCard = ({ pkg, index, onRenew, onDelete }) => {
             placeholder="0"
           />
 
+          {/* Precio de lista — sólo referencia, no reemplaza el monto propuesto arriba (basado en el último pago real) */}
+          {tariff > 0 && (
+            <button type="button" onClick={() => setNewAmount(tariff)}
+              className="w-full mt-1.5 py-1.5 rounded-lg text-[10px] font-semibold border border-dashed border-gray-300 text-gray-500 hover:border-violet-300 hover:text-violet-600 transition flex items-center justify-center gap-1.5">
+              Precio de lista: <span className="font-black">{formatMoneyAr(tariff)}</span>
+            </button>
+          )}
+
           {/* Diferencia */}
           {diff !== 0 && (
             <div className={`mt-2 flex items-center gap-2 text-xs font-semibold ${diff > 0 ? 'text-amber-600' : 'text-green-600'}`}>
@@ -213,7 +223,8 @@ const RenewalCard = ({ pkg, index, onRenew, onDelete }) => {
   );
 };
 
-export const RenewSubscriptionModal = ({ isOpen, onClose, renewalData, onRenew, onDeletePackage }) => {
+export const RenewSubscriptionModal = ({ isOpen, onClose, renewalData, onRenew, onDeletePackage, db, appId }) => {
+  const { pricing } = usePricing(db, appId);
   if (!isOpen || !renewalData) return null;
   const { student, packages } = renewalData;
 
@@ -244,7 +255,7 @@ export const RenewSubscriptionModal = ({ isOpen, onClose, renewalData, onRenew, 
         <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-gray-50">
           {packages.length > 0 ? (
             packages.map((pkg, index) => (
-              <RenewalCard key={`${pkg.classType}-${pkg.dayOfWeek}-${pkg.startTime}`} pkg={pkg} index={index} onRenew={handleRenew} onDelete={onDeletePackage} />
+              <RenewalCard key={`${pkg.classType}-${pkg.dayOfWeek}-${pkg.startTime}`} pkg={pkg} index={index} onRenew={handleRenew} onDelete={onDeletePackage} pricing={pricing} />
             ))
           ) : (
             <div className="text-center py-10 text-gray-500">

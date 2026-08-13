@@ -8,6 +8,7 @@ import { formatMoneyAr } from '../utils/money.js';
 import { formatDateToDDMMYYYY, mapClassTypeToSpanish, daysOfWeekFull } from '../utils/classHelpers.js';
 import { getLocalToday, toLocalYYYYMMDD, generateTimeOptions } from '../utils/dateHelpers.js';
 import { cancelScheduledClass, hardDeleteScheduledClass, hardDeleteUnpaidMonthlyPackage } from '../utils/classActions.js';
+import { usePricing, getTariff } from '../hooks/usePricing.js';
 const fldLabel = 'block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5';
 const fldInput = 'w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 transition bg-white';
 
@@ -641,6 +642,22 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
             }
         }
     }, [classType, monthlyClassType, scheduleType, isRescheduling]);
+
+    // Precio de lista como DEFAULT — sólo rellena si el campo está vacío, así
+    // que nunca pisa un monto puntual que ya se haya tipeado (becas, casos
+    // particulares, etc.). Ver hooks/usePricing.js.
+    const { pricing } = usePricing(db, appId);
+    useEffect(() => {
+        if (isEditing || isRescheduling || price !== '') return;
+        const tariff = getTariff(pricing, classType, Number(duration));
+        if (tariff > 0) setPrice(String(tariff));
+    }, [classType, duration, isEditing, isRescheduling, pricing, price]);
+
+    useEffect(() => {
+        if (isEditing || isRescheduling || monthlyAmount !== '') return;
+        const tariff = getTariff(pricing, monthlyClassType, Number(monthlyDuration));
+        if (tariff > 0) setMonthlyAmount(String(tariff));
+    }, [monthlyClassType, monthlyDuration, isEditing, isRescheduling, pricing, monthlyAmount]);
 
     const handleClassToRescheduleChange = (e) => {
         const selectedId = e.target.value;

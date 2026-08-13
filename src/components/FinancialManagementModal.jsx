@@ -1,6 +1,7 @@
 ﻿import React, { useState, useMemo } from 'react';
 import { Modal, ModalHeader } from './Modal.jsx';
 import { AddExtraIncomeForm, ManageExpenseCategoriesModal, AddExpenseForm } from './FinancialForms.jsx';
+import { PricingSettingsModal } from './PricingSettingsModal.jsx';
 import { formatMoneyAr } from '../utils/money.js';
 import { IconTrash } from './Icons.jsx';
 import { MoneyInput } from './MoneyInput.jsx';
@@ -24,6 +25,7 @@ export const FinancialManagementModal = ({ isOpen, onClose, allPayments, extraIn
     const [showConfirmDeleteFinancialRecordModal, setShowConfirmDeleteFinancialRecordModal] = useState(false);
     const [selectedFinancialRecordToDelete, setSelectedFinancialRecordToDelete] = useState(null);
 const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
+    const [showPricingSettings, setShowPricingSettings] = useState(false);
     const [baseAmountInput, setBaseAmountInput] = useState('');
     const [percentageInput, setPercentageInput] = useState('');
     const [originalPriceInput, setOriginalPriceInput] = useState('');
@@ -421,6 +423,11 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
                         title="Calculadora de porcentajes">
                         % Calc
                     </button>
+                    <button onClick={() => setShowPricingSettings(true)}
+                        className="px-3 py-2 text-xs font-bold bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition"
+                        title="Precio de lista por tipo de clase">
+                        Tarifario
+                    </button>
                 </div>
             </div>
 
@@ -578,6 +585,7 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
     </div>
 
     {/* Modales internos */}
+    <PricingSettingsModal isOpen={showPricingSettings} onClose={() => setShowPricingSettings(false)} db={db} appId={appId} showMessage={showMessage} />
     <Modal isOpen={showAddExtraIncomeModal} onClose={() => setShowAddExtraIncomeModal(false)}><AddExtraIncomeForm db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => setShowAddExtraIncomeModal(false)} /></Modal>
     <Modal isOpen={showAddExpenseModal} onClose={() => setShowAddExpenseModal(false)}><AddExpenseForm db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => setShowAddExpenseModal(false)} expenseCategories={expenseCategories} /></Modal>
     <Modal isOpen={showManageCategoriesModal} onClose={() => setShowManageCategoriesModal(false)}><ManageExpenseCategoriesModal db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => setShowManageCategoriesModal(false)} expenseCategories={expenseCategories} onCategoriesUpdate={() => {}} /></Modal>
