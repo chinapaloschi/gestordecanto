@@ -665,7 +665,10 @@ const saveAttendance = async (classId, status) => {
 
     console.error(e);
 
-    showToast('No se pudo registrar. Probá de nuevo.', 'error');
+    // e.message trae el motivo real que devuelve confirmAttendance (ej. "La
+    // clase no es hoy.") — antes se descartaba y sólo se mostraba un mensaje
+    // genérico, así que nunca se sabía por qué había fallado.
+    showToast(e?.message || 'No se pudo registrar. Probá de nuevo.', 'error');
 
   } finally {
 
@@ -685,17 +688,23 @@ const handleClassClick = (classItem) => {
 
   if (saving) return;
 
-  const isClickable = classItem.isInCurrentWeek && !isPresent(classItem.status) && !isAbsent(classItem.status);
+  const alreadyMarked = isPresent(classItem.status) || isAbsent(classItem.status);
 
-  if (isClickable) {
+  if (classItem.isToday && !alreadyMarked) {
 
     setSelectedClassForAttendance(classItem);
 
     setShowAttendanceOptions(true);
 
-  } else if (classItem.isInCurrentWeek) {
+  } else if (alreadyMarked) {
 
     showToast('Ya registraste tu estado para esta clase.', 'info');
+
+  } else if (classItem.isInCurrentWeek) {
+
+    // Sólo se puede marcar la clase del día de hoy — el servidor rechaza
+    // cualquier otra, aunque sea de esta misma semana.
+    showToast('Sólo podés marcar la clase del día de hoy.', 'info');
 
   }
 
@@ -789,6 +798,11 @@ for (const r of rows) {
 
   const isInCurrentWeek = r.classDate >= weekRange.start && r.classDate <= weekRange.end;
 
+  // El servidor (confirmAttendance) sólo acepta marcar la clase de HOY —
+  // antes se ofrecía "Marcar →" en toda la semana, lo que hacía fallar el
+  // pedido en silencio para cualquier otro día. Ver hooks más abajo.
+  const isToday = r.classDate === todayKey;
+
   groups[g].push({
 
     id: r.id,
@@ -802,6 +816,8 @@ for (const r of rows) {
     status: r.attendanceStatus || 'pending',
 
     isInCurrentWeek,   // ← nueva propiedad
+
+    isToday,
 
     topicLink: r.topicLink || null,
 
@@ -1565,7 +1581,7 @@ const renderCalendarGrid = () => {
                                 const absent   = isAbsent(c.status);
                                 const isWeek   = c.isInCurrentWeek;
                                 const isPast   = new Date(c.date + 'T00:00:00') < today;
-                                const canMark  = isWeek && !present && !absent;
+                                const canMark  = c.isToday && !present && !absent;
                                 const tipo     = (c.realType || '').toLowerCase();
                                 const typeLabel = tipo.includes('coral') ? 'Coral' : tipo.includes('grup') ? 'Grupal' : 'Individual';
 

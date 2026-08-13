@@ -4,6 +4,7 @@ import { Modal, ModalHeader } from './Modal.jsx';
 import { MoneyInput } from './MoneyInput.jsx';
 import { formatMoneyAr, parseMoneyAr } from '../utils/money.js';
 import { formatDateToDDMMYYYY, mapClassTypeToSpanish, daysOfWeekFull } from '../utils/classHelpers.js';
+import { isPresent, isAbsent } from '../utils/studentHelpers.js';
 import { getLocalToday, toLocalYYYYMMDD, generateTimeOptions } from '../utils/dateHelpers.js';
 import { cancelScheduledClass, hardDeleteScheduledClass, hardDeleteUnpaidMonthlyPackage } from '../utils/classActions.js';
 import { ScheduleClassForm } from './ScheduleClassForm.jsx';
@@ -157,8 +158,8 @@ const classesOnSelectedDate = React.useMemo(() => {
 
         // Estadísticas del día
         const allStudentsToday = classesOnSelectedDate.flatMap(g => g.students);
-        const todayPresent  = allStudentsToday.filter(s => s.attendance === 'presente').length;
-        const todayAbsent   = allStudentsToday.filter(s => s.attendance === 'ausente').length;
+        const todayPresent  = allStudentsToday.filter(s => isPresent(s.attendance)).length;
+        const todayAbsent   = allStudentsToday.filter(s => isAbsent(s.attendance)).length;
         const todayPending  = allStudentsToday.filter(s => !s.attendance).length;
         const isToday = selectedDate === getLocalToday();
 

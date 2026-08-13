@@ -78,7 +78,7 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
     assertC(cls.studentId === studentId, "Clase no corresponde al alumno.");
     assertC(cls.classDate === dateKey, "La clase no es hoy.");
 
-    if (cls.attendanceStatus === "present") return;
+    if (cls.attendanceStatus === "presente" || cls.attendanceStatus === "present") return;
 
     const stRef = db.doc(`artifacts/${appId}/students/${studentId}`);
     const stSnap = await tx.get(stRef);
@@ -92,7 +92,10 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
     }, { merge: true });
 
     tx.set(clsRef, {
-      attendanceStatus: "present",
+      // En español, igual que el resto de la app (panel de Sandra, etc.) —
+      // antes se guardaba "present" en inglés y varias pantallas que
+      // comparan el valor sin normalizar no reconocían el check-in.
+      attendanceStatus: "presente",
       attendanceRefId: attRef.id,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });

@@ -14,6 +14,7 @@ import { formatMoneyAr, parseMoneyAr } from '../utils/money.js';
 import { sumWithSurcharge, LATE_SURCHARGE_RATE } from '../utils/lateSurcharge.js';
 
 import { formatDateToDDMMYYYY, mapClassTypeToSpanish, daysOfWeekFull } from '../utils/classHelpers.js';
+import { isPresent } from '../utils/studentHelpers.js';
 
 import { getLocalToday, toLocalYYYYMMDD, getDayNameFromDate, generateTimeOptions } from '../utils/dateHelpers.js';
 
@@ -656,7 +657,10 @@ const closeAddStudentForm = useCallback(() => {
         );
         unsubs.push(onSnapshot(qClasses, snap => {
             setScheduledClasses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        }, err => console.error('Error scheduledClasses:', err)));
+        }, err => {
+            console.error('Error scheduledClasses:', err);
+            setMessage({ text: `Error al cargar el calendario de clases: ${err.message}`, type: 'error' });
+        }));
 
         // payments: todos los no pagados + pagados de los últimos 12 meses
         // Se cargan en dos listeners y se fusionan para no perder deudas viejas
@@ -679,7 +683,10 @@ const closeAddStudentForm = useCallback(() => {
             // Limpiar docs que ya no son unpaid
             unpaidSet.forEach((_, k) => { if (!snap.docs.find(d => d.id === k)) unpaidSet.delete(k); });
             mergeSets();
-        }, err => console.error('Error payments/unpaid:', err)));
+        }, err => {
+            console.error('Error payments/unpaid:', err);
+            setMessage({ text: `Error al cargar deudas pendientes: ${err.message}`, type: 'error' });
+        }));
 
         const qPaid = query(
             fsCollection(db, `artifacts/${appId}/payments`),
@@ -690,7 +697,10 @@ const closeAddStudentForm = useCallback(() => {
             snap.docs.forEach(d => paidSet.set(d.id, { id: d.id, ...d.data() }));
             paidSet.forEach((_, k) => { if (!snap.docs.find(d => d.id === k)) paidSet.delete(k); });
             mergeSets();
-        }, err => console.error('Error payments/paid:', err)));
+        }, err => {
+            console.error('Error payments/paid:', err);
+            setMessage({ text: `Error al cargar pagos cobrados: ${err.message}`, type: 'error' });
+        }));
 
         // Un solo collectionGroup para todos los comprobantes pendientes — reemplaza N listeners por tarjeta
         try {
@@ -1093,7 +1103,7 @@ const studentsWithStats = React.useMemo(() => {
 
         // Última clase asistida (presente) o pagada
         const attendedClasses = studentClasses
-            .filter(c => c.attendanceStatus === 'presente' && c.classDate)
+            .filter(c => isPresent(c.attendanceStatus) && c.classDate)
             .map(c => c.classDate)
             .sort()
             .reverse();

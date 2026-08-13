@@ -204,26 +204,32 @@ export const StudentDetailsModal = ({
     const sid = localStudent.id;
     const today = new Date().toISOString().split('T')[0];
 
-    // Próxima clase
+    // Próxima clase — necesita el índice compuesto scheduledClasses(studentId, classDate, startTime)
     getDocs(query(
       fsCollection(db, `artifacts/${appId}/scheduledClasses`),
       where('studentId', '==', sid), where('classDate', '>=', today),
       orderBy('classDate'), orderBy('startTime'), limit(1)
-    )).then(s => { if (!s.empty) setNextClass(s.docs[0].data()); }).catch(() => {});
+    )).then(s => { if (!s.empty) setNextClass(s.docs[0].data()); }).catch(e => {
+      console.error('Error cargando próxima clase:', e);
+      showMessage?.('No se pudo cargar la próxima clase de este alumno.', 'error');
+    });
 
     // Últimas 8 clases (asistencias dots)
     getDocs(query(
       fsCollection(db, `artifacts/${appId}/scheduledClasses`),
       where('studentId', '==', sid), where('classDate', '<', today),
       orderBy('classDate', 'desc'), limit(8)
-    )).then(s => setRecentClasses(s.docs.map(d => d.data()).reverse())).catch(() => {});
+    )).then(s => setRecentClasses(s.docs.map(d => d.data()).reverse())).catch(e => console.error('Error cargando últimas clases:', e));
 
-    // Últimos 3 pagos
+    // Últimos 3 pagos — necesita el índice compuesto payments(studentId, createdAt)
     getDocs(query(
       fsCollection(db, `artifacts/${appId}/payments`),
       where('studentId', '==', sid),
       orderBy('createdAt', 'desc'), limit(3)
-    )).then(s => setRecentPayments(s.docs.map(d => ({ id: d.id, ...d.data() })))).catch(() => {});
+    )).then(s => setRecentPayments(s.docs.map(d => ({ id: d.id, ...d.data() })))).catch(e => {
+      console.error('Error cargando últimos pagos:', e);
+      showMessage?.('No se pudieron cargar los últimos pagos de este alumno.', 'error');
+    });
 
     // Abonos flexibles activos (incluye los "por clase" que todavía están pendientes de cobro)
     getDocs(query(
@@ -233,7 +239,7 @@ export const StudentDetailsModal = ({
     )).then(s => {
       setFlexCredits(s.docs.map(d => ({ id: d.id, ...d.data() }))
         .filter(c => (c.clasesTotal || 0) > (c.clasesUsadas || 0) || c.isPaidForPackage === false));
-    }).catch(() => {});
+    }).catch(e => console.error('Error cargando abonos flexibles:', e));
   }, [localStudent?.id, db, appId]);
 
   if (!localStudent) return null;

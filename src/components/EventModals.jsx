@@ -119,6 +119,9 @@ const handleShareOrDownload = async (action, ticket, participantName) => {
     const eventRef = doc(db, `artifacts/${appId}/events/${event.id}`);
     const unsubEvent = onSnapshot(eventRef, (snap) => {
       setParticipants(Array.isArray(snap.data()?.participants) ? snap.data().participants : []);
+    }, (err) => {
+      console.error('Error cargando participantes del evento:', err);
+      showMessage(`No se pudieron cargar los participantes: ${err.message}`, 'error');
     });
     const ticketsCol = fsCollection(db, `artifacts/${appId}/events/${event.id}/tickets`);
     const qy = query(ticketsCol, where("status", "in", ["active", "used"]));
@@ -130,6 +133,9 @@ const handleShareOrDownload = async (action, ticket, participantName) => {
         acc[studentId].push(t);
         return acc;
       }, {}));
+    }, (err) => {
+      console.error('Error cargando entradas del evento:', err);
+      showMessage(`No se pudieron cargar las entradas: ${err.message}`, 'error');
     });
     return () => { unsubEvent(); unsubTickets(); };
   }, [isOpen, db, appId, event?.id]);
@@ -343,6 +349,9 @@ export const ScanTicketsView = ({ isOpen, onClose, db, appId, event, showMessage
     const unsub = onSnapshot(q, (snapshot) => {
       const ticketsData = snapshot.docs.map(doc => doc.data());
       setEventTickets(ticketsData);
+    }, (err) => {
+      console.error('Error cargando entradas para escanear:', err);
+      showMessage?.(`No se pudieron cargar las entradas del evento: ${err.message}`, 'error');
     });
 
     return () => unsub(); // Se desuscribe al cerrar el modal

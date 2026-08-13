@@ -5,6 +5,7 @@ import { IconCalendar, IconCreditCard, IconTrash } from './Icons.jsx';
 import { MoneyInput } from './MoneyInput.jsx';
 import { formatMoneyAr } from '../utils/money.js';
 import { formatDateToDDMMYYYY, mapClassTypeToSpanish } from '../utils/classHelpers.js';
+import { isPresent, isAbsent } from '../utils/studentHelpers.js';
 import { ActionButton } from './ActionButton.jsx';
 import { ClassScreen } from './ClassScreen.jsx';
 
@@ -282,12 +283,12 @@ const handleDeleteEntireMonthlyPackage = async () => {
                             <div className="grid grid-cols-2">
                                 <button onClick={() => handleMarkAttendance(cls.id, 'presente')}
                                     className={`py-4 font-black text-sm flex items-center justify-center gap-2 transition border-r border-gray-100
-                                        ${cls.attendanceStatus === 'presente' ? 'bg-green-500 text-white' : 'bg-white text-green-600 hover:bg-green-50'}`}>
+                                        ${isPresent(cls.attendanceStatus) ? 'bg-green-500 text-white' : 'bg-white text-green-600 hover:bg-green-50'}`}>
                                     ✓ Presente
                                 </button>
                                 <button onClick={() => handleMarkAttendance(cls.id, 'ausente')}
                                     className={`py-4 font-black text-sm flex items-center justify-center gap-2 transition
-                                        ${cls.attendanceStatus === 'ausente' ? 'bg-rose-500 text-white' : 'bg-white text-rose-500 hover:bg-rose-50'}`}>
+                                        ${isAbsent(cls.attendanceStatus) ? 'bg-rose-500 text-white' : 'bg-white text-rose-500 hover:bg-rose-50'}`}>
                                     ✗ Ausente
                                 </button>
                             </div>
