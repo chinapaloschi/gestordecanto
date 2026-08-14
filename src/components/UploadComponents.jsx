@@ -7,6 +7,7 @@ import { formatMoneyAr } from '../utils/money.js';
 import { waitForAuthReady } from '../utils/authHelpers.js';
 import { BANK_INFO, copyToClipboard } from './PublicPortalComponents.jsx';
 import { __uploadReceiptInline__PATCH__ } from '../utils/authHelpers.js';
+import { resizeImageFile } from '../utils/imageResize.js';
 import { Toast } from './Toast.jsx';
 export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, receipts = [] }) {
   const [file, setFile] = React.useState(null);
@@ -195,9 +196,10 @@ export function ProfilePictureUploader({ db, appId, student, setStudent, size = 
   const handleUpload = async (file) => {
     setUploading(true);
     try {
+      const resized = await resizeImageFile(file, { maxDim: 480, quality: 0.85 }).catch(() => file);
       const storagePath = `students/${student.id}/profilePicture.jpg`;
       const storageRef = stRef(storage, storagePath);
-      await uploadBytesResumable(storageRef, file);
+      await uploadBytesResumable(storageRef, resized);
       const downloadURL = await getDownloadURL(storageRef);
 
       const studentDocRef = doc(db, `artifacts/${appId}/students`, student.id);

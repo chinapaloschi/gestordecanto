@@ -53,6 +53,7 @@ import { MassEventsAdminModal } from './MassEvents.jsx';
 // bundle principal que se descarga en cada sesión.
 const BlockDaysModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.BlockDaysModal })));
 const BackupRestoreModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.BackupRestoreModal })));
+const OptimizeStudentPhotosModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.OptimizeStudentPhotosModal })));
 import { AvailableSlotsManager } from './AvailableSlotsManager.jsx';
 import { TrialRequestsPanel } from './TrialRequestsPanel.jsx';
 import { ExercisePacksManager } from './ExercisePacksManager.jsx';
@@ -346,6 +347,7 @@ const { amountsHidden, toggleAmountsHidden } = useAmountsHidden();
     const [selectedStudentForDetails, setSelectedStudentForDetails] = useState(null);
 
     const [showBackupRestoreModal, setShowBackupRestoreModal] = useState(false);
+    const [showOptimizePhotosModal, setShowOptimizePhotosModal] = useState(false);
     const [showMobileMoreMenu, setShowMobileMoreMenu] = useState(false);
     const [showTransposeModal, setShowTransposeModal] = useState(false);
     const [showLegend, setShowLegend] = useState(false);
@@ -1742,6 +1744,10 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
                       <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
                       Backup
                     </button>
+                    <button onClick={() => setShowOptimizePhotosModal(true)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition text-sm font-medium">
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                      Optimizar fotos
+                    </button>
                   </div>
 
                 </nav>
@@ -1886,6 +1892,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
           { label: 'Bloquear', icon: '🚫', action: () => { setShowBlockDaysModal(true); setShowMobileMoreMenu(false); } },
           { label: 'Backup', icon: '💾', action: () => { setShowBackupRestoreModal(true); setShowMobileMoreMenu(false); } },
           { label: 'Masivos', icon: '📢', action: () => { setShowMassEventsModal(true); setShowMobileMoreMenu(false); } },
+          { label: 'Fotos', icon: '🖼️', action: () => { setShowOptimizePhotosModal(true); setShowMobileMoreMenu(false); } },
         ].map(item => (
           <button key={item.label} onClick={item.action}
             className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-50 hover:bg-rose-50 active:bg-rose-100 border border-gray-200 transition">
@@ -2235,6 +2242,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
 
             <React.Suspense fallback={null}>
               <Modal size="xl" isOpen={showBackupRestoreModal} onClose={() => setShowBackupRestoreModal(false)}><BackupRestoreModal db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => setShowBackupRestoreModal(false)} /></Modal>
+              <Modal size="md" isOpen={showOptimizePhotosModal} onClose={() => setShowOptimizePhotosModal(false)}><OptimizeStudentPhotosModal isOpen={showOptimizePhotosModal} db={db} appId={appId} showMessage={showMessage} onClose={() => setShowOptimizePhotosModal(false)} /></Modal>
             </React.Suspense>
 
             <AudioTransposeModal isOpen={showTransposeModal} onClose={() => setShowTransposeModal(false)} />

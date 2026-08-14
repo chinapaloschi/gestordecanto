@@ -5,6 +5,10 @@ import { IconBan, IconTrash, IconHardDrive } from './Icons.jsx';
 import { toLocalYYYYMMDD } from '../utils/dateHelpers.js';
 import { formatDateToDDMMYYYY } from '../utils/classHelpers.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { updateDoc } from 'firebase/firestore';
+import { ref as stRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { storage } from '../firebaseConfig.js';
+import { resizeImageFile } from '../utils/imageResize.js';
 
 const MOTIVOS_RAPIDOS = ['Feriado', 'Viaje', 'Médico', 'Vacaciones', 'Personal', 'Otro'];
 const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -739,3 +743,98 @@ async function generateComposedTicketImage(qrData, eventInfo, logoSrc) {
 }
 
 // ▼ REEMPLAZÁ TU COMPONENTE ManageTicketsModal CON ESTA VERSIÓN FINAL Y COMPLETA ▼
+
+// Las fotos de perfil se subían sin comprimir — cada tarjeta de alumno de
+// 64px terminaba decodificando la foto original entera (varios MB), lo que
+// trababa el scroll con muchos alumnos en pantalla. Las subidas nuevas ya se
+// comprimen solas (ver ProfilePictureUploader); esta herramienta achica de
+// una sola vez las que ya estaban cargadas.
+export const OptimizeStudentPhotosModal = ({ isOpen, onClose, db, appId, showMessage }) => {
+    const [running, setRunning] = useState(false);
+    const [progress, setProgress] = useState(null); // { done, total, optimized, skipped, errors }
+    const [log, setLog] = useState([]);
+
+    if (!isOpen) return null;
+
+    const run = async () => {
+        setRunning(true);
+        setLog([]);
+        try {
+            const snap = await getDocs(fsCollection(db, `artifacts/${appId}/students`));
+            const students = snap.docs
+                .map(d => ({ id: d.id, ...d.data() }))
+                .filter(s => s.photoURL);
+
+            let optimized = 0, skipped = 0, errors = 0;
+            setProgress({ done: 0, total: students.length, optimized, skipped, errors });
+
+            for (let i = 0; i < students.length; i++) {
+                const student = students[i];
+                try {
+                    const res = await fetch(student.photoURL);
+                    const blob = await res.blob();
+                    // Ya es chica (subida nueva, o ya optimizada en una corrida
+                    // anterior) — no hace falta tocarla de nuevo.
+                    if (blob.size <= 200 * 1024) {
+                        skipped++;
+                    } else {
+                        const resizedBlob = await resizeImageFile(blob, { maxDim: 480, quality: 0.85 });
+                        const storageRef = stRef(storage, `students/${student.id}/profilePicture.jpg`);
+                        await uploadBytesResumable(storageRef, resizedBlob);
+                        const newUrl = await getDownloadURL(storageRef);
+                        await updateDoc(doc(db, `artifacts/${appId}/students`, student.id), { photoURL: newUrl });
+                        optimized++;
+                        setLog(prev => [...prev, `✓ ${student.name || student.id}: ${(blob.size / 1024).toFixed(0)}KB → ${(resizedBlob.size / 1024).toFixed(0)}KB`]);
+                    }
+                } catch (e) {
+                    errors++;
+                    setLog(prev => [...prev, `✗ ${student.name || student.id}: ${e.message}`]);
+                }
+                setProgress({ done: i + 1, total: students.length, optimized, skipped, errors });
+            }
+            showMessage(`Listo: ${optimized} fotos optimizadas, ${skipped} ya estaban bien, ${errors} con error.`, errors > 0 ? 'info' : 'success');
+        } catch (e) {
+            showMessage('Error al optimizar fotos: ' + e.message, 'error');
+        } finally {
+            setRunning(false);
+        }
+    };
+
+    return (
+        <div className="p-4 sm:p-6">
+            <ModalHeader iconNode={<IconHardDrive />} title="Optimizar fotos de alumnos"
+                subtitle="Achica las fotos de perfil ya cargadas para que el scroll de la lista no se trabe." />
+            <div className="mt-4 space-y-4">
+                <p className="text-sm text-gray-600">
+                    Recorre a todos los alumnos con foto, y si la foto pesa más de 200KB la achica y la vuelve a subir.
+                    Las que ya están livianas se saltean — es seguro correr esto más de una vez.
+                </p>
+                {progress && (
+                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-sm">
+                        <p className="font-semibold text-gray-800">{progress.done} / {progress.total} alumnos revisados</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {progress.optimized} optimizadas · {progress.skipped} ya estaban bien · {progress.errors} con error
+                        </p>
+                        <div className="w-full h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                            <div className="h-full bg-rose-600 transition-all" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
+                        </div>
+                    </div>
+                )}
+                {log.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto p-2 bg-gray-900 rounded-lg text-[11px] font-mono text-gray-200 space-y-0.5">
+                        {log.map((line, i) => <div key={i}>{line}</div>)}
+                    </div>
+                )}
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2.5 text-sm rounded-xl bg-gray-100 text-gray-600 font-semibold hover:bg-gray-200 transition">
+                        Cerrar
+                    </button>
+                    <button onClick={run} disabled={running}
+                        className="px-4 py-2.5 text-sm rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-700 disabled:opacity-50 transition">
+                        {running ? 'Optimizando…' : 'Optimizar fotos'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
