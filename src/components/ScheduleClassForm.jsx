@@ -1034,6 +1034,21 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
         )
         : [];
 
+    // Un alumno puede tener más de una serie recurrente a la vez (ej. individual
+    // los martes Y grupal los miércoles) — "Todas las futuras" sólo mueve UNA
+    // serie por vez, así que hace falta poder elegir cuál, en vez de quedar
+    // fijo en la que casualmente viene primero en el calendario.
+    const distinctSlots = [];
+    for (const c of availableClassesToReschedule) {
+        const dow = new Date(c.classDate + 'T12:00:00').getDay();
+        const key = `${c.studentType}-${dow}-${c.startTime}`;
+        if (!distinctSlots.some(s => s.key === key)) {
+            distinctSlots.push({ key, studentType: c.studentType, dow, startTime: c.startTime, sampleClassId: c.id });
+        }
+    }
+    const rescheduleReferenceDow = rescheduleReferenceClass ? new Date(rescheduleReferenceClass.classDate + 'T12:00:00').getDay() : null;
+    const dowLabelShort = (dow) => daysOfWeekFull.find(d => parseInt(d.value) === dow)?.label || '';
+
     // ── MODO REPROGRAMAR: diseño completamente nuevo ──────────────────────────
     if (isRescheduling) return (
         <div className="bg-white rounded-xl overflow-hidden">
@@ -1121,6 +1136,25 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                         {/* ── MOVER TODAS ── */}
                         {moveAll && (
                             <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl space-y-3">
+                                {distinctSlots.length > 1 && (
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-orange-600 uppercase tracking-wider mb-1">
+                                            {currentStudent?.name?.split(' ')[0]} tiene {distinctSlots.length} horarios distintos — ¿cuál mover?
+                                        </label>
+                                        <div className="space-y-1">
+                                            {distinctSlots.map(slot => (
+                                                <button key={slot.key} type="button"
+                                                    onClick={() => setSelectedClassToRescheduleId(slot.sampleClassId)}
+                                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold border transition
+                                                        ${rescheduleReferenceDow === slot.dow && rescheduleReferenceClass?.studentType === slot.studentType && rescheduleReferenceClass?.startTime === slot.startTime
+                                                            ? 'bg-orange-500 text-white border-orange-500'
+                                                            : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300'}`}>
+                                                    {mapClassTypeToSpanish(slot.studentType)} · {dowLabelShort(slot.dow)} {slot.startTime}hs
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="flex items-center gap-2">
                                     <span className="text-2xl">📆</span>
                                     <div>
