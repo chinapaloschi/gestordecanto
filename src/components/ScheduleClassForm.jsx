@@ -709,9 +709,22 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                             new Date(c.classDate + 'T12:00:00').getDay() === new Date(rescheduleRef.classDate + 'T12:00:00').getDay()
                           )
                         : [];
+
+                    // Si no se pidió cambio de día y la hora nueva es igual a la
+                    // que ya tenía la serie, el envío no cambiaría nada — antes
+                    // esto se guardaba igual (reescribiendo los mismos valores) y
+                    // mostraba "reprogramado con éxito" sin mover nada en el
+                    // calendario, dando la falsa sensación de que se guardó.
+                    const noRealChange = (!newDayOfWeek || newDayOfWeek === '') && startTime === rescheduleRef?.startTime;
+                    if (noRealChange) {
+                        showLocalMessage(`No elegiste ningún cambio de día u hora para "${mapClassTypeToSpanish(rescheduleRef.studentType)} · ${startTime}hs" — seleccioná un nuevo día o una nueva hora antes de confirmar.`, 'error');
+                        setLoading(false); return;
+                    }
+
                     const batch = writeBatch(db);
                     let count = 0;
                     let skippedOverlap = 0;
+                    let skippedBlocked = 0;
                     const movingIds = classesToMove.map(c => c.id);
                     for (const cls of classesToMove) {
                         let targetDate = cls.classDate;
@@ -722,8 +735,8 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                             orig.setDate(orig.getDate() + diff);
                             targetDate = toLocalYYYYMMDD(orig);
                         }
-                        if (blockedSlots.some(s => s.date === targetDate)) continue;
-                        const dur = parseInt(cls.duration || duration || 60);
+                        if (blockedSlots.some(s => s.date === targetDate)) { skippedBlocked++; continue; }
+                        const dur = parseInt(cls.duration || 60);
                         const endDt = new Date(`${targetDate}T${startTime}:00`);
                         endDt.setMinutes(endDt.getMinutes() + dur);
                         const newEnd = `${String(endDt.getHours()).padStart(2,'0')}:${String(endDt.getMinutes()).padStart(2,'0')}`;
@@ -751,8 +764,18 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                         count++;
                     }
                     await batch.commit();
-                    const skipNote = skippedOverlap > 0 ? ` ${skippedOverlap} se salteó por chocar con otra clase.` : '';
-                    showMessage(`✅ ${count} clase${count !== 1 ? 's' : ''} reprogramada${count !== 1 ? 's' : ''} exitosamente.${skipNote}`, skippedOverlap > 0 ? 'info' : 'success');
+                    const skipParts = [];
+                    if (skippedOverlap > 0) skipParts.push(`${skippedOverlap} por chocar con otra clase`);
+                    if (skippedBlocked > 0) skipParts.push(`${skippedBlocked} por caer en un día bloqueado`);
+                    const skipNote = skipParts.length > 0 ? ` Se salteó ${skipParts.join(' y ')}.` : '';
+                    if (count === 0) {
+                        // Antes esto también mostraba un mensaje de "éxito" con
+                        // 0 clases movidas — parecía haber funcionado sin haber
+                        // cambiado nada en el calendario.
+                        showLocalMessage(`No se movió ninguna clase.${skipNote || ' Revisá el día y la hora elegidos.'}`, 'error');
+                        setLoading(false); return;
+                    }
+                    showMessage(`✅ ${count} clase${count !== 1 ? 's' : ''} reprogramada${count !== 1 ? 's' : ''} exitosamente.${skipNote}`, skipParts.length > 0 ? 'info' : 'success');
                     if (sendWhatsapp) {
                         const fn = (currentStudent.name || '').split(' ')[0];
                         const dayStr = newDayOfWeek ? (daysOfWeekFull.find(d => d.value === newDayOfWeek)?.label || '') : 'el horario habitual';
@@ -1144,7 +1167,14 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                                         <div className="space-y-1">
                                             {distinctSlots.map(slot => (
                                                 <button key={slot.key} type="button"
-                                                    onClick={() => setSelectedClassToRescheduleId(slot.sampleClassId)}
+                                                    onClick={() => {
+                                                        // Si no reseteamos, queda pegado el horario del slot
+                                                        // anterior — se puede enviar "sin cambios" sin darse
+                                                        // cuenta (mismo día/hora que ya tenía esa serie).
+                                                        setSelectedClassToRescheduleId(slot.sampleClassId);
+                                                        setNewDayOfWeek('');
+                                                        setStartTime('');
+                                                    }}
                                                     className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold border transition
                                                         ${rescheduleReferenceDow === slot.dow && rescheduleReferenceClass?.studentType === slot.studentType && rescheduleReferenceClass?.startTime === slot.startTime
                                                             ? 'bg-orange-500 text-white border-orange-500'
