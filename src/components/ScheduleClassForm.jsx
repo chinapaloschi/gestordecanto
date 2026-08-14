@@ -696,11 +696,24 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                         showLocalMessage('Seleccioná la nueva hora.', 'error');
                         setLoading(false); return;
                     }
+                    // Sólo la misma serie recurrente que la clase elegida (mismo
+                    // tipo + mismo día de semana + mismo horario) — antes acá se
+                    // movían TODAS las clases futuras del alumno sin importar el
+                    // tipo, mezclando series distintas (ej. individual de un día
+                    // con coral de otro) en un solo movimiento.
+                    const rescheduleRef = availableClassesToReschedule.find(c => c.id === selectedClassToRescheduleId) || availableClassesToReschedule[0];
+                    const classesToMove = rescheduleRef
+                        ? availableClassesToReschedule.filter(c =>
+                            c.studentType === rescheduleRef.studentType &&
+                            c.startTime === rescheduleRef.startTime &&
+                            new Date(c.classDate + 'T12:00:00').getDay() === new Date(rescheduleRef.classDate + 'T12:00:00').getDay()
+                          )
+                        : [];
                     const batch = writeBatch(db);
                     let count = 0;
                     let skippedOverlap = 0;
-                    const movingIds = availableClassesToReschedule.map(c => c.id);
-                    for (const cls of availableClassesToReschedule) {
+                    const movingIds = classesToMove.map(c => c.id);
+                    for (const cls of classesToMove) {
                         let targetDate = cls.classDate;
                         // Si cambió el día de la semana, calcular la nueva fecha en la misma semana
                         if (newDayOfWeek && newDayOfWeek !== '') {
@@ -1007,6 +1020,20 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
     const selectedRescheduleClass = availableClassesToReschedule.find(c => c.id === selectedClassToRescheduleId);
     const hasWa = (currentStudent?.whatsapp || currentStudent?.contactInfo || '').replace(/\D/g, '').length >= 8;
 
+    // "Todas las futuras" tiene que mover sólo la serie recurrente de la
+    // clase elegida (mismo tipo + mismo día de semana + mismo horario) — antes
+    // juntaba TODAS las clases futuras del alumno sin importar el tipo, así
+    // que un alumno con individual los lunes y coral los miércoles, por
+    // ejemplo, terminaba con las dos series movidas juntas al mismo lugar.
+    const rescheduleReferenceClass = selectedRescheduleClass || availableClassesToReschedule[0] || null;
+    const classesInSameSlot = rescheduleReferenceClass
+        ? availableClassesToReschedule.filter(c =>
+            c.studentType === rescheduleReferenceClass.studentType &&
+            c.startTime === rescheduleReferenceClass.startTime &&
+            new Date(c.classDate + 'T12:00:00').getDay() === new Date(rescheduleReferenceClass.classDate + 'T12:00:00').getDay()
+        )
+        : [];
+
     // ── MODO REPROGRAMAR: diseño completamente nuevo ──────────────────────────
     if (isRescheduling) return (
         <div className="bg-white rounded-xl overflow-hidden">
@@ -1049,7 +1076,7 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                             </button>
                             <button type="button" onClick={() => setMoveAll(true)}
                                 className={`flex-1 py-2.5 text-xs font-bold transition border-l border-gray-200 ${moveAll ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
-                                📆 Todas las futuras ({availableClassesToReschedule.length})
+                                📆 Todas las futuras ({classesInSameSlot.length})
                             </button>
                         </div>
 
@@ -1098,10 +1125,11 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                                     <span className="text-2xl">📆</span>
                                     <div>
                                         <p className="font-bold text-orange-800 text-sm">
-                                            {availableClassesToReschedule.length} clases serán reprogramadas
+                                            {classesInSameSlot.length} clase{classesInSameSlot.length !== 1 ? 's' : ''} ser{classesInSameSlot.length !== 1 ? 'án' : 'á'} reprogramada{classesInSameSlot.length !== 1 ? 's' : ''}
                                         </p>
                                         <p className="text-orange-600 text-xs">
-                                            {availableClassesToReschedule[0]?.classDate && `Desde ${formatDateToDDMMYYYY(availableClassesToReschedule[0].classDate)} en adelante`}
+                                            {rescheduleReferenceClass && `${mapClassTypeToSpanish(rescheduleReferenceClass.studentType)} · ${rescheduleReferenceClass.startTime}hs`}
+                                            {classesInSameSlot[0]?.classDate && ` · Desde ${formatDateToDDMMYYYY(classesInSameSlot[0].classDate)} en adelante`}
                                         </p>
                                     </div>
                                 </div>
@@ -1183,7 +1211,7 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
                                         </svg>
                                         {moveAll
-                                            ? `Reprogramar ${availableClassesToReschedule.length} clases`
+                                            ? `Reprogramar ${classesInSameSlot.length} clase${classesInSameSlot.length !== 1 ? 's' : ''}`
                                             : 'Confirmar cambio de horario'}
                                       </>
                                 }
