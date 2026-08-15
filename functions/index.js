@@ -172,6 +172,56 @@ exports.loginStudent = functions.https.onCall(async (data, context) => {
   return { id: studentDoc.id, ...safeStudentData };
 });
 
+// ---------------- 2b) Registrar comprobante de pago (server-side) ----------------
+// El cliente sigue subiendo el archivo directo a Storage (mismas storage.rules
+// de siempre), pero el documento en Firestore ahora lo crea esta función en vez
+// del cliente: valida que el path pertenezca realmente a ese alumno y usa el
+// tamaño/tipo reales del archivo ya subido en lugar de confiar en lo que
+// declaró el cliente.
+exports.submitReceipt = functions.https.onCall(async (data, context) => {
+  const appId = String(data?.appId || "");
+  const studentId = String(data?.studentId || "");
+  const storagePath = String(data?.storagePath || "");
+  const url = String(data?.url || "");
+  const filename = String(data?.filename || "");
+  assertC(appId.length > 0, "Falta appId.");
+  assertC(studentId.length > 0, "Falta studentId.");
+  assertC(storagePath.length > 0, "Falta el archivo.");
+
+  const expectedPrefix = `artifacts/${appId}/students/${studentId}/receipts/`;
+  assertC(storagePath.startsWith(expectedPrefix), "Ruta de archivo inválida.");
+
+  const db = admin.firestore();
+  const studentSnap = await db.doc(`artifacts/${appId}/students/${studentId}`).get();
+  assertC(studentSnap.exists, "Alumno no encontrado.");
+  assertC(studentSnap.data()?.isArchived !== true, "Alumno no encontrado.");
+
+  const file = admin.storage().bucket().file(storagePath);
+  const [exists] = await file.exists();
+  assertC(exists, "El archivo no se terminó de subir. Probá de nuevo.");
+  const [metadata] = await file.getMetadata();
+  const size = Number(metadata.size) || 0;
+  const contentType = metadata.contentType || "application/octet-stream";
+  assertC(size > 0 && size <= 15 * 1024 * 1024, "El archivo supera el tamaño permitido.");
+  const allowedTypes = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+  assertC(allowedTypes.includes(contentType), "Formato de archivo no permitido.");
+
+  const docRef = db.collection(`artifacts/${appId}/students/${studentId}/receipts`).doc();
+  await docRef.set({
+    studentId,
+    storagePath,
+    url,
+    filename: filename || storagePath.split("/").pop(),
+    size,
+    mime: contentType,
+    contentType,
+    status: "pending",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true, id: docRef.id };
+});
+
 // ---------------- 3) Descarga de YouTube via yt-dlp (cliente tv_embedded) ----------------
 const https_mod = require("https");
 const { spawn }  = require("child_process");

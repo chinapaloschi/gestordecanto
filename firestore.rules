@@ -31,15 +31,11 @@ service cloud.firestore {
     // ===================================================================
 
     // REGLA PARA COMPROBANTES
+    // El alta ahora la hace exclusivamente la función submitReceipt (Admin
+    // SDK, bypassea estas reglas) — valida el path real y lee tamaño/tipo
+    // reales del archivo en vez de confiar en lo que declara el cliente.
     match /artifacts/{appId}/students/{studentId}/receipts/{docId} {
-      allow create: if isPublicAppPath(appId)
-                  && request.auth != null
-                  && request.resource.data.keys().hasOnly([
-                        'studentId', 'storagePath', 'url', 'createdAt', 'size', 'mime',
-                        'status', 'filename', 'contentType'
-                      ])
-                  && request.resource.data.status == 'pending'
-                  && request.resource.data.studentId == studentId;
+      allow create: if false;
       // El alumno necesita ver el estado de sus propios comprobantes ya
       // enviados (pantalla "Pagar mi cuota" del portal público).
       allow read: if isPublicAppPath(appId) || isStaff();

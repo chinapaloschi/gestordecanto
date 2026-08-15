@@ -1,8 +1,8 @@
 ﻿import React, { useState, useRef } from 'react';
-import { serverTimestamp, collection as fsCollection, addDoc as fsAddDoc } from 'firebase/firestore';
 import { ref as stRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { doc, updateDoc } from 'firebase/firestore';
-import { storage, db } from '../firebaseConfig.js';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { storage } from '../firebaseConfig.js';
 import { formatMoneyAr } from '../utils/money.js';
 import { waitForAuthReady } from '../utils/authHelpers.js';
 import { BANK_INFO, copyToClipboard } from './PublicPortalComponents.jsx';
@@ -56,11 +56,8 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, 
     try {
       await waitForAuthReady();
       const { url, path, filename } = await __uploadReceiptInline__PATCH__({ appId, studentId: student.id, file });
-      await fsAddDoc(fsCollection(db, `artifacts/${appId}/students/${student.id}/receipts`), {
-        studentId: student.id, storagePath: path, url,
-        createdAt: serverTimestamp(), size: file.size, mime: file.type,
-        status: "pending", filename, contentType: file.type,
-      });
+      const submitReceipt = httpsCallable(getFunctions(), 'submitReceipt');
+      await submitReceipt({ appId, studentId: student.id, storagePath: path, url, filename });
       notify("¡Comprobante enviado! Sandra lo revisará pronto.");
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";

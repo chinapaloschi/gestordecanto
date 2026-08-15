@@ -1,12 +1,10 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
 import { writeBatch, serverTimestamp, collection as fsCollection, collectionGroup, doc, getDoc, getDocs, deleteDoc, query, orderBy, updateDoc, where , limit , onSnapshot } from 'firebase/firestore';
-import { ref as stRef, uploadBytesResumable, getDownloadURL, listAll, getMetadata } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { storage } from '../firebaseConfig.js';
 import { Modal, ModalHeader } from './Modal.jsx';
 import { IconReceipt, IconTrash } from './Icons.jsx';
 
-import { waitForAuthReady, updateReceiptStatus, markStudentReceiptsAsSeen } from '../utils/authHelpers.js';
+import { updateReceiptStatus, markStudentReceiptsAsSeen } from '../utils/authHelpers.js';
 import { withSurcharge } from '../utils/lateSurcharge.js';
 import { useStudentReceipts } from '../hooks/useStudentReceipts.js';
 export const FileTypeIcon = ({ mime = '', filename = '' }) => {
@@ -594,113 +592,6 @@ const [displayDebt, setDisplayDebt] = React.useState(student?.pendingBalance || 
 // ============================================================
 // POPUP DE EVENTOS PARA ALUMNOS (VERSIÓN CON DISEÑO MEJORADO)
 // ============================================================
-
-export const ReceiptUploadBox = ({ db, appId, student }) => {
-  const [file, setFile] = React.useState(null);
-  const [busy, setBusy] = React.useState(false);
-  const [lastUp, setLastUp] = React.useState([]);
-
-  React.useEffect(() => {
-    if (!db || !appId || !student?.id) return;
-    const col = fsCollection(db, `artifacts/${appId}/students/${student.id}/receipts`);
-    const qy = query(col, orderBy("createdAt","desc"), limit(5));
-    const unsub = onSnapshot(qy, snap => {
-      setLastUp(snap.docs.map(d => ({ id: d.id, ...(d.data()||{}) })));
-    });
-    return () => unsub && unsub();
-  }, [db, appId, student?.id]);
-
-  const onPick = (e) => {
-
-    const f = e.target.files?.[0];
-    if (!f) return setFile(null);
-    const okTypes = ["application/pdf","image/png","image/jpeg","image/webp","image/jpg","image/heic","image/heif"];
-    if (!okTypes.includes(f.type)) { alert("Formato no soportado. Subí PDF o imagen (PNG/JPG/WebP/HEIC)."); e.target.value = ""; return; }
-    if (f.size > 15 * 1024 * 1024) { alert("El archivo supera 15MB. Comprimí o subí un PDF más liviano."); e.target.value = ""; return; }
-    setFile(f);
-  };
-
-  // ✅ Handler corregido
- const doUpload = async () => {
-  try {
-    if (!db || !appId || !student?.id) { alert("Falta contexto de alumno."); return; }
-    if (!file) { alert("Elegí un archivo primero."); return; }
-    setBusy(true);
-
-    await waitForAuthReady();
-
-    const storage = getStorage(undefined, "gs://nuevaclase-135ec.appspot.com");
-    const uuid = crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
-    const ext  = (file.name.split(".").pop() || "bin").toLowerCase();
-    const path = `artifacts/${appId}/students/${student.id}/receipts/${uuid}.${ext}`;
-    const ctype = file.type || "application/octet-stream";
-
-    const sref = stRef(storage, path);
-    // podés usar uploadBytesResumable o uploadBytes; el problema es getDownloadURL, no la subida
-    await uploadBytesResumable(sref, file, { contentType: ctype });
-
-    const col = fsCollection(db, `artifacts/${appId}/students/${student.id}/receipts`);
-    await fsAddDoc(col, {
-      studentId: student.id,
-      // 👇 guardamos path y bucket, NO url
-      path,
-      bucket: "nuevaclase-135ec.appspot.com",
-      filename: file.name,
-      contentType: ctype,
-      size: file.size || 0,
-      status: "pending",
-      createdAt: serverTimestamp(),
-    });
-
-    alert("¡Comprobante enviado! Lo vamos a revisar.");
-    setFile(null);
-  } catch (e) {
-    console.error("[receipt] ERROR", e?.code, e?.message, e);
-    alert(`No se pudo subir el comprobante.\n${e?.code || ""} ${e?.message || ""}`.trim());
-  } finally {
-    setBusy(false);
-  }
-};
-
-
-  return (
-    <div className="rounded-lg sm:rounded-xl border border-gray-200 bg-white p-4 sm:p-6 mt-3">
-      <div className="text-sm sm:text-base font-semibold text-gray-900 mb-2">Enviar comprobante de pago</div>
-      <div className="flex flex-col sm:flex-row items-stretch gap-2">
-        <input type="file" accept=".pdf,image/*" onChange={onPick} className="block w-full text-sm border rounded-lg p-2" />
-        <button
-          type="button"
-          onClick={doUpload}
-          disabled={!file || busy}
-          className="w-full sm:w-auto text-sm font-medium px-3 py-2 rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200 border border-rose-200 disabled:opacity-50"
-        >
-          {busy ? "Enviando..." : "Subir comprobante"}
-        </button>
-      </div>
-
-      {lastUp?.length > 0 && (
-        <div className="mt-3">
-          <div className="text-xs text-gray-600 mb-1">Tus últimos envíos</div>
-          <ul className="text-xs text-gray-800 space-y-1">
-            {lastUp.map(r => (
-  <li key={r.id} className="flex items-center justify-between">
-    <span className="break-all">{r.filename || "archivo"}</span>
-    <span className={"ml-2 px-2 py-0.5 rounded-full border " + (
-      r.status === "approved" ? "bg-green-50 border-green-200 text-green-800"
-      : r.status === "rejected" ? "bg-red-50 border-red-200 text-red-700"
-      : "bg-amber-50 border-amber-200 text-amber-800"
-    )}>
-      {r.status || "pending"}
-    </span>
-  </li>
-))}
-
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-};
 
 
 const getInitialsColor = (name = '') => {
