@@ -1,7 +1,7 @@
 ﻿// PublicLenceriaCatalogo.jsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection as fsCollection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection as fsCollection, onSnapshot, query, orderBy, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 
 // --- Tus componentes y helpers ---
 const formatMoneyAr = (num) => {
@@ -37,40 +37,16 @@ function ImageGalleryModal({ images, onClose }) {
   );
 }
 
-function PersonalPayModal({ isOpen, onClose, item }) {
-  if (!isOpen || !item) return null;
-  const handleCopy = (text) => {
-    navigator.clipboard.writeText(text).then(() => alert("¡Monto copiado!"));
-  };
-  const precioFinal = item.precioTransferencia;
-  return (
-    <div className="fixed inset-0 z-[70] bg-black bg-opacity-70 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm text-center" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-gray-800">Pagá con QR</h3>
-        <p className="text-sm text-gray-600 mt-1">Escaneá con Personal Pay o cualquier billetera virtual.</p>
-        <div className="my-4">
-          <img src={PERSONAL_PAY_QR_URL} alt="Código QR" className="w-48 h-48 mx-auto rounded-lg border-4 border-gray-200" />
-        </div>
-        <div className="bg-gray-50 p-3 rounded-lg border">
-          <p className="text-sm text-gray-600">Tenés que transferir:</p>
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <p className="text-2xl font-bold text-gray-900">$ {formatMoneyAr(precioFinal)}</p>
-            <button onClick={() => handleCopy(precioFinal.toString())} className="px-2 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded hover:bg-gray-300">Copiar</button>
-          </div>
-        </div>
-        <button onClick={onClose} className="mt-6 w-full px-4 py-2 bg-gray-800 text-white font-semibold rounded-lg hover:bg-black">Entendido</button>
-      </div>
-    </div>
-  );
-}
-
 // ▼▼▼ NUEVO COMPONENTE PARA ELEGIR PAGO ▼▼▼
-function PaymentChoiceModal({ isOpen, onClose, item }) {
+function PaymentChoiceModal({ isOpen, onClose, item, talle, db, appId }) {
   const [view, setView] = useState('choice'); // 'choice', 'alias', 'qr'
-  
+  const [reserving, setReserving] = useState(false);
+  const [reserved, setReserved] = useState(false);
+  const [reserveError, setReserveError] = useState('');
+
   useEffect(() => {
-    if (isOpen) { setView('choice'); }
-  }, [isOpen]);
+    if (isOpen) { setView('choice'); setReserved(false); setReserveError(''); }
+  }, [isOpen, item?.id, talle]);
 
   if (!isOpen || !item) return null;
 
@@ -78,14 +54,62 @@ function PaymentChoiceModal({ isOpen, onClose, item }) {
     navigator.clipboard.writeText(text).then(() => alert(`¡${label} copiado!`));
   };
 
+  // Recién cuando el comprador elige un método de pago se reserva el stock
+  // y se registra el pedido en lenceriaVentas (status "pendiente") para
+  // que Sandra lo confirme o cancele desde el panel de admin.
+  const reservarVenta = async (metodoPago) => {
+    const stockRef = doc(db, `artifacts/${appId}/lenceriaStock`, item.id);
+    const ventaRef = doc(fsCollection(db, `artifacts/${appId}/lenceriaVentas`));
+    await runTransaction(db, async (tx) => {
+      const stockSnap = await tx.get(stockRef);
+      if (!stockSnap.exists()) throw new Error('Este producto ya no está disponible.');
+      const stockPorTalle = stockSnap.data().stockPorTalle || {};
+      const actual = stockPorTalle[talle] || 0;
+      if (actual <= 0) throw new Error(`Se agotó el talle ${talle}. Elegí otro talle.`);
+      tx.update(stockRef, { [`stockPorTalle.${talle}`]: actual - 1 });
+      tx.set(ventaRef, {
+        itemId: item.id,
+        nombre: item.nombre,
+        color: item.color,
+        talle,
+        cantidad: 1,
+        metodoPago,
+        precioUnitario: item.precioTransferencia,
+        totalVenta: item.precioTransferencia,
+        buyerName: 'Pedido online',
+        origen: 'catalogo_publico',
+        status: 'pendiente',
+        fechaVenta: serverTimestamp(),
+      });
+    });
+  };
+
+  const handleChoosePayment = async (metodoPago, nextView) => {
+    if (reserving) return;
+    if (reserved) { setView(nextView); return; }
+    setReserving(true);
+    setReserveError('');
+    try {
+      await reservarVenta(metodoPago);
+      setReserved(true);
+      setView(nextView);
+    } catch (err) {
+      setReserveError(err.message || 'No se pudo registrar el pedido. Probá de nuevo.');
+    } finally {
+      setReserving(false);
+    }
+  };
+
   const renderChoiceView = () => (
     <>
       <h3 className="text-lg font-bold text-gray-800">Elige tu método de pago</h3>
-      <p className="text-sm text-gray-600 mt-1">¿Cómo preferís abonar tu conjunto?</p>
+      <p className="text-sm text-gray-600 mt-1">¿Cómo preferís abonar tu conjunto? (Talle {talle})</p>
+      {reserveError && <p className="mt-2 text-sm text-red-600 font-semibold">{reserveError}</p>}
       <div className="mt-6 space-y-3">
-        <button 
-          onClick={() => setView('qr')}
-          className="w-full flex items-center gap-3 p-4 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
+        <button
+          onClick={() => handleChoosePayment('qr', 'qr')}
+          disabled={reserving}
+          className="w-full flex items-center gap-3 p-4 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition disabled:opacity-50"
         >
           <img src="https://img.icons8.com/color/48/mercado-pago.png" alt="QR" className="w-8 h-8"/>
           <div>
@@ -93,9 +117,10 @@ function PaymentChoiceModal({ isOpen, onClose, item }) {
             <p className="text-xs text-left text-gray-500">Usa Mercado Pago o cualquier billetera virtual.</p>
           </div>
         </button>
-        <button 
-          onClick={() => setView('alias')}
-          className="w-full flex items-center gap-3 p-4 border-2 border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition"
+        <button
+          onClick={() => handleChoosePayment('transferencia', 'alias')}
+          disabled={reserving}
+          className="w-full flex items-center gap-3 p-4 border-2 border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition disabled:opacity-50"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
           <div>
@@ -103,6 +128,7 @@ function PaymentChoiceModal({ isOpen, onClose, item }) {
             <p className="text-xs text-left text-gray-500">Desde Personal Pay o tu home banking.</p>
           </div>
         </button>
+        {reserving && <p className="text-xs text-gray-400">Registrando tu pedido...</p>}
       </div>
     </>
   );
@@ -125,16 +151,36 @@ function PaymentChoiceModal({ isOpen, onClose, item }) {
             <button onClick={() => handleCopy(item.precioTransferencia.toString(), 'Monto')} className="px-2 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded hover:bg-gray-300">Copiar</button>
           </div>
       </div>
+      {reserved && <p className="mt-3 text-xs text-emerald-600 font-semibold">✓ Tu pedido (talle {talle}) quedó registrado. Te confirmamos apenas se acredite el pago.</p>}
     </>
   );
-  
+
+  const renderQrView = () => (
+    <>
+      <button onClick={() => setView('choice')} className="text-sm text-blue-600 hover:underline mb-2">‹ Volver a las opciones</button>
+      <h3 className="text-lg font-bold text-gray-800">Pagá con QR</h3>
+      <p className="text-sm text-gray-600 mt-1">Escaneá con Personal Pay o cualquier billetera virtual.</p>
+      <div className="my-4">
+        <img src={PERSONAL_PAY_QR_URL} alt="Código QR" className="w-48 h-48 mx-auto rounded-lg border-4 border-gray-200" />
+      </div>
+      <div className="bg-gray-50 p-3 rounded-lg border">
+        <p className="text-sm text-gray-600">Tenés que transferir:</p>
+        <div className="flex items-center justify-center gap-2 mt-1">
+          <p className="text-2xl font-bold text-gray-900">$ {formatMoneyAr(item.precioTransferencia)}</p>
+          <button onClick={() => handleCopy(item.precioTransferencia.toString(), 'Monto')} className="px-2 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded hover:bg-gray-300">Copiar</button>
+        </div>
+      </div>
+      {reserved && <p className="mt-3 text-xs text-emerald-600 font-semibold">✓ Tu pedido (talle {talle}) quedó registrado. Te confirmamos apenas se acredite el pago.</p>}
+    </>
+  );
+
   return (
     <div className="fixed inset-0 z-[70] bg-black bg-opacity-70 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm text-center" onClick={(e) => e.stopPropagation()}>
         {view === 'choice' && renderChoiceView()}
         {view === 'alias' && renderAliasView()}
-        {view === 'qr' && <PersonalPayModal isOpen={true} onClose={() => setView('choice')} item={item} />}
-        
+        {view === 'qr' && renderQrView()}
+
         <button onClick={onClose} className="mt-6 w-full px-4 py-2 bg-gray-800 text-white font-semibold rounded-lg hover:bg-black">
           {view === 'choice' ? 'Cerrar' : 'Entendido'}
         </button>
@@ -147,15 +193,19 @@ function PaymentChoiceModal({ isOpen, onClose, item }) {
 
 function ProductDetailModal({ item, onClose, onBuyClick, onImageClick }) {
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [talleSeleccionado, setTalleSeleccionado] = useState('');
 
     useEffect(() => {
         setCurrentIndex(0);
+        const primerTalleConStock = Object.keys(item?.stockPorTalle || {}).find(t => (item.stockPorTalle[t] || 0) > 0);
+        setTalleSeleccionado(primerTalleConStock || '');
     }, [item]);
-    
+
     if (!item) return null;
 
     const { nombre, color, stockPorTalle, precioEfectivo, precioTransferencia, photoURLs, photoURL } = item;
-    const isOutOfStock = Object.values(stockPorTalle || {}).reduce((sum, current) => sum + (current || 0), 0) === 0;
+    const tallesConStock = Object.entries(stockPorTalle || {}).filter(([, stock]) => stock > 0);
+    const isOutOfStock = tallesConStock.length === 0;
     const hasMultipleImages = photoURLs && photoURLs.length > 1;
     const currentImage = hasMultipleImages ? photoURLs[currentIndex] : (photoURLs?.[0] || photoURL);
 
@@ -165,7 +215,6 @@ function ProductDetailModal({ item, onClose, onBuyClick, onImageClick }) {
     let displayName = nombre;
     const nameParts = nombre.split(' ');
     if (nameParts.length > 1 && /^[A-Z0-9]+$/i.test(nameParts[0])) { displayName = nameParts.slice(1).join(' '); }
-    const availableSizes = Object.entries(stockPorTalle || {}).filter(([talle, stock]) => stock > 0).map(([talle]) => talle).join(' / ');
     const whatsappLink = `https://wa.me/5492216141254?text=${encodeURIComponent(`¡Hola! Me interesa el conjunto *${displayName}*. ¿Sigue disponible?`)}`;
 
     const productUrl = window.location.href;
@@ -205,7 +254,22 @@ function ProductDetailModal({ item, onClose, onBuyClick, onImageClick }) {
     <div><p className="text-xs font-semibold text-gray-500">Efectivo</p><p className="text-xl font-bold text-green-700">${formatMoneyAr(precioEfectivo)}</p></div>
     <div><p className="text-xs font-semibold text-gray-500">Transferencia / QR</p><p className="text-xl font-bold text-blue-700">${formatMoneyAr(precioTransferencia)}</p></div>
 </div>
-                <div className="border-t pt-2 mt-2"><h4 className="text-xs uppercase font-bold text-gray-500 mb-1">Talles Disponibles</h4><p className="text-base font-bold text-gray-800 tracking-wider">{availableSizes || "Consultar"}</p></div>
+                <div className="border-t pt-2 mt-2">
+                  <h4 className="text-xs uppercase font-bold text-gray-500 mb-1">Talle</h4>
+                  {tallesConStock.length > 0 ? (
+                    <select
+                      value={talleSeleccionado}
+                      onChange={(e) => setTalleSeleccionado(e.target.value)}
+                      className="w-full max-w-[160px] mx-auto p-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-800 bg-white"
+                    >
+                      {tallesConStock.map(([talle, stock]) => (
+                        <option key={talle} value={talle}>{talle} (Stock: {stock})</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-base font-bold text-gray-800 tracking-wider">Consultar</p>
+                  )}
+                </div>
               </div>
 
               <div className="flex-shrink-0">
@@ -237,7 +301,7 @@ function ProductDetailModal({ item, onClose, onBuyClick, onImageClick }) {
                 <div className="mt-4 px-4">
                   {isOutOfStock ? ( <div className="block w-full bg-gray-300 text-gray-500 text-center py-2 rounded-lg text-sm font-semibold cursor-not-allowed">Agotado</div>) : (
                       <div className="w-full grid grid-cols-2 gap-3">
-                        <button onClick={() => onBuyClick(item)} className="w-full bg-blue-500 text-white text-center py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">Comprar</button>
+                        <button onClick={() => onBuyClick(item, talleSeleccionado)} disabled={!talleSeleccionado} className="w-full bg-blue-500 text-white text-center py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Comprar</button>
                         <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="w-full bg-green-500 text-white text-center py-2 rounded-lg text-sm font-semibold hover:bg-green-600 transition-colors flex items-center justify-center">Consultar</a>
                       </div>
                   )}
@@ -266,6 +330,7 @@ export default function PublicLenceriaCatalogo({ db, appId }) {
   const [galleryImages, setGalleryImages] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [itemForPaymentChoice, setItemForPaymentChoice] = useState(null);
+  const [talleForPaymentChoice, setTalleForPaymentChoice] = useState('');
 
   const [talleFilter, setTalleFilter] = useState('');
   const [colorFilter, setColorFilter] = useState('');
@@ -353,9 +418,10 @@ export default function PublicLenceriaCatalogo({ db, appId }) {
       <ProductDetailModal
         item={selectedItem}
         onClose={() => setSelectedItem(null)}
-        onBuyClick={(item) => {
+        onBuyClick={(item, talle) => {
           setSelectedItem(null);
           setItemForPaymentChoice(item);
+          setTalleForPaymentChoice(talle);
         }}
         onImageClick={setGalleryImages}
       />
@@ -364,6 +430,9 @@ export default function PublicLenceriaCatalogo({ db, appId }) {
         isOpen={!!itemForPaymentChoice}
         onClose={() => setItemForPaymentChoice(null)}
         item={itemForPaymentChoice}
+        talle={talleForPaymentChoice}
+        db={db}
+        appId={appId}
       />
     </>
   );

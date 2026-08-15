@@ -328,17 +328,24 @@ export function LenceriaStockModal({ isOpen, onClose, db, appId, showMessage, is
     });
   }, [salesHistory, salesDateFrom, salesDateTo]);
 
+  // Excluye pedidos pendientes/cancelados del catálogo público: todavía no
+  // son plata confirmada, así que no deben inflar los totales ni el ranking.
+  const confirmedSalesHistory = useMemo(
+    () => filteredSalesHistory.filter(v => v.status !== 'pendiente' && v.status !== 'cancelada'),
+    [filteredSalesHistory]
+  );
+
   const salesSummary = useMemo(() => {
-    const totalRevenue = filteredSalesHistory.reduce((acc, v) => acc + (Number(v.totalVenta) || 0), 0);
-    const totalUnits = filteredSalesHistory.reduce((acc, v) => acc + (Number(v.cantidad) || 0), 0);
-    const cashRevenue = filteredSalesHistory.filter(v => v.metodoPago === 'efectivo').reduce((acc, v) => acc + (Number(v.totalVenta) || 0), 0);
-    const transferRevenue = filteredSalesHistory.filter(v => v.metodoPago === 'transferencia').reduce((acc, v) => acc + (Number(v.totalVenta) || 0), 0);
-    return { totalRevenue, totalUnits, cashRevenue, transferRevenue, count: filteredSalesHistory.length };
-  }, [filteredSalesHistory]);
+    const totalRevenue = confirmedSalesHistory.reduce((acc, v) => acc + (Number(v.totalVenta) || 0), 0);
+    const totalUnits = confirmedSalesHistory.reduce((acc, v) => acc + (Number(v.cantidad) || 0), 0);
+    const cashRevenue = confirmedSalesHistory.filter(v => v.metodoPago === 'efectivo').reduce((acc, v) => acc + (Number(v.totalVenta) || 0), 0);
+    const transferRevenue = confirmedSalesHistory.filter(v => v.metodoPago === 'transferencia').reduce((acc, v) => acc + (Number(v.totalVenta) || 0), 0);
+    return { totalRevenue, totalUnits, cashRevenue, transferRevenue, count: confirmedSalesHistory.length };
+  }, [confirmedSalesHistory]);
 
   const topSellers = useMemo(() => {
     const map = new Map();
-    filteredSalesHistory.forEach(v => {
+    confirmedSalesHistory.forEach(v => {
       const key = `${v.nombre}__${v.color}`;
       const entry = map.get(key) || { nombre: v.nombre, color: v.color, unidades: 0, total: 0 };
       entry.unidades += Number(v.cantidad) || 0;
@@ -346,16 +353,16 @@ export function LenceriaStockModal({ isOpen, onClose, db, appId, showMessage, is
       map.set(key, entry);
     });
     return Array.from(map.values()).sort((a, b) => b.unidades - a.unidades).slice(0, 5);
-  }, [filteredSalesHistory]);
+  }, [confirmedSalesHistory]);
 
   const handleExportSalesCSV = () => {
     if (!filteredSalesHistory.length) { showMessage('No hay ventas para exportar.', 'info'); return; }
     setExportingSales(true);
     try {
-      const lines = [toCsvLine(["Fecha", "Producto", "Color", "Talle", "Cantidad", "Comprador", "Medio de pago", "Total"])];
+      const lines = [toCsvLine(["Fecha", "Producto", "Color", "Talle", "Cantidad", "Comprador", "Medio de pago", "Total", "Estado"])];
       filteredSalesHistory.forEach(v => {
         const fecha = v.fechaVenta?.toDate ? v.fechaVenta.toDate().toLocaleString('es-AR') : new Date(v.fechaVenta).toLocaleString('es-AR');
-        lines.push(toCsvLine([fecha, v.nombre, v.color, v.talle, v.cantidad, v.buyerName, v.metodoPago, v.totalVenta]));
+        lines.push(toCsvLine([fecha, v.nombre, v.color, v.talle, v.cantidad, v.buyerName, v.metodoPago, v.totalVenta, v.status || 'confirmada']));
       });
       downloadBlobAs(`ventas_lenceria_${new Date().toISOString().slice(0, 10)}.csv`, new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }));
     } finally {
@@ -503,6 +510,33 @@ export function LenceriaStockModal({ isOpen, onClose, db, appId, showMessage, is
     } catch (error) {
       console.error("Error al eliminar la venta:", error);
       showMessage(`No se pudo eliminar la venta: ${error.message}`, 'error');
+    }
+  };
+
+  // Pedidos que el comprador registró solo desde el catálogo público (stock ya
+  // reservado) — acá Sandra los confirma tras ver el pago acreditado, o los
+  // cancela devolviendo el stock reservado.
+  const handleConfirmarVentaPendiente = async (venta) => {
+    try {
+      await updateDoc(doc(db, `artifacts/${appId}/lenceriaVentas`, venta.id), {
+        status: 'confirmada', confirmedAt: serverTimestamp(),
+      });
+      showMessage('Venta confirmada.', 'success');
+    } catch (error) {
+      showMessage(`No se pudo confirmar la venta: ${error.message}`, 'error');
+    }
+  };
+
+  const handleCancelarVentaPendiente = async (venta) => {
+    if (!window.confirm(`¿Cancelar este pedido online de "${venta.nombre}" (talle ${venta.talle})? Se devolverá ${venta.cantidad}u al stock.`)) return;
+    try {
+      await adjustStock(venta.itemId, venta.talle, venta.cantidad, { silent: true });
+      await updateDoc(doc(db, `artifacts/${appId}/lenceriaVentas`, venta.id), {
+        status: 'cancelada', cancelledAt: serverTimestamp(),
+      });
+      showMessage('Pedido cancelado y stock devuelto.', 'success');
+    } catch (error) {
+      showMessage(`No se pudo cancelar el pedido: ${error.message}`, 'error');
     }
   };
 
@@ -892,7 +926,7 @@ export function LenceriaStockModal({ isOpen, onClose, db, appId, showMessage, is
                     ) : (
                     <div className="space-y-3">
                       {filteredSalesHistory.map(venta => (
-                        <div key={venta.id} className="p-3 bg-white rounded-2xl shadow-sm border border-gray-100">
+                        <div key={venta.id} className={`p-3 bg-white rounded-2xl shadow-sm border ${venta.status === 'pendiente' ? 'border-amber-300 bg-amber-50/40' : venta.status === 'cancelada' ? 'border-gray-100 opacity-60' : 'border-gray-100'}`}>
                           <div className="flex justify-between items-start gap-2">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 to-rose-400 text-white text-xs font-black flex items-center justify-center flex-shrink-0">
@@ -903,12 +937,21 @@ export function LenceriaStockModal({ isOpen, onClose, db, appId, showMessage, is
                                 <p className="text-sm text-gray-600">Vendido a <strong>{venta.buyerName}</strong></p>
                                 <p className="text-sm text-gray-500">Talle: <strong>{venta.talle}</strong> · Cantidad: <strong>{venta.cantidad}</strong></p>
                                 <p className="text-xs text-gray-400 mt-1">{venta.fechaVenta?.toDate ? venta.fechaVenta.toDate().toLocaleString('es-AR') : new Date(venta.fechaVenta).toLocaleString('es-AR')}</p>
+                                {venta.status === 'pendiente' && <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Pendiente de confirmar</span>}
+                                {venta.status === 'cancelada' && <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Cancelada</span>}
                               </div>
                             </div>
                             <div className="flex flex-col items-end flex-shrink-0">
                               <p className="text-lg font-black text-gray-900">${formatMoneyAr(venta.totalVenta)}</p>
                               <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full mb-2 ${venta.metodoPago === 'efectivo' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>{venta.metodoPago}</span>
-                              <button onClick={() => handleDeleteSale(venta)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Eliminar venta y devolver stock"><IconTrash /></button>
+                              {venta.status === 'pendiente' ? (
+                                <div className="flex gap-1.5">
+                                  <button onClick={() => handleConfirmarVentaPendiente(venta)} className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold hover:bg-emerald-200 transition-colors">Confirmar</button>
+                                  <button onClick={() => handleCancelarVentaPendiente(venta)} className="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-colors">Cancelar</button>
+                                </div>
+                              ) : (
+                                <button onClick={() => handleDeleteSale(venta)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Eliminar venta y devolver stock"><IconTrash /></button>
+                              )}
                             </div>
                           </div>
                         </div>
