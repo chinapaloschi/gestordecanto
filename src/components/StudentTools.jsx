@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { collection as fsCollection, addDoc, doc, updateDoc, serverTimestamp, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { ref as stRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { collection as fsCollection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { ref as stRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { storage } from '../firebaseConfig.js';
 import { detectPitch, freqToNoteInfo, NOTE_ES } from '../utils/pitchDetector.js';
 import { ChromaticTuner } from './PitchPanel.jsx';
@@ -685,6 +685,21 @@ function VoiceRecorder({ db, appId, student }) {
 
   const fmt = (secs) => `${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}`;
 
+  // Antes no había ninguna forma de borrar un envío ya hecho — quedaban
+  // acumulados para siempre, tanto acá como en el almacenamiento.
+  const [deletingSentId, setDeletingSentId] = useState(null);
+  const deleteSentNote = async (note) => {
+    if (!window.confirm('¿Borrar esta grabación enviada?')) return;
+    setDeletingSentId(note.id);
+    try {
+      if (note.storagePath) {
+        try { await deleteObject(stRef(storage, note.storagePath)); } catch {}
+      }
+      await deleteDoc(doc(db, `artifacts/${appId}/students/${student.id}/voiceNotes`, note.id));
+    } catch (e) { notify('No se pudo borrar: ' + e.message, 'error'); }
+    finally { setDeletingSentId(null); }
+  };
+
   return (
     <div className="space-y-4">
       <Toast open={!!toast} kind={toast?.kind}>{toast?.text}</Toast>
@@ -744,6 +759,10 @@ function VoiceRecorder({ db, appId, student }) {
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${heard ? 'text-green-700 bg-green-100' : 'text-amber-700 bg-amber-100'}`}>
                   {heard ? 'Escuchada por Sandra' : 'Esperando escucha'}
                 </span>
+                <button onClick={() => deleteSentNote(n)} disabled={deletingSentId === n.id}
+                  className="flex-shrink-0 text-gray-300 hover:text-red-500 disabled:opacity-50 transition" title="Borrar">
+                  {deletingSentId === n.id ? '…' : '✕'}
+                </button>
               </div>
             );
           })}

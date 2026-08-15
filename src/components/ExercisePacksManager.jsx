@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { ref as stRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref as stRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { storage } from '../firebaseConfig.js';
 import { formatMoneyAr, parseMoneyAr } from '../utils/money.js';
 
@@ -70,14 +70,18 @@ export function ExercisePacksManager({ db, appId, onClose }) {
   const toggleActive = (pack) =>
     updateDoc(doc(db, `artifacts/${appId}/exercisePacks`, pack.id), { isActive: !pack.isActive });
 
-  const removeFile = (pack, file) => {
-    if (!window.confirm(`¿Quitar "${file.name}" del pack?`)) return;
-    updateDoc(doc(db, `artifacts/${appId}/exercisePacks`, pack.id), { files: arrayRemove(file) });
+  // Antes esto sólo quitaba la referencia del pack — el archivo seguía
+  // ocupando espacio en el almacenamiento para siempre.
+  const removeFile = async (pack, file) => {
+    if (!window.confirm(`¿Quitar "${file.name}" del pack? Se borra también del almacenamiento.`)) return;
+    await updateDoc(doc(db, `artifacts/${appId}/exercisePacks`, pack.id), { files: arrayRemove(file) });
+    if (file.path) { try { await deleteObject(stRef(storage, file.path)); } catch {} }
   };
 
-  const handleDelete = (pack) => {
-    if (!window.confirm(`¿Eliminar el pack "${pack.title}"? Los archivos ya subidos no se borran del almacenamiento, pero el pack deja de mostrarse.`)) return;
-    deleteDoc(doc(db, `artifacts/${appId}/exercisePacks`, pack.id));
+  const handleDelete = async (pack) => {
+    if (!window.confirm(`¿Eliminar el pack "${pack.title}" y sus ${pack.files?.length || 0} archivo(s)? No se puede deshacer.`)) return;
+    await deleteDoc(doc(db, `artifacts/${appId}/exercisePacks`, pack.id));
+    await Promise.allSettled((pack.files || []).map(f => f.path ? deleteObject(stRef(storage, f.path)) : Promise.resolve()));
   };
 
   return (

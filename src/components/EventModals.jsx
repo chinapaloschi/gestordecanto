@@ -1,7 +1,7 @@
 ﻿const playSound = (src) => { try { new Audio(src).play().catch(()=>{}); } catch {} };
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { collection as fsCollection, doc, getDoc, getDocs, updateDoc, deleteDoc, query, where, onSnapshot, serverTimestamp, runTransaction, addDoc as fsAddDoc , limit } from 'firebase/firestore';
+import { collection as fsCollection, doc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, runTransaction, addDoc as fsAddDoc , limit } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { v4 as uuidv4 } from 'uuid';
 import { Modal, ModalHeader } from './Modal.jsx';
@@ -10,6 +10,7 @@ import { IconTicket, IconCalendar, IconPlusCircle, IconDownload, IconShare, Icon
 import { formatMoneyAr } from '../utils/money.js';
 import { formatDateToDDMMYYYY } from '../utils/classHelpers.js';
 import { ROUTES } from '../constants.js';
+import { dataUrlToFile, generateQrWithLogo, generateComposedTicketImage } from '../utils/ticketQr.js';
 
 const toCsvLine = (arr) => arr.map(v => {
   const s = String(v ?? "").replace(/"/g, '""');
@@ -182,7 +183,6 @@ const adjustTicketCount = async (participant, amount) => {
                 }
                 
                 const newTicketNumber = lastIssued + 1;
-                alert(`Creando entrada N° ${newTicketNumber}`);
                 const ticketRef = doc(fsCollection(db, `artifacts/${appId}/events/${event.id}/tickets`));
                 
                 const ticketData = {

@@ -72,7 +72,7 @@ export const CertificateModal = ({ isOpen, onClose, studentData, modality, year,
           <div id="certificate-content" className="p-8 border-4 border-gray-300 bg-white rounded-lg sm:rounded-xl">
             <div className="text-center">
               <img src="/nuevologo.gif" alt="Logo Estudio de Canto" className="h-40 w-auto object-contain mx-auto mb-4" />
-              <h1 className="text-3xl sm:text-4xl font-bold text-gray-800">ESTUDIO DE CANTO SANDRA PALOSCH</h1>
+              <h1 className="text-3xl sm:text-4xl font-bold text-gray-800">ESTUDIO DE CANTO SANDRA PALOSCHI</h1>
               <p className="text-sm sm:text-base sm:text-sm text-gray-600 mt-4">Certificado de Finalización</p>
             </div>
             <div className="mt-12 text-center text-gray-700">

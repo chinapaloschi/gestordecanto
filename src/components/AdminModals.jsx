@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { collection as fsCollection, doc, getDocs, setDoc, addDoc as fsAddDoc, deleteDoc, query, where, orderBy, writeBatch } from 'firebase/firestore';
+import { collection as fsCollection, collectionGroup, doc, getDocs, setDoc, addDoc as fsAddDoc, deleteDoc, query, where, orderBy, writeBatch } from 'firebase/firestore';
 import { ModalHeader } from './Modal.jsx';
 import { IconBan, IconTrash, IconHardDrive } from './Icons.jsx';
 import { toLocalYYYYMMDD } from '../utils/dateHelpers.js';
@@ -348,10 +348,54 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
 
 // --- BackupRestoreModal Component ---
 // --- BackupRestoreModal Component ---
+// Antes el backup sólo cubría estas 8 colecciones — faltaba casi todo lo
+// demás que la app realmente usa hoy (más de 20 colecciones en total),
+// incluida Lencería (plata real de otro negocio) y el tarifario de precios.
+const BACKUP_TOP_LEVEL_COLLECTIONS = [
+    'students', 'scheduledClasses', 'payments', 'extraIncomes', 'expenses',
+    'expenseCategories', 'blockedSlots', 'events',
+    'trialRequests', 'adminTokens', 'reminderLog', 'availableSlots',
+    'exercisePacks', 'lenceriaStock', 'lenceriaVentas', 'massEvents',
+    'publicMessages', 'settings',
+];
+
+// Subcolecciones reales que viven anidadas bajo un documento padre (no se
+// pueden exportar con un simple getDocs de la raíz). El índice de PIN de
+// login del portal (pinIndex/{pin}/entries) queda afuera a propósito: es
+// puramente derivado de `students`, así que después de restaurar alcanza
+// con el botón "Reconstruir índice de PINs" en vez de cargar con esto.
+const BACKUP_SUBCOLLECTIONS = ['repertoire', 'receipts', 'voiceNotes', 'tickets'];
+
+function backupReviveDates(obj) {
+    Object.keys(obj).forEach(key => {
+        const value = obj[key];
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value)) {
+            obj[key] = new Date(value);
+        } else if (value && typeof value === 'object' && value.hasOwnProperty('seconds') && value.hasOwnProperty('nanoseconds')) {
+            obj[key] = new Date(value.seconds * 1000 + value.nanoseconds / 1000000);
+        }
+    });
+    return obj;
+}
+
 export const BackupRestoreModal = ({ isOpen, onClose, db, userId, appId, showMessage }) => {
     const [loading, setLoading] = useState(false);
     const [confirmImport, setConfirmImport] = useState(false);
     const [fileToImport, setFileToImport] = useState(null);
+    const [reindexing, setReindexing] = useState(false);
+
+    const handleReindexPins = async () => {
+        setReindexing(true);
+        try {
+            const fn = httpsCallable(getFunctions(), 'reindexPins');
+            await fn({ appId });
+            showMessage('Índice de PINs reconstruido — el login del portal ya debería andar para todos.', 'success');
+        } catch (e) {
+            showMessage(`Error al reconstruir el índice de PINs: ${e.message}`, 'error');
+        } finally {
+            setReindexing(false);
+        }
+    };
 
     const handleExport = async () => {
         if (!userId) {
@@ -361,11 +405,19 @@ export const BackupRestoreModal = ({ isOpen, onClose, db, userId, appId, showMes
         setLoading(true);
         try {
             const data = {};
-            const collectionsToExport = ['students', 'scheduledClasses', 'payments', 'extraIncomes', 'expenses', 'expenseCategories', 'blockedSlots', 'events'];
 
-            for (const collectionName of collectionsToExport) {
+            for (const collectionName of BACKUP_TOP_LEVEL_COLLECTIONS) {
                 const querySnapshot = await getDocs(fsCollection(db, `artifacts/${appId}/${collectionName}`));
                 data[collectionName] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            }
+            for (const subName of BACKUP_SUBCOLLECTIONS) {
+                const snap = await getDocs(collectionGroup(db, subName));
+                // Un collectionGroup trae todo lo que se llame igual en toda
+                // la base — filtramos por el prefijo del path para quedarnos
+                // sólo con lo de esta app.
+                data[`_sub_${subName}`] = snap.docs
+                    .filter(d => d.ref.path.startsWith(`artifacts/${appId}/`))
+                    .map(d => ({ path: d.ref.path, ...d.data() }));
             }
 
             const jsonString = JSON.stringify(data, (key, value) => {
@@ -422,34 +474,52 @@ export const BackupRestoreModal = ({ isOpen, onClose, db, userId, appId, showMes
         reader.onload = async (event) => {
             try {
                 const importedData = JSON.parse(event.target.result);
-                const collectionsToImport = ['students', 'scheduledClasses', 'payments', 'extraIncomes', 'expenses', 'expenseCategories', 'blockedSlots', 'events'];
-                
+
                 // Firestore allows up to 500 operations in a single batch. We'll be conservative.
                 const batchOperations = [];
-                
-                // 1. Prepare deletions
-                for (const collectionName of collectionsToImport) {
+
+                // 1. Prepare deletions — sólo para colecciones que el archivo
+                // realmente trae. Antes esto borraba TODAS las colecciones de
+                // la lista sin importar si el backup las incluía o no — un
+                // backup viejo/parcial (por ejemplo de antes de que existiera
+                // "eventos") borraba esa colección entera sin nada para
+                // reemplazarla.
+                for (const collectionName of BACKUP_TOP_LEVEL_COLLECTIONS) {
+                    if (!Array.isArray(importedData[collectionName])) continue;
                     const querySnapshot = await getDocs(fsCollection(db, `artifacts/${appId}/${collectionName}`));
                     querySnapshot.forEach((docRef) => {
                         batchOperations.push({ type: 'delete', ref: docRef.ref });
                     });
                 }
+                for (const subName of BACKUP_SUBCOLLECTIONS) {
+                    const key = `_sub_${subName}`;
+                    if (!Array.isArray(importedData[key])) continue;
+                    const snap = await getDocs(collectionGroup(db, subName));
+                    snap.docs
+                        .filter(d => d.ref.path.startsWith(`artifacts/${appId}/`))
+                        .forEach(d => batchOperations.push({ type: 'delete', ref: d.ref }));
+                }
 
                 // 2. Prepare additions
-                for (const collectionName of collectionsToImport) {
+                for (const collectionName of BACKUP_TOP_LEVEL_COLLECTIONS) {
                     if (importedData[collectionName] && Array.isArray(importedData[collectionName])) {
                         for (const item of importedData[collectionName]) {
                             const { id, ...dataWithoutId } = item;
-                            Object.keys(dataWithoutId).forEach(key => {
-                                const value = dataWithoutId[key];
-                                if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value)) {
-                                    dataWithoutId[key] = new Date(value);
-                                } else if (value && typeof value === 'object' && value.hasOwnProperty('seconds') && value.hasOwnProperty('nanoseconds')) {
-                                    dataWithoutId[key] = new Date(value.seconds * 1000 + value.nanoseconds / 1000000);
-                                }
-                            });
+                            backupReviveDates(dataWithoutId);
                             const newDocRef = doc(db, `artifacts/${appId}/${collectionName}`, id);
                             batchOperations.push({ type: 'set', ref: newDocRef, data: dataWithoutId });
+                        }
+                    }
+                }
+                for (const subName of BACKUP_SUBCOLLECTIONS) {
+                    const key = `_sub_${subName}`;
+                    if (importedData[key] && Array.isArray(importedData[key])) {
+                        for (const item of importedData[key]) {
+                            const { path, ...dataWithoutPath } = item;
+                            if (!path) continue;
+                            backupReviveDates(dataWithoutPath);
+                            const newDocRef = doc(db, path);
+                            batchOperations.push({ type: 'set', ref: newDocRef, data: dataWithoutPath });
                         }
                     }
                 }
@@ -548,6 +618,22 @@ export const BackupRestoreModal = ({ isOpen, onClose, db, userId, appId, showMes
                         </div>
                     )}
                 </div>
+
+                {/* --- REINDEXAR PINS --- */}
+                <div className="border-t border-gray-200 pt-6 space-y-3">
+                    <h3 className="text-base font-semibold text-gray-800">Índice de PINs del portal</h3>
+                    <p className="text-sm text-gray-600">
+                        Después de restaurar un backup, los alumnos pueden quedar sin poder entrar a su portal —
+                        este botón reconstruye ese índice a partir de los alumnos ya restaurados.
+                    </p>
+                    <button
+                        onClick={handleReindexPins}
+                        className="w-full sm:w-auto px-5 py-2.5 bg-gray-800 text-white font-semibold rounded-lg shadow-sm hover:bg-gray-900 transition disabled:opacity-50"
+                        disabled={reindexing}
+                    >
+                        {reindexing ? 'Reconstruyendo...' : 'Reconstruir índice de PINs'}
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -581,166 +667,6 @@ async function createTicketsForEvent({ db, appId, eventId, quantity = 1, price =
   return ids;
 }
 
-// App.jsx
-
-// ▼ REEMPLAZA dataUrlToFile Y AÑADE ESTAS DOS NUEVAS FUNCIONES ANTES DE "ManageTicketsModal" ▼
-
-// Helper para convertir Data URL a un archivo (para compartir)
-async function dataUrlToFile(dataUrl, fileName) {
-  try {
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    return new File([blob], fileName, { type: blob.type });
-  } catch (e) {
-    console.error("Error al convertir data URL a archivo:", e);
-    return null;
-  }
-}
-
-// ▼ PEGÁ AQUÍ EL BLOQUE DE LAS DOS FUNCIONES FALTANTES ▼
-async function generateQrWithLogo(qrData, logoSrc, qrSize = 128) {
-  let qrCanvas; 
-
-  try {
-    qrCanvas = document.createElement('canvas');
-    await QRCode.toCanvas(qrCanvas, qrData, {
-      width: qrSize,
-      margin: 1,
-      errorCorrectionLevel: 'H'
-    });
-
-    const ctx = qrCanvas.getContext('2d');
-    const logoImage = new Image();
-    logoImage.src = logoSrc;
-    logoImage.crossOrigin = "anonymous";
-    
-    await new Promise((resolve, reject) => {
-        logoImage.onload = resolve;
-        logoImage.onerror = (err) => reject(new Error("No se pudo cargar la imagen del logo. Verifica que la ruta '/logo.png' sea correcta en tu carpeta 'public'."));
-    });
-
-    const logoSize = qrSize * 0.3;
-    const logoX = (qrSize - logoSize) / 2;
-    const logoY = (qrSize - logoSize) / 2;
-
-    ctx.fillStyle = 'white';
-    ctx.beginPath();
-    ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2 + 4, 0, 2 * Math.PI);
-    ctx.fill();
-    
-    ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize);
-
-    return qrCanvas.toDataURL('image/png');
-  } catch (error) {
-    console.error("Error al generar QR con logo:", error);
-    
-    if (qrCanvas) {
-      console.warn("Fallback: Devolviendo QR sin logo.");
-      return qrCanvas.toDataURL('image/png');
-    }
-    
-    return null;
-  }
-}
-
-
-// ▼ REEMPLAZA ESTA FUNCIÓN COMPLETA ▼
-async function generateComposedTicketImage(qrData, eventInfo, logoSrc) {
-  try {
-    const finalCanvas = document.createElement('canvas');
-    const ctx = finalCanvas.getContext('2d');
-    
-    const cardWidth = 350;
-    const cardHeight = 450;
-    const padding = 25;
-
-    finalCanvas.width = cardWidth;
-    finalCanvas.height = cardHeight;
-
-    // Fondo blanco
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, cardWidth, cardHeight);
-
-    // --- LÓGICA MODIFICADA PARA EL TÍTULO ---
-    let currentY = padding + 25; // Posición Y inicial para el texto
-    const titleFont = 'bold 20px Arial';
-    const titleLineHeight = 24; // Espacio entre renglones
-    
-    ctx.fillStyle = '#1f2937';
-    ctx.font = titleFont;
-    ctx.textAlign = 'center';
-
-    const fullTitle = eventInfo.title.toUpperCase();
-    const splitIndex = fullTitle.indexOf('('); // Busca el paréntesis
-    
-    let line1 = fullTitle;
-    let line2 = null;
-
-    // Si encuentra un paréntesis, divide el texto
-    if (splitIndex > 0) {
-        line1 = fullTitle.substring(0, splitIndex).trim();
-        line2 = fullTitle.substring(splitIndex).trim();
-    }
-
-    // Dibuja la primera línea
-    ctx.fillText(line1, cardWidth / 2, currentY);
-
-    // Si hay una segunda línea, la dibuja y actualiza la posición
-    if (line2) {
-        currentY += titleLineHeight;
-        ctx.fillText(line2, cardWidth / 2, currentY);
-    }
-    // --- FIN DE LA LÓGICA MODIFICADA ---
-
-    // Dibuja el subtítulo (fecha y hora) ajustando su posición
-    currentY += 30;
-    ctx.font = '16px Arial';
-    ctx.fillStyle = '#4b5563';
-    ctx.fillText(eventInfo.subtitle, cardWidth / 2, currentY);
-
-    // Dibuja el código QR, ajustando su posición
-    currentY += 20;
-    const qrCodeWithLogoUrl = await generateQrWithLogo(qrData, logoSrc, 200); // Un poco más chico para dar espacio
-    if (!qrCodeWithLogoUrl) throw new Error("Falló la generación del QR con logo.");
-    
-    const qrImage = new Image();
-    qrImage.src = qrCodeWithLogoUrl;
-    await new Promise(resolve => { qrImage.onload = resolve; });
-    
-    ctx.drawImage(qrImage, (cardWidth - 200) / 2, currentY, 200, 200);
-    currentY += 200; // Avanza la posición vertical
-
-    // Dibuja el resto de los elementos ajustando su posición
-    currentY += 30;
-    ctx.font = '16px Arial';
-    ctx.fillStyle = '#4b5563';
-    ctx.fillText('Entrada para:', cardWidth / 2, currentY);
-    
-    currentY += 25;
-    ctx.font = 'bold 20px Arial';
-    ctx.fillStyle = '#D81B60';
-    ctx.fillText(eventInfo.attendee.toUpperCase(), cardWidth / 2, currentY);
-
-    currentY += 25;
-    if (eventInfo.ticketNumber) {
-        ctx.font = '16px Arial';
-        ctx.fillStyle = '#4b5563';
-        ctx.fillText(`Entrada N° ${eventInfo.ticketNumber}`, cardWidth / 2, currentY);
-        currentY += 15;
-    }
-
-    if (eventInfo.ticketId) {
-        ctx.font = '10px "Courier New", monospace';
-        ctx.fillStyle = '#9ca3af';
-        ctx.fillText(`ID: ${eventInfo.ticketId}`, cardWidth / 2, currentY);
-    }
-
-    return finalCanvas.toDataURL('image/png');
-  } catch (error) {
-    console.error("Error al generar imagen de ticket compuesta:", error);
-    return null;
-  }
-}
 
 // ▼ REEMPLAZÁ TU COMPONENTE ManageTicketsModal CON ESTA VERSIÓN FINAL Y COMPLETA ▼
 

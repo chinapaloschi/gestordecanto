@@ -1,5 +1,7 @@
 import React from 'react';
-import { collection as fsCollection, collectionGroup, doc, query, where, orderBy, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection as fsCollection, collectionGroup, doc, query, where, orderBy, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { ref as stRef, deleteObject } from 'firebase/storage';
+import { storage } from '../firebaseConfig.js';
 import { Modal } from './Modal.jsx';
 import { getInitials } from '../utils/studentHelpers.js';
 
@@ -32,6 +34,24 @@ function StudentVoiceNotesModal({ db, appId, student, isOpen, onClose }) {
     } catch {}
   };
 
+  // Antes no había ninguna forma de borrar una grabación — se acumulaban
+  // para siempre, tanto en Firestore como en el almacenamiento.
+  const [deletingId, setDeletingId] = React.useState(null);
+  const deleteNote = async (note) => {
+    if (!window.confirm('¿Borrar esta grabación? No se puede deshacer.')) return;
+    setDeletingId(note.id);
+    try {
+      if (note.storagePath) {
+        try { await deleteObject(stRef(storage, note.storagePath)); } catch {}
+      }
+      await deleteDoc(doc(db, `artifacts/${appId}/students/${student.id}/voiceNotes`, note.id));
+    } catch (e) {
+      alert('No se pudo borrar: ' + e.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="md">
       <div className="flex flex-col" style={{ maxHeight: '80vh' }}>
@@ -56,12 +76,18 @@ function StudentVoiceNotesModal({ db, appId, student, isOpen, onClose }) {
                   : <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full flex-shrink-0">Escuchada</span>}
               </div>
               <audio src={n.url} controls className="w-full h-8" />
-              {n.status === 'pending_review' && (
-                <button onClick={() => markReviewed(n.id)}
-                  className="w-full py-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-100 transition">
-                  Marcar como escuchada
+              <div className="flex gap-1.5">
+                {n.status === 'pending_review' && (
+                  <button onClick={() => markReviewed(n.id)}
+                    className="flex-1 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-100 transition">
+                    Marcar como escuchada
+                  </button>
+                )}
+                <button onClick={() => deleteNote(n)} disabled={deletingId === n.id}
+                  className="flex-1 py-1.5 rounded-lg bg-white border border-red-200 text-red-500 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 transition">
+                  {deletingId === n.id ? 'Borrando…' : 'Borrar'}
                 </button>
-              )}
+              </div>
             </div>
           ))}
         </div>

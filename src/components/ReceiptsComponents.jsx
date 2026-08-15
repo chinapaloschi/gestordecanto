@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { writeBatch, serverTimestamp, collection as fsCollection, collectionGroup, doc, getDocs, deleteDoc, query, orderBy, updateDoc, where , limit , onSnapshot } from 'firebase/firestore';
+import { writeBatch, serverTimestamp, collection as fsCollection, collectionGroup, doc, getDoc, getDocs, deleteDoc, query, orderBy, updateDoc, where , limit , onSnapshot } from 'firebase/firestore';
 import { ref as stRef, uploadBytesResumable, getDownloadURL, listAll, getMetadata } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { storage } from '../firebaseConfig.js';
@@ -7,6 +7,7 @@ import { Modal, ModalHeader } from './Modal.jsx';
 import { IconReceipt, IconTrash } from './Icons.jsx';
 
 import { waitForAuthReady, updateReceiptStatus, markStudentReceiptsAsSeen } from '../utils/authHelpers.js';
+import { withSurcharge } from '../utils/lateSurcharge.js';
 import { useStudentReceipts } from '../hooks/useStudentReceipts.js';
 export const FileTypeIcon = ({ mime = '', filename = '' }) => {
     const isPdf = mime.includes('pdf') || filename.endsWith('.pdf');
@@ -332,6 +333,45 @@ const [displayDebt, setDisplayDebt] = React.useState(student?.pendingBalance || 
   const handleApprove = async (receiptId) => {
     setBusyId(receiptId);
     try {
+      // Antes esto sólo cambiaba el estado del comprobante y le avisaba al
+      // alumno "tu pago fue aprobado" — nunca tocaba el pago real. El saldo
+      // en Finanzas y en la ficha del alumno seguía exactamente igual hasta
+      // que alguien lo marcara a mano en "Marcar Pago", en otro lugar
+      // completamente distinto. Ahora aprobar salda lo que estaba impago al
+      // momento de subir el comprobante — mismo criterio de recargo que
+      // "Marcar Pago" (ver utils/lateSurcharge.js). Los abonos flexibles
+      // "por clase" quedan afuera a propósito: se cobran clase por clase
+      // desde la ficha del alumno, igual que en "Condonar deuda" acá mismo.
+      const receiptSnap = await getDoc(doc(db, `artifacts/${appId}/students/${student.id}/receipts`, receiptId));
+      const refDate = receiptSnap.exists() && receiptSnap.data()?.createdAt?.toDate
+        ? receiptSnap.data().createdAt.toDate()
+        : new Date();
+
+      const batch = writeBatch(db);
+
+      const qClasses = query(fsCollection(db, `artifacts/${appId}/scheduledClasses`), where("studentId", "==", student.id), where("isPaid", "==", false), where("scheduleType", "==", "single"));
+      const snapClasses = await getDocs(qClasses);
+      snapClasses.forEach(d => {
+        const cls = d.data();
+        const { amount } = withSurcharge(cls.price || 0, cls.classDate, refDate);
+        batch.update(d.ref, { isPaid: true, paidAmount: amount, paymentMethod: 'comprobante', paidAt: refDate });
+      });
+
+      const qPack = query(fsCollection(db, `artifacts/${appId}/payments`), where("studentId", "==", student.id), where("paymentMethod", "==", "monthly_package_payment"), where("isPaidForPackage", "==", false));
+      const snapPack = await getDocs(qPack);
+      snapPack.forEach(d => {
+        const pkg = d.data();
+        const { amount, applies } = withSurcharge(pkg.amount || 0, pkg.periodStartDate, refDate);
+        batch.update(d.ref, {
+          isPaidForPackage: true, status: 'paid', amount,
+          paymentDate: refDate, paidAt: refDate, paidVia: 'comprobante', surchargeApplied: applies,
+        });
+        if (pkg.associatedClassIds?.length) {
+          pkg.associatedClassIds.forEach(id => batch.update(doc(db, `artifacts/${appId}/scheduledClasses`, id), { isPaid: true }));
+        }
+      });
+
+      await batch.commit();
       await updateReceiptStatus(db, appId, student.id, receiptId, 'approved');
       const firstName = (student.name || '').split(' ')[0];
       await sendPushToStudent(

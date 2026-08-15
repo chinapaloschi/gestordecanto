@@ -2,7 +2,7 @@
 
 import { collection as fsCollection, collectionGroup, doc, getDoc, getDocs, addDoc as fsAddDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, getFirestore, limit } from 'firebase/firestore';
 
-import { ref as stRef, getDownloadURL, listAll, getMetadata } from 'firebase/storage';
+import { ref as stRef, getDownloadURL, listAll, getMetadata, deleteObject } from 'firebase/storage';
 
 import { GoogleAuthProvider, onAuthStateChanged, signInWithCustomToken, signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth';
 
@@ -891,7 +891,29 @@ const handleOpenStudentDetailsModal = useCallback((student, initialEditMode = fa
 
 
 
+            // Antes esto no tocaba el repertorio ni las notas de voz del
+            // alumno — quedaban huérfanas en la base para siempre, sin
+            // ninguna pantalla que las mostrara ya. Los audios ni se
+            // borraban del almacenamiento.
+            const repertoireSnapshot = await getDocs(fsCollection(db, `artifacts/${appId}/students/${studentId}/repertoire`));
+            repertoireSnapshot.forEach(d => batch.delete(d.ref));
+
+            const voiceNotesSnapshot = await getDocs(fsCollection(db, `artifacts/${appId}/students/${studentId}/voiceNotes`));
+            voiceNotesSnapshot.forEach(d => batch.delete(d.ref));
+
+
+
             await batch.commit();
+
+            // Borrar los audios del almacenamiento es una operación aparte
+            // (no entra en el batch de Firestore) — si algún archivo ya no
+            // existe o falla, no debe frenar el resto del borrado.
+            await Promise.allSettled(
+                voiceNotesSnapshot.docs.map(d => {
+                    const path = d.data()?.storagePath;
+                    return path ? deleteObject(stRef(storage, path)) : Promise.resolve();
+                })
+            );
 
             showMessage('Alumno y todos sus datos han sido eliminados.', 'success');
 

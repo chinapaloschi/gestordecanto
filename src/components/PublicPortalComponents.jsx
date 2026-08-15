@@ -14,6 +14,7 @@ import { SocialMediaLinks } from './SocialMediaLinks.jsx';
 import { GracePeriodNotice, NextMonthInfoBox } from './PublicPortalWidgets.jsx';
 import { IconClock, IconCalendar, IconTicket, IconDownload, IconShare } from './Icons.jsx';
 import { ROUTES } from '../constants.js';
+import { dataUrlToFile, generateQrWithLogo, generateComposedTicketImage } from '../utils/ticketQr.js';
 // ▼▼▼ REEMPLAZÁ TU COMPONENTE PublicTicketsSection ENTERO CON ESTA VERSIÓN ▼▼▼
 export const PublicTicketsSection = ({ db, appId, student }) => {
   const [tickets, setTickets] = React.useState([]);
