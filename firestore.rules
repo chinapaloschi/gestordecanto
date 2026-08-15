@@ -1,0 +1,233 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // === Funciones de ayuda ===
+    function isPublicAppPath(appId) {
+      return appId == '1:786390581865:web:ed47531cf7415ae5ca18f8';
+    }
+
+    function isStaff() {
+      return request.auth != null &&
+        request.auth.token.email in [
+          'sandrupaloschi@gmail.com',
+          'gracielamargheritis8@gmail.com',
+          'javicampa010@gmail.com'
+        ];
+    }
+
+    // Colecciones internas (financieras / de seguridad) que nunca deben ser
+    // legibles públicamente, aunque vivan bajo el mismo appId público que el
+    // resto de los datos. Sin esto, el catch-all de más abajo las expondría.
+    function isInternalOnlyCollection(path) {
+      return path.size() > 0 && path[0] in [
+        'expenses', 'expenseCategories', 'extraIncomes',
+        'adminTokens', 'reminderLog', 'loginAttempts'
+      ];
+    }
+
+    // ===================================================================
+    // ------------------- REGLAS ESPECÍFICAS PRIMERO --------------------
+    // ===================================================================
+
+    // REGLA PARA COMPROBANTES
+    match /artifacts/{appId}/students/{studentId}/receipts/{docId} {
+      allow create: if isPublicAppPath(appId)
+                  && request.auth != null
+                  && request.resource.data.keys().hasOnly([
+                        'studentId', 'storagePath', 'url', 'createdAt', 'size', 'mime',
+                        'status', 'filename', 'contentType'
+                      ])
+                  && request.resource.data.status == 'pending'
+                  && request.resource.data.studentId == studentId;
+      // El alumno necesita ver el estado de sus propios comprobantes ya
+      // enviados (pantalla "Pagar mi cuota" del portal público).
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow update: if isStaff();
+      allow delete: if false;
+    }
+
+    // --- REGLAS PÚBLICAS (lectura para alumnos) ---
+
+    match /artifacts/{appId}/pinIndex/{pin}/entries/{entryId} {
+      allow read: if isPublicAppPath(appId);
+      allow write: if false;
+    }
+
+    match /artifacts/{appId}/students/{studentId} {
+      allow read: if isPublicAppPath(appId);
+      allow update: if isPublicAppPath(appId)
+                  && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoURL'])
+                  && request.resource.data.dni == resource.data.dni;
+      allow write: if isStaff();
+      allow delete: if isStaff();
+    }
+
+    // Grabaciones de voz enviadas por el alumno ("Herramientas → Grabador de
+    // voz → Enviar a Sandra"). El alumno crea la suya y puede borrar sus
+    // propios envíos ("Mis envíos"); solo el staff las marca como escuchadas.
+    match /artifacts/{appId}/students/{studentId}/voiceNotes/{noteId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow create: if isPublicAppPath(appId)
+                  && request.auth != null
+                  && request.resource.data.studentId == studentId
+                  && request.resource.data.status == 'pending_review'
+                  && request.resource.data.keys().hasOnly([
+                        'url', 'filename', 'storagePath', 'durationSecs', 'createdAt', 'studentId', 'status'
+                      ]);
+      allow update: if isStaff();
+      allow delete: if isPublicAppPath(appId) || isStaff();
+    }
+
+    // Sesiones de práctica registradas por el alumno (cronómetro de
+    // Herramientas). Solo crea y lee su propio total semanal.
+    match /artifacts/{appId}/students/{studentId}/practiceSessions/{sessionId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow create: if isPublicAppPath(appId)
+                  && request.auth != null
+                  && request.resource.data.studentId == studentId
+                  && request.resource.data.keys().hasOnly(['durationSecs', 'createdAt', 'studentId', 'date']);
+      allow update, delete: if isStaff();
+    }
+
+    // ✅ REGLA CORREGIDA PARA SCHEDULEDCLASSES (permite presente Y ausente)
+    match /artifacts/{appId}/scheduledClasses/{classId} {
+      allow read: if isPublicAppPath(appId);
+      allow update: if isPublicAppPath(appId)
+                  && request.resource.data.attendanceSource == 'public'
+                  && request.resource.data.attendanceStatus in ['presente', 'present', 'ausente', 'absent']
+                  && resource.data.classDate == request.resource.data.classDate
+                  && resource.data.studentId == request.resource.data.studentId;
+      allow create, delete: if false;
+    }
+
+    match /artifacts/{appId}/attendance/{attId} {
+      allow read: if isPublicAppPath(appId);
+      allow create: if isPublicAppPath(appId)
+                  && request.auth != null
+                  && request.resource.data.status in ['present','presente']
+                  && request.resource.data.isPresent == true
+                  && request.resource.data.source == 'public';
+      allow update, delete: if false;
+    }
+
+    match /artifacts/{appId}/publicPushTokens/{token} {
+      allow read: if isPublicAppPath(appId);
+      allow write: if isPublicAppPath(appId) && request.auth != null;
+    }
+
+    match /artifacts/{appId}/students/{studentId}/deviceTokens/{token} {
+      allow read: if false;
+      allow create: if isPublicAppPath(appId)
+                  && request.resource.id == request.resource.data.token
+                  && request.resource.data.token is string
+                  && request.resource.data.enabled is bool
+                  && request.resource.data.ua is string
+                  && request.resource.data.platform is string;
+      allow update: if isPublicAppPath(appId)
+                  && request.resource.id == resource.id
+                  && request.resource.data.keys().hasOnly(['enabled']);
+      allow delete: if false;
+    }
+
+    match /artifacts/{appId}/events/{eventId} {
+      allow read: if isPublicAppPath(appId);
+      allow write: if isStaff();
+    }
+
+    match /artifacts/{appId}/events/{eventId}/tickets/{ticketId} {
+      allow read: if isPublicAppPath(appId);
+      allow create, delete: if isStaff();
+      allow update: if isStaff();
+      allow update: if isPublicAppPath(appId) &&
+                      resource.data.status == 'active' &&
+                      request.resource.data.status == 'used' &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'usedAt']);
+    }
+
+    match /artifacts/{appId}/publicSettings/{docId} {
+      allow read: if isPublicAppPath(appId);
+      allow write: if false;
+    }
+
+    // REGLA PARA EL CATÁLOGO PÚBLICO DE LENCERÍA
+    match /artifacts/{appId}/lenceriaStock/{productId} {
+      allow read: if isPublicAppPath(appId);
+      allow create, delete: if isStaff();
+      // El comprador público solo puede tocar stockPorTalle (reserva de 1
+      // unidad al elegir método de pago); cualquier otro cambio requiere staff.
+      allow update: if isStaff() || (
+                      isPublicAppPath(appId)
+                      && request.auth != null
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockPorTalle'])
+                    );
+    }
+
+    // Pedidos de venta de Lencería: el registro manual de Sandra (staff) y la
+    // reserva automática que hace el catálogo público al elegir pago.
+    match /artifacts/{appId}/lenceriaVentas/{ventaId} {
+      allow read: if isStaff();
+      allow create: if isStaff() || (
+                      isPublicAppPath(appId)
+                      && request.auth != null
+                      && request.resource.data.status == 'pendiente'
+                      && request.resource.data.origen == 'catalogo_publico'
+                      && request.resource.data.cantidad == 1
+                      && request.resource.data.keys().hasOnly([
+                            'itemId', 'nombre', 'color', 'talle', 'cantidad', 'metodoPago',
+                            'precioUnitario', 'totalVenta', 'buyerName', 'origen', 'status', 'fechaVenta'
+                          ])
+                    );
+      allow update, delete: if isStaff();
+    }
+
+    // Pedido de clase de prueba desde la página pública de inscripción.
+    match /artifacts/{appId}/trialRequests/{reqId} {
+      allow read: if isPublicAppPath(appId);
+      allow create: if isPublicAppPath(appId)
+                  && request.auth != null
+                  && request.resource.data.status == 'pending'
+                  && request.resource.data.keys().hasOnly([
+                        'date', 'startTime', 'duration', 'classType', 'slotId',
+                        'name', 'whatsapp', 'email', 'notes', 'status', 'createdAt'
+                      ]);
+      allow update, delete: if isStaff();
+    }
+
+    // --- REGLAS PRIVADAS (solo para staff) ---
+
+    match /apps/{appId}/students/{studentId} {
+      allow read: if isStaff();
+      allow update: if isStaff();
+    }
+
+    match /artifacts/{appId}/fcmTokens/{token} {
+      allow create, update: if request.auth != null;
+      allow read, delete: if false;
+    }
+
+    // REGLAS PARA EVENTOS MASIVOS (confirmación)
+    match /artifacts/{appId}/massEvents/{eventId}/attendees/{studentId} {
+      allow read: if isPublicAppPath(appId);
+      allow create: if isPublicAppPath(appId)
+                    && request.auth != null
+                    && request.resource.data.studentId == studentId
+                    && request.resource.data.keys().hasOnly(['confirmed', 'confirmedAt', 'selectedOptionId']);
+      allow update: if isPublicAppPath(appId)
+                    && request.auth != null
+                    && request.resource.data.studentId == studentId
+                    && resource.data.studentId == studentId
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmed', 'confirmedAt', 'selectedOptionId']);
+      allow delete: if false;
+    }
+
+    // ===================================================================
+    // -------------------- REGLAS GENERALES (AL FINAL) ------------------
+    // ===================================================================
+
+    match /artifacts/{appId}/{path=**} {
+      allow read: if isStaff() || (isPublicAppPath(appId) && !isInternalOnlyCollection(path));
+      allow write: if isStaff();
+    }
+  }
+}
