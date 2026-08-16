@@ -22,19 +22,22 @@ const MAX_GRUPAL_SIZE = 8;
 // ser un error real: superar el cupo publicado de la clase grupal, o que
 // dos tipos distintos (grupal vs coral) caigan en el mismo horario exacto
 // — Sandra no puede dar dos clases distintas a la vez.
+const isGroupType = (t) => t === 'group' || t === 'grupal';
+const isChoirType = (t) => t === 'choir' || t === 'coral';
+
 function getGroupClassWarning(candidatesSameDay, { startTime, studentType }, excludeIds = []) {
-    if (studentType !== 'grupal' && studentType !== 'coral') return null;
+    if (!isGroupType(studentType) && !isChoirType(studentType)) return null;
     const sameSlot = (candidatesSameDay || []).filter(c =>
         c.startTime === startTime &&
         !excludeIds.includes(c.id) &&
         c.status !== 'cancelled'
     );
-    const crossType = sameSlot.find(c => (c.studentType === 'grupal' || c.studentType === 'coral') && c.studentType !== studentType);
+    const crossType = sameSlot.find(c => (isGroupType(c.studentType) || isChoirType(c.studentType)) && c.studentType !== studentType);
     if (crossType) {
         return `A esa hora ya hay una clase ${mapClassTypeToSpanish(crossType.studentType)} distinta — revisá que no se pisen.`;
     }
-    if (studentType === 'grupal') {
-        const count = sameSlot.filter(c => c.studentType === 'grupal').length + 1;
+    if (isGroupType(studentType)) {
+        const count = sameSlot.filter(c => isGroupType(c.studentType)).length + 1;
         if (count > MAX_GRUPAL_SIZE) {
             return `Ese horario grupal ya tiene ${count - 1} alumno${count - 1 !== 1 ? 's' : ''} anotado${count - 1 !== 1 ? 's' : ''} — con este serían ${count}, por encima del tope de ${MAX_GRUPAL_SIZE}.`;
         }
@@ -1532,7 +1535,7 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                   />
                 )}
 
-                {(classType === 'coral' || classType === 'grupal') && (
+                {(isChoirType(classType) || isGroupType(classType)) && (
                   <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
                     <label className="block text-xs font-bold text-indigo-800 uppercase mb-1">Link del Tema / Material</label>
                     <input type="url" placeholder="Pegar link (YouTube, Drive...)" value={topicLink}

@@ -847,7 +847,17 @@ const handleClassClick = (classItem) => {
 
 
 
-        const normType = (t) => String(t||'').toLowerCase().includes('grup') ? 'grupal' : 'individual';
+        // Los valores crudos guardados en studentType son en inglés
+        // ('group'/'choir'/'individual'); este chequeo comparaba contra las
+        // palabras en español y nunca coincidía, así que toda clase grupal o
+        // coral cae acá como individual — también se acepta 'grupal'/'coral'
+        // por si hay datos históricos guardados así.
+        const normType = (t) => {
+          const s = String(t || '').toLowerCase();
+          if (s === 'group' || s === 'grupal') return 'grupal';
+          if (s === 'choir' || s === 'coral') return 'otras';
+          return 'individual';
+        };
 
 const groups = { grupal: [], individual: [], otras: [] };
 
@@ -1083,7 +1093,7 @@ const renderCalendarGrid = () => {
 
 };
 
-  const showGracePeriodNotice = !hasPaidThisMonth && (new Date().getDate() <= 8) && (monthlyByType.individual?.length > 0 || monthlyByType.grupal?.length > 0);
+  const showGracePeriodNotice = !hasPaidThisMonth && (new Date().getDate() <= 8) && (monthlyByType.individual?.length > 0 || monthlyByType.grupal?.length > 0 || monthlyByType.otras?.length > 0);
 
 
 
@@ -1644,7 +1654,7 @@ const renderCalendarGrid = () => {
                                 const isPast   = new Date(c.date + 'T00:00:00') < today;
                                 const canMark  = c.isToday && !present && !absent;
                                 const tipo     = (c.realType || '').toLowerCase();
-                                const typeLabel = tipo.includes('coral') ? 'Coral' : tipo.includes('grup') ? 'Grupal' : 'Individual';
+                                const typeLabel = (tipo === 'choir' || tipo === 'coral') ? 'Coral' : (tipo === 'group' || tipo === 'grupal') ? 'Grupal' : 'Individual';
 
                                 return (
                                   <button key={c.id} onClick={() => handleClassClick(c)} disabled={!canMark && !isWeek}

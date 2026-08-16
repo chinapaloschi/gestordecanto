@@ -382,7 +382,10 @@ const handleDeleteEntireMonthlyPackage = async () => {
                     }
 
                     // SEGURIDAD: Si es clase individual (1 alumno), filtramos por ID del alumno
-                    if (classesToDisplay.length === 1 && commonClassInfo.studentType !== 'coral' && commonClassInfo.studentType !== 'grupal') {
+                    // (studentType real es 'group'/'choir' en inglés, no 'grupal'/'coral' —
+                    // con la comparación vieja esto nunca detectaba grupal/coral y terminaba
+                    // filtrando por un solo alumno incluso en clases grupales)
+                    if (classesToDisplay.length === 1 && commonClassInfo.studentType !== 'coral' && commonClassInfo.studentType !== 'grupal' && commonClassInfo.studentType !== 'choir' && commonClassInfo.studentType !== 'group') {
                         constraints.push(where("studentId", "==", firstClass.studentId));
                     }
 

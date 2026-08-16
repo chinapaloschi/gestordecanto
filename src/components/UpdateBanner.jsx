@@ -9,10 +9,17 @@ export function UpdateBanner() {
   const checkWaiting = useCallback(async () => {
     if (!('serviceWorker' in navigator)) return;
     try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.update().catch(() => {})));
-      const waiting = regs.find(r => r.waiting);
-      if (waiting) setHasUpdate(true);
+      // getRegistrations() (plural) devuelve TODOS los service workers del
+      // origen — admin y público conviven en scope '/', así que un
+      // dispositivo que alguna vez visitó ambos queda con las dos
+      // registraciones. Usar esa lista acá hacía que el banner reaccionara
+      // al "waiting" del OTRO service worker (irrelevante para esta página)
+      // y nunca terminara de resolverse. getRegistration() sin argumentos
+      // trae solo el que realmente controla la página actual.
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) return;
+      await reg.update().catch(() => {});
+      if (reg.waiting) setHasUpdate(true);
     } catch {}
   }, []);
 
@@ -49,8 +56,7 @@ export function UpdateBanner() {
     setApplying(true);
     try {
       if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        const reg = regs.find(r => r.waiting);
+        const reg = await navigator.serviceWorker.getRegistration();
         if (reg?.waiting) {
           const reloadOnce = new Promise(resolve => {
             navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });

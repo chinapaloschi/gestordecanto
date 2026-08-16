@@ -18,9 +18,21 @@ export function isPublicPortal() {
 // <UpdateBanner/> — tener dos consumidores del mismo "waiting" worker
 // causaba que el banner se quedara pegado mostrando "nueva versión disponible"
 // sin aplicarla nunca.
-export function registerPublicSW() {
+export async function registerPublicSW() {
   if (!('serviceWorker' in navigator)) return;
   if (!isPublicPortal()) return;
+
+  // Un mismo dispositivo puede haber visitado el panel admin en algún
+  // momento (sw-admin.js) — ambos comparten scope '/', así que si no se
+  // limpia, quedan las dos registraciones para siempre y el banner de
+  // actualización puede terminar reaccionando a la que no corresponde.
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.filter(r => {
+      const url = r.active?.scriptURL || r.installing?.scriptURL || r.waiting?.scriptURL || '';
+      return url && !url.endsWith('/sw-public.js');
+    }).map(r => r.unregister().catch(() => {})));
+  } catch {}
 
   navigator.serviceWorker.register(SW_URL, { scope: '/' })
     .catch(err => console.error('SW público ERROR', err));

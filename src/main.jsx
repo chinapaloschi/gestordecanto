@@ -26,6 +26,18 @@ function registerAdminSW() {
 
   window.addEventListener('load', async () => {
     try {
+      // Limpiar cualquier registración del SW público que haya quedado de
+      // una visita anterior al portal /checkin en este mismo dispositivo —
+      // ambos comparten scope '/' y dejarla generaba banners de actualización
+      // pegados reaccionando al service worker que no correspondía.
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.filter(r => {
+          const url = r.active?.scriptURL || r.installing?.scriptURL || r.waiting?.scriptURL || '';
+          return url && !url.endsWith('/sw-admin.js');
+        }).map(r => r.unregister().catch(() => {})));
+      } catch {}
+
       const reg = await navigator.serviceWorker.register('/sw-admin.js', { scope: '/' });
 
       // Aplica el SW en espera (skipWaiting) y recarga la página
