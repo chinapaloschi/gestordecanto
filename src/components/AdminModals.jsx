@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { collection as fsCollection, collectionGroup, doc, getDocs, setDoc, addDoc as fsAddDoc, deleteDoc, query, where, orderBy, writeBatch } from 'firebase/firestore';
+import { collection as fsCollection, collectionGroup, doc, getDocs, setDoc, addDoc as fsAddDoc, deleteDoc, query, where, orderBy, writeBatch, deleteField } from 'firebase/firestore';
 import { ModalHeader } from './Modal.jsx';
 import { IconBan, IconTrash, IconHardDrive } from './Icons.jsx';
 import { toLocalYYYYMMDD } from '../utils/dateHelpers.js';
@@ -90,17 +90,24 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
             const cur = new Date(startDate + 'T12:00:00');
             const last = new Date(endDate  + 'T12:00:00');
             let count = 0;
+            // Guardamos con qué bloqueo (por fecha) corresponde cancelar cada
+            // clase, para poder restaurarlas exactamente si el bloqueo se borra.
+            const blockedSlotIdByDate = {};
             while (cur <= last) {
                 const d = toLocalYYYYMMDD(cur);
-                const exists = blockedSlots.some(s => s.date === d && (isAllDay ? s.isAllDay !== false : false));
-                if (!exists) {
-                    batch.set(doc(fsCollection(db, `artifacts/${appId}/blockedSlots`)), {
+                const existingSlot = blockedSlots.find(s => s.date === d && (isAllDay ? s.isAllDay !== false : false));
+                if (!existingSlot) {
+                    const newSlotRef = doc(fsCollection(db, `artifacts/${appId}/blockedSlots`));
+                    batch.set(newSlotRef, {
                         date: d, reason: reason.trim() || 'Sin motivo',
                         isAllDay, startTime: isAllDay ? null : startTime,
                         endTime: isAllDay ? null : endTime,
                         createdAt: new Date(),
                     });
+                    blockedSlotIdByDate[d] = newSlotRef.id;
                     count++;
+                } else {
+                    blockedSlotIdByDate[d] = existingSlot.id;
                 }
                 cur.setDate(cur.getDate() + 1);
             }
@@ -110,7 +117,10 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
                 ? affectedClasses
                 : affectedClasses.filter(cls => cls.startTime < endTime && cls.endTime > startTime);
             classesToCancel.forEach(cls => {
-                batch.update(doc(db, `artifacts/${appId}/scheduledClasses`, cls.id), { status: 'cancelled' });
+                batch.update(doc(db, `artifacts/${appId}/scheduledClasses`, cls.id), {
+                    status: 'cancelled',
+                    cancelledByBlockId: blockedSlotIdByDate[cls.classDate] || null,
+                });
             });
 
             await batch.commit();
@@ -136,10 +146,22 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
         } finally { setLoading(false); }
     };
 
+    // Antes esto solo borraba el bloqueo — las clases que se habían cancelado
+    // automáticamente al bloquear el día quedaban canceladas para siempre,
+    // aunque el bloqueo ya no existiera (ej. Sandra bloquea por vacaciones y
+    // después se arrepiente: al "desbloquear" los alumnos seguían sin clase).
     const handleDelete = async (slotId) => {
         try {
-            await deleteDoc(doc(db, `artifacts/${appId}/blockedSlots`, slotId));
-            showMessage('Bloqueo eliminado.', 'success');
+            const q = query(fsCollection(db, `artifacts/${appId}/scheduledClasses`), where('cancelledByBlockId', '==', slotId));
+            const snap = await getDocs(q);
+            const batch = writeBatch(db);
+            snap.forEach(d => {
+                batch.update(d.ref, { status: 'scheduled', cancelledByBlockId: deleteField() });
+            });
+            batch.delete(doc(db, `artifacts/${appId}/blockedSlots`, slotId));
+            await batch.commit();
+            const restoredMsg = snap.size > 0 ? ` ${snap.size} clase${snap.size!==1?'s':''} restaurada${snap.size!==1?'s':''}.` : '';
+            showMessage(`Bloqueo eliminado.${restoredMsg}`, 'success');
         } catch (err) { showMessage(`Error: ${err.message}`, 'error'); }
     };
 
