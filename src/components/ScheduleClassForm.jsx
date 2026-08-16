@@ -13,6 +13,35 @@ import { buildWhatsappLink } from '../utils/whatsapp.js';
 const fldLabel = 'block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5';
 const fldInput = 'w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 transition bg-white';
 
+const MAX_GRUPAL_SIZE = 8;
+
+// Grupal/coral no tienen un ID de sesión compartido — cada alumno es su
+// propio documento y "mismo día+hora+tipo" se asume la MISMA clase (por
+// eso el chequeo de solapamiento de arriba ignora grupal-con-grupal y
+// coral-con-coral). Esto solo avisa (no bloquea) dos casos que sí suelen
+// ser un error real: superar el cupo publicado de la clase grupal, o que
+// dos tipos distintos (grupal vs coral) caigan en el mismo horario exacto
+// — Sandra no puede dar dos clases distintas a la vez.
+function getGroupClassWarning(candidatesSameDay, { startTime, studentType }, excludeIds = []) {
+    if (studentType !== 'grupal' && studentType !== 'coral') return null;
+    const sameSlot = (candidatesSameDay || []).filter(c =>
+        c.startTime === startTime &&
+        !excludeIds.includes(c.id) &&
+        c.status !== 'cancelled'
+    );
+    const crossType = sameSlot.find(c => (c.studentType === 'grupal' || c.studentType === 'coral') && c.studentType !== studentType);
+    if (crossType) {
+        return `A esa hora ya hay una clase ${mapClassTypeToSpanish(crossType.studentType)} distinta — revisá que no se pisen.`;
+    }
+    if (studentType === 'grupal') {
+        const count = sameSlot.filter(c => c.studentType === 'grupal').length + 1;
+        if (count > MAX_GRUPAL_SIZE) {
+            return `Ese horario grupal ya tiene ${count - 1} alumno${count - 1 !== 1 ? 's' : ''} anotado${count - 1 !== 1 ? 's' : ''} — con este serían ${count}, por encima del tope de ${MAX_GRUPAL_SIZE}.`;
+        }
+    }
+    return null;
+}
+
 const MONTH_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const DAY_ES   = ['L','M','M','J','V','S','D'];
 
@@ -726,6 +755,7 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                     let skippedOverlap = 0;
                     let skippedBlocked = 0;
                     const movingIds = classesToMove.map(c => c.id);
+                    const groupWarnings = new Set();
                     for (const cls of classesToMove) {
                         let targetDate = cls.classDate;
                         // Si cambió el día de la semana, calcular la nueva fecha en la misma semana
@@ -757,6 +787,13 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                         });
                         if (overlappingClass) { skippedOverlap++; continue; }
 
+                        const groupWarning = getGroupClassWarning(
+                            (scheduledClasses || []).filter(c => c.classDate === targetDate),
+                            { startTime, studentType: cls.studentType },
+                            movingIds
+                        );
+                        if (groupWarning) groupWarnings.add(groupWarning);
+
                         batch.update(doc(db, `artifacts/${appId}/scheduledClasses`, cls.id), {
                             classDate: targetDate, startTime, endTime: newEnd,
                             rescheduleReason: rescheduleReason || null, rescheduledAt: new Date(),
@@ -768,6 +805,7 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                     if (skippedOverlap > 0) skipParts.push(`${skippedOverlap} por chocar con otra clase`);
                     if (skippedBlocked > 0) skipParts.push(`${skippedBlocked} por caer en un día bloqueado`);
                     const skipNote = skipParts.length > 0 ? ` Se salteó ${skipParts.join(' y ')}.` : '';
+                    const warnNote = groupWarnings.size > 0 ? ` ⚠️ ${[...groupWarnings].join(' ')}` : '';
                     if (count === 0) {
                         // Antes esto también mostraba un mensaje de "éxito" con
                         // 0 clases movidas — parecía haber funcionado sin haber
@@ -775,7 +813,7 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                         showLocalMessage(`No se movió ninguna clase.${skipNote || ' Revisá el día y la hora elegidos.'}`, 'error');
                         setLoading(false); return;
                     }
-                    showMessage(`✅ ${count} clase${count !== 1 ? 's' : ''} reprogramada${count !== 1 ? 's' : ''} exitosamente.${skipNote}`, skipParts.length > 0 ? 'info' : 'success');
+                    showMessage(`✅ ${count} clase${count !== 1 ? 's' : ''} reprogramada${count !== 1 ? 's' : ''} exitosamente.${skipNote}${warnNote}`, (skipParts.length > 0 || groupWarnings.size > 0) ? 'info' : 'success');
                     if (sendWhatsapp) {
                         const fn = (currentStudent.name || '').split(' ')[0];
                         const dayStr = newDayOfWeek ? (daysOfWeekFull.find(d => d.value === newDayOfWeek)?.label || '') : 'el horario habitual';
@@ -827,13 +865,14 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                     setLoading(false);
                     return;
                 }
+                const groupWarning = getGroupClassWarning(classesOnTargetDate, { startTime, studentType: classType }, [selectedClassToRescheduleId]);
 
                 await updateDoc(doc(db, `artifacts/${appId}/scheduledClasses`, selectedClassToRescheduleId), {
                     classDate, startTime, endTime: newEndTime, duration: parseInt(duration),
                     rescheduleReason: rescheduleReason || null,
                     rescheduledAt: new Date(),
                 });
-                showMessage('Clase re-programada exitosamente!', 'success');
+                showMessage(`Clase re-programada exitosamente!${groupWarning ? ` ⚠️ ${groupWarning}` : ''}`, groupWarning ? 'info' : 'success');
 
                 // WhatsApp notification
                 if (sendWhatsapp) {
@@ -881,21 +920,23 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                     setLoading(false);
                     return;
                 }
+                const groupWarning = getGroupClassWarning(classesOnTargetDate, { startTime, studentType: classType }, isEditing ? [editingClassData.id] : []);
+                const warnSuffix = groupWarning ? ` ⚠️ ${groupWarning}` : '';
 
                 const classData = { studentId, studentName, studentType: classType, classDate, startTime, endTime, duration: parseInt(duration), price: useFlexCredit ? 0 : Number(price), isPaid: isEditing ? (editingClassData.isPaid === true) : false, userId, scheduledAt: isEditing && editingClassData.scheduledAt ? editingClassData.scheduledAt : new Date(), scheduleType: 'single', attendanceStatus: isEditing && editingClassData.attendanceStatus !== undefined ? editingClassData.attendanceStatus : null, status: 'scheduled',topicLink: topicLink || null, };
                 if (isEditing) {
                     await updateDoc(doc(db, `artifacts/${appId}/scheduledClasses`, editingClassData.id), classData);
-                    showMessage('Clase actualizada exitosamente!', 'success');
+                    showMessage(`Clase actualizada exitosamente!${warnSuffix}`, groupWarning ? 'info' : 'success');
                 } else {
                     // Si usa saldo flexible: marcar como pagada y descontar del saldo
                     if (useFlexCredit && selectedFlexId) {
                       const flexData = { ...classData, isPaid: true, scheduleType: 'single', flexiblePaymentId: selectedFlexId };
                       await fsAddDoc(fsCollection(db, `artifacts/${appId}/scheduledClasses`), flexData);
                       await updateDoc(doc(db, `artifacts/${appId}/payments`, selectedFlexId), { clasesUsadas: increment(1) });
-                      showMessage('✅ Clase agendada y descontada del saldo flexible.', 'success');
+                      showMessage(`✅ Clase agendada y descontada del saldo flexible.${warnSuffix}`, groupWarning ? 'info' : 'success');
                     } else {
                       await fsAddDoc(fsCollection(db, `artifacts/${appId}/scheduledClasses`), classData);
-                      showMessage('Clase única programada exitosamente! (Pendiente de pago)', 'success');
+                      showMessage(`Clase única programada exitosamente! (Pendiente de pago)${warnSuffix}`, groupWarning ? 'info' : 'success');
                     }
                 }
 
@@ -917,6 +958,7 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                 const startPeriodDate = new Date(year, month - 1, day);
                 const classesToAdd = [];
                 const skippedBlockedDays = [];
+                const groupWarnings = new Set();
                 const actualYear = startPeriodDate.getFullYear();
                 const actualMonth = startPeriodDate.getMonth();
                 const daysInMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
@@ -957,6 +999,8 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                             setLoading(false);
                             return;
                         }
+                        const groupWarning = getGroupClassWarning(classesOnTargetDate, { startTime: classStartTime, studentType: monthlyClassType });
+                        if (groupWarning) groupWarnings.add(groupWarning);
 
                         classesToAdd.push({ studentId, studentName, studentType: monthlyClassType, classDate: formattedDate, startTime: classStartTime, endTime, duration: classDuration, isPaid: false, userId, scheduledAt: new Date(), scheduleType: 'monthly', attendanceStatus: null, status: 'scheduled',topicLink: topicLink || null });
                     }
@@ -1028,7 +1072,8 @@ export const ScheduleClassForm = ({ db, userId, appId, showMessage, onClose, edi
                     const formattedSkippedDays = skippedBlockedDays.map(formatDateToDDMMYYYY).join(', ');
                     successMessage += ` Se omitieron los días bloqueados: ${formattedSkippedDays}.`;
                 }
-                showMessage(successMessage, 'success');
+                if (groupWarnings.size > 0) successMessage += ` ⚠️ ${[...groupWarnings].join(' ')}`;
+                showMessage(successMessage, groupWarnings.size > 0 ? 'info' : 'success');
             }
             onClose && onClose();
         } catch (e) {
