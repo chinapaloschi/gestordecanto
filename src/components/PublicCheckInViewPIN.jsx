@@ -118,7 +118,7 @@ function NotificationStatusBanner({ appId, studentId, showToast }) {
   );
 }
 
-export const PublicCheckInViewPIN = ({ db }) => {
+export const PublicCheckInViewPIN = ({ db, forcedStudent = null, forcedAppId = null, onExitPreview = null }) => {
 
   const [activeTab, setActiveTab] = React.useState('inicio');
 
@@ -140,9 +140,13 @@ export const PublicCheckInViewPIN = ({ db }) => {
   const [pinInput, setPinInput] = React.useState('');
   const [needsPin, setNeedsPin] = React.useState(false);
 
-  const [student, setStudent] = React.useState(null);
+  // Modo "vista previa" para el admin: entra directo con el alumno elegido
+  // (estado inicial perezoso, para no mostrar ni una vez la pantalla de
+  // DNI/PIN), sin persistir sesión en este dispositivo y sin registrar
+  // notificaciones push a nombre del alumno.
+  const [student, setStudent] = React.useState(() => forcedStudent || null);
   const [pendingAutoStudent, setPendingAutoStudent] = React.useState(null);
-  const [autoLoginChecked, setAutoLoginChecked] = React.useState(false);
+  const [autoLoginChecked, setAutoLoginChecked] = React.useState(() => !!forcedStudent);
 
   const [status, setStatus] = React.useState({ step: 'ok', msg: 'Completá tu DNI para ingresar.' });
 
@@ -219,7 +223,7 @@ export const PublicCheckInViewPIN = ({ db }) => {
 const [showAttendanceOptions, setShowAttendanceOptions] = useState(false);
 
 
-  const [appId, setLocalAppId] = React.useState(null);
+  const [appId, setLocalAppId] = React.useState(forcedAppId || null);
 
 React.useEffect(() => {
 
@@ -566,6 +570,7 @@ const getCurrentWeekRange = () => {
   // Login logic (existente)
 
   React.useEffect(() => {
+    if (forcedAppId) return; // vista previa del admin: el appId ya viene fijo por prop
 
     try {
 
@@ -574,7 +579,7 @@ const getCurrentWeekRange = () => {
       setLocalAppId(getParam('a'));
 
     } catch (e) { console.error(e); }
-  }, []);
+  }, [forcedAppId]);
 
   // Sesión guardada: si el alumno ya inició sesión antes en este teléfono,
   // le preguntamos "¿sos vos?" antes de entrar directo — un celular puede
@@ -1214,6 +1219,15 @@ const renderCalendarGrid = () => {
       )}
 
       {/* ══ APP ══ */}
+      {forcedStudent && student && (
+        <div className="bg-amber-400 text-amber-950 px-4 py-2 flex items-center gap-3 text-xs font-bold sticky top-0 z-[60]"
+          style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top))' }}>
+          <span className="flex-1">👁️ Vista previa — viendo como {student.name || student.fullName}</span>
+          <button onClick={() => onExitPreview && onExitPreview()}
+            className="bg-amber-950 text-white px-3 py-1 rounded-lg hover:bg-amber-900 transition">Salir</button>
+        </div>
+      )}
+
       {student && !student.photoURL && (
         <div className="min-h-screen bg-gradient-to-br from-rose-950 via-rose-800 to-pink-700 flex items-center justify-center px-4"
           style={{ paddingTop: 'max(1.5rem, calc(env(safe-area-inset-top) + 1rem))' }}>
@@ -1222,8 +1236,8 @@ const renderCalendarGrid = () => {
             <h2 className="font-display font-semibold text-lg text-gray-900">¡Sumá tu foto de perfil!</h2>
             <p className="text-sm text-gray-500">Para continuar necesitamos una foto tuya — así Sandra puede reconocerte. Es obligatoria para usar la app.</p>
             <ProfilePictureUploader db={db} appId={appId} student={student} setStudent={setStudent} />
-            <button onClick={cambiarUsuario}
-              className="text-xs font-semibold text-gray-400 hover:text-gray-600 transition">Cambiar usuario</button>
+            {!forcedStudent && <button onClick={cambiarUsuario}
+              className="text-xs font-semibold text-gray-400 hover:text-gray-600 transition">Cambiar usuario</button>}
           </div>
         </div>
       )}
@@ -1254,10 +1268,10 @@ const renderCalendarGrid = () => {
                       Debe
                     </span>
                   : <span />}
-              <button onClick={cambiarUsuario}
+              {!forcedStudent && <button onClick={cambiarUsuario}
                 className="text-[11px] font-medium text-rose-200 hover:text-white transition whitespace-nowrap flex-shrink-0">
                 Cambiar usuario
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -1344,7 +1358,7 @@ const renderCalendarGrid = () => {
                 </div>
               )}
 
-              <NotificationStatusBanner appId={appId} studentId={student?.id} showToast={showToast} />
+              {!forcedStudent && <NotificationStatusBanner appId={appId} studentId={student?.id} showToast={showToast} />}
 
               {/* CTA pago */}
               {showCta && (

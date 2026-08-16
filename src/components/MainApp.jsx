@@ -52,6 +52,7 @@ import { MassEventsAdminModal } from './MassEvents.jsx';
 // que se abren), así que las cargamos bajo demanda en vez de sumarlas al
 // bundle principal que se descarga en cada sesión.
 const BlockDaysModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.BlockDaysModal })));
+const StudentPreviewModal = React.lazy(() => import('./StudentPreviewModal.jsx').then(m => ({ default: m.StudentPreviewModal })));
 const BackupRestoreModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.BackupRestoreModal })));
 const OptimizeStudentPhotosModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.OptimizeStudentPhotosModal })));
 import { AvailableSlotsManager } from './AvailableSlotsManager.jsx';
@@ -361,6 +362,7 @@ const { amountsHidden, toggleAmountsHidden } = useAmountsHidden();
     const [showAttendanceModal, setShowAttendanceModal] = useState(false);
 
     const [showBlockDaysModal, setShowBlockDaysModal] = useState(false);
+    const [showStudentPreviewModal, setShowStudentPreviewModal] = useState(false);
 
     const [studentToDelete, setStudentToDelete] = useState(null);
 
@@ -1736,6 +1738,10 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
                       <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
                       Pre-inscriptos
                     </button>
+                    <button onClick={() => setShowStudentPreviewModal(true)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-700 hover:bg-rose-50 hover:text-rose-700 transition text-sm font-medium">
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                      Ver como alumno
+                    </button>
                   </div>
 
                   {/* CATÁLOGO */}
@@ -2273,6 +2279,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
 
             <React.Suspense fallback={null}>
               <Modal size="xl" isOpen={showBlockDaysModal} onClose={() => setShowBlockDaysModal(false)}><BlockDaysModal db={db} userId={userId} appId={appId} showMessage={showMessage} onClose={() => setShowBlockDaysModal(false)} blockedSlots={blockedSlots} scheduledClasses={scheduledClasses} /></Modal>
+              <Modal size="xl" isOpen={showStudentPreviewModal} onClose={() => setShowStudentPreviewModal(false)}><StudentPreviewModal db={db} appId={appId} students={students} onClose={() => setShowStudentPreviewModal(false)} /></Modal>
             </React.Suspense>
 
             <Modal size="sm" isOpen={showConfirmDeleteStudentModal} onClose={() => setShowConfirmDeleteStudentModal(false)}>
