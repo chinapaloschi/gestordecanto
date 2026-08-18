@@ -75,6 +75,7 @@ async function sendDirectMessage({ db, appId, student, text, authorEmail }) {
 // Componente público: muestra mensajes (broadcast + directos al alumno) con dismiss
 export function PublicMessages({ db, appId, student }) {
   const [rows, setRows] = React.useState([]);
+  const [loadError, setLoadError] = React.useState(false);
   const [dismissed, setDismissed] = React.useState(() => {
     try {
       const key = `dismissed_msgs_${student?.id}`;
@@ -117,14 +118,17 @@ export function PublicMessages({ db, appId, student }) {
       setRows(merged);
     };
 
+    // Antes ninguno de los dos listeners tenía callback de error — si
+    // fallaban (permisos, conexión), la sección quedaba vacía y sin ningún
+    // aviso de que algo salió mal, indistinguible de "no hay mensajes".
     const u1 = onSnapshot(qBroadcast, snap => {
       broadcast = snap.docs.map(d => ({ id: d.id, ...(d.data() || {}), scope: 'todos' }));
       apply();
-    });
+    }, () => setLoadError(true));
     const u2 = onSnapshot(qDirect, snap => {
       direct = snap.docs.map(d => ({ id: d.id, ...(d.data() || {}), scope: 'directo' }));
       apply();
-    });
+    }, () => setLoadError(true));
 
     return () => { try { u1(); u2(); } catch {} };
   }, [db, appId, student?.id]);
@@ -139,7 +143,16 @@ export function PublicMessages({ db, appId, student }) {
   };
 
   const visible = rows.filter(m => !dismissed.has(m.id));
-  if (!visible.length) return null;
+  if (!visible.length && !loadError) return null;
+
+  if (!visible.length && loadError) {
+    return (
+      <div className="rounded-xl border border-amber-100 bg-amber-50 shadow-sm mt-4 px-4 py-3 flex items-center gap-2">
+        <span className="text-lg flex-shrink-0">⚠️</span>
+        <p className="text-xs text-amber-800">No pudimos cargar tus mensajes. Revisá tu conexión y volvé a intentar.</p>
+      </div>
+    );
+  }
 
   const fmt = (ts) => {
     try {

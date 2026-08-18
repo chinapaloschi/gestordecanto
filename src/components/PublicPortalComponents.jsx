@@ -22,6 +22,7 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
   const [qrCache, setQrCache] = React.useState({});
   const [qrErrors, setQrErrors] = React.useState({});
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
 
   const [openEventId, setOpenEventId] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -114,6 +115,7 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
             }
           }, (error) => {
             console.error(`Error en listener de tickets para evento ${eventDoc.id}:`, error);
+            if (alive) setLoadError(true);
           });
 // ...el resto del bloque (la llave de cierre '});' y 'unsubscribers.push(unsub);')
           unsubscribers.push(unsub);
@@ -121,6 +123,7 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
 
       } catch (error) {
         console.error("Error al buscar entradas públicas:", error);
+        if (alive) setLoadError(true);
       } finally {
         if (alive) setLoading(false);
       }
@@ -226,10 +229,18 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
     return Array.from(m.entries()).map(([id, data]) => ({ id, ...data }));
   }, [tickets, eventsById]);
 
-  if (loading || tickets.length === 0) {
-    return null;
+  if (loading) return null;
+
+  if (tickets.length === 0) {
+    if (!loadError) return null;
+    return (
+      <div className="rounded-xl border border-amber-100 bg-amber-50 shadow-sm mt-4 px-4 py-3 flex items-center gap-2">
+        <span className="text-lg flex-shrink-0">⚠️</span>
+        <p className="text-xs text-amber-800">No pudimos cargar tus entradas. Revisá tu conexión y volvé a intentar.</p>
+      </div>
+    );
   }
-  
+
   return (
     <>
       <div className="rounded-lg border border-gray-200 p-4 bg-white shadow-sm">
@@ -390,6 +401,19 @@ export const PublicPaymentsList = ({ db, appId, student }) => {
     return nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1);
   };
 
+  // Muestra a qué mes corresponde el pago (periodStartDate) cuando difiere
+  // del mes en que se cargó — antes el historial solo mostraba la fecha de
+  // carga, así que un pago atrasado o adelantado no se distinguía de uno
+  // hecho en término.
+  const periodLabel = (periodStartDate, paymentDate) => {
+    if (!periodStartDate) return null;
+    if (String(periodStartDate).slice(0, 7) === ymKey(paymentDate)) return null;
+    try {
+      const label = new Date(periodStartDate + 'T12:00:00').toLocaleDateString('es-AR', { month: 'short', year: 'numeric' });
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    } catch { return null; }
+  };
+
   const payments = React.useMemo(() => (showOnlyAll ? merged : merged.slice(0, 5)), [merged, showOnlyAll]);
   
   const groups = React.useMemo(() => {
@@ -466,18 +490,22 @@ export const PublicPaymentsList = ({ db, appId, student }) => {
                 {openMonths[key] && (
                   <div className="px-4 pb-4 pt-2">
                     <div className="flex flex-wrap gap-2">
-                      {rows.map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => setSelectedPayment(p)}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-full border border-gray-300 hover:border-rose-400 hover:bg-rose-50 transition-all shadow-sm"
-                        >
-                          <span className="text-xs font-mono text-gray-600">{fmtShort(p.date)}</span>
-                          <span className="font-bold text-sm text-gray-800">
-                            ${new Intl.NumberFormat('es-AR').format(p.amount ?? 0)}
-                          </span>
-                        </button>
-                      ))}
+                      {rows.map((p) => {
+                        const pLabel = periodLabel(p.periodStartDate, p.date);
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => setSelectedPayment(p)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-full border border-gray-300 hover:border-rose-400 hover:bg-rose-50 transition-all shadow-sm"
+                          >
+                            <span className="text-xs font-mono text-gray-600">{fmtShort(p.date)}</span>
+                            <span className="font-bold text-sm text-gray-800">
+                              ${new Intl.NumberFormat('es-AR').format(p.amount ?? 0)}
+                            </span>
+                            {pLabel && <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">Cubre {pLabel}</span>}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -495,6 +523,12 @@ export const PublicPaymentsList = ({ db, appId, student }) => {
                     <p className="text-xs text-gray-500">Comprobante</p>
                     <h3 className="text-lg font-bold text-gray-800">{selectedPayment.concept}</h3>
                     <p className="text-sm text-gray-600">{fmtShort(selectedPayment.date)}</p>
+                    {periodLabel(selectedPayment.periodStartDate, selectedPayment.date) && (
+                      <p className="text-xs text-blue-600 font-semibold mt-0.5">Cubre {periodLabel(selectedPayment.periodStartDate, selectedPayment.date)}</p>
+                    )}
+                    {selectedPayment.surchargeApplied && (
+                      <p className="text-xs text-amber-600 font-semibold mt-0.5">Incluye 10% de recargo por mora</p>
+                    )}
                 </div>
                 <p className="font-extrabold text-2xl text-rose-600">
                     ${new Intl.NumberFormat('es-AR').format(selectedPayment.amount ?? 0)}

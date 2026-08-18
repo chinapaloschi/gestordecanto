@@ -66,6 +66,8 @@ function getArgentinaDateKey() {
   return fmt.format(new Date());
 }
 
+const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
 const STUDENT_SESSION_KEY = 'sp_checkin_student_id';
 
 // Antes el registro de notificaciones del alumno era completamente
@@ -564,6 +566,11 @@ const getCurrentWeekRange = () => {
       return `${d}/${m}/${y}`;
 
   }, [todayKey]);
+
+  const mesActualLabel = useMemo(
+    () => capitalize(new Date(todayKey + 'T12:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })),
+    [todayKey]
+  );
 
 
 
@@ -1393,7 +1400,7 @@ const renderCalendarGrid = () => {
                   <div className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center flex-shrink-0">
                     <svg className="w-[18px] h-[18px] text-green-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
                   </div>
-                  <div><p className="font-display font-semibold text-green-800 text-sm">Cuota al día</p><p className="text-xs text-green-600 mt-0.5">Tu pago de este mes fue recibido. Gracias.</p></div>
+                  <div><p className="font-display font-semibold text-green-800 text-sm">Cuota al día</p><p className="text-xs text-green-600 mt-0.5">{mesActualLabel} pagado. Gracias.</p></div>
                 </div>
               )}
               {showDue && (
@@ -1422,7 +1429,7 @@ const renderCalendarGrid = () => {
               )}
 
               {/* Convocatorias / eventos masivos pendientes de confirmar */}
-              <MassEventsStudentSection db={db} appId={appId} student={student} />
+              <MassEventsStudentSection db={db} appId={appId} student={student} showMessage={(text, kind) => showToast(text, kind)} />
 
               {/* Próxima clase — boleta de función */}
               {showNext && (
@@ -1564,7 +1571,7 @@ const renderCalendarGrid = () => {
                 <div className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center flex-shrink-0">
                   <svg className="w-[18px] h-[18px] text-green-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
                 </div>
-                <div><p className="font-display font-semibold text-green-800 text-sm">Cuota al día</p><p className="text-xs text-green-600 mt-0.5">Tu pago fue recibido.</p></div>
+                <div><p className="font-display font-semibold text-green-800 text-sm">Cuota al día</p><p className="text-xs text-green-600 mt-0.5">{mesActualLabel} pagado.</p></div>
               </div>
             ) : publicTotalToday > 0 ? (
               <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">

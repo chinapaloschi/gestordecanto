@@ -56,6 +56,8 @@ export function useMergedValidatedPayments(db, appId, studentId) {
         date: finalPaymentDate,
         amount: paidAmount(data),
         concept: note,
+        periodStartDate: data.periodStartDate || null,
+        surchargeApplied: data.surchargeApplied === true,
         _order: ultimateTimestamp,
         _source: source,
       };
@@ -85,7 +87,7 @@ export function useMergedValidatedPayments(db, appId, studentId) {
 
         const existing = index.get(key);
         if (existing && existing._source !== p._source) {
-          index.set(key, { ...existing, ...p });
+          index.set(key, { ...existing, ...p, periodStartDate: p.periodStartDate || existing.periodStartDate });
         } else if (existing) {
           index.set(`${key}|${p.id}`, p);
         } else {

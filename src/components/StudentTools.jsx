@@ -714,12 +714,12 @@ function VoiceRecorder({ db, appId, student }) {
             <span className="text-xs text-gray-400">/ 1:00</span>
           </div>
         )}
-        <button onClick={isRec ? stopRec : startRec}
-          className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-lg transition font-bold
+        <button onClick={isRec ? stopRec : startRec} disabled={sending !== null}
+          className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-lg transition font-bold disabled:opacity-40
             ${isRec ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-rose-600 hover:bg-rose-700 text-white'}`}>
           {isRec ? '⏹' : '🎙️'}
         </button>
-        <p className="text-xs text-gray-400">{isRec ? 'Tocá para detener' : 'Tocá para grabar'}</p>
+        <p className="text-xs text-gray-400">{sending !== null ? 'Enviando grabación...' : isRec ? 'Tocá para detener' : 'Tocá para grabar'}</p>
       </div>
 
       {recError && (

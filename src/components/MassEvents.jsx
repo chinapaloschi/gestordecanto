@@ -636,13 +636,15 @@ export const MassEventsAdminModal = ({ isOpen, onClose, db, appId, students, sho
     </Modal>
   );
 };
-export const MassEventsStudentSection = ({ db, appId, student }) => {
+export const MassEventsStudentSection = ({ db, appId, student, showMessage: showMessageProp }) => {
   const [events, setEvents] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState(null);
   const [selectedOption, setSelectedOption] = useState({});
-  const showMessage = (text, type) => alert(`${type}: ${text}`);
+  // Antes esto usaba alert() nativo — brusco e inconsistente con el resto
+  // del portal, que muestra los avisos como toast.
+  const showMessage = showMessageProp || ((text, type) => alert(`${type}: ${text}`));
 
   useEffect(() => {
     if (!db || !appId || !student?.id) return;
