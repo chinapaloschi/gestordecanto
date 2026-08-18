@@ -44,6 +44,7 @@ import { EventConfirmationPopup, ConfirmedEventsSection } from './MiscComponents
 import { MinimalReceiptUpload, ProfilePictureUploader } from './UploadComponents.jsx';
 
 import { PublicMessages } from './PortalAlumnoComponents.jsx';
+import { MassEventsStudentSection } from './MassEvents.jsx';
 import { ChromaticTuner } from './PitchPanel.jsx';
 import { StudentTools } from './StudentTools.jsx';
 
@@ -1379,9 +1380,12 @@ const renderCalendarGrid = () => {
                     <svg className="w-4 h-4 text-rose-100" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path strokeLinecap="round" d="M2 10h20"/></svg>
                     <p className="font-display font-semibold text-sm">Pagar mi cuota</p>
                   </div>
-                  <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} receipts={receipts} />
+                  <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} aplicaRecargo={publicSurchargeApplies} receipts={receipts} />
                 </div>
               )}
+
+              {/* Convocatorias / eventos masivos pendientes de confirmar */}
+              <MassEventsStudentSection db={db} appId={appId} student={student} />
 
               {/* Próxima clase — boleta de función */}
               {showNext && (
@@ -1531,7 +1535,7 @@ const renderCalendarGrid = () => {
                   <svg className="w-4 h-4 text-rose-100" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path strokeLinecap="round" d="M2 10h20"/></svg>
                   <p className="font-display font-semibold text-sm">Pagar mi cuota</p>
                 </div>
-                <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} receipts={receipts} />
+                <MinimalReceiptUpload appId={appId} student={student} totalHoy={publicTotalToday} aplicaRecargo={publicSurchargeApplies} receipts={receipts} />
               </div>
             ) : null}
             <div className="bg-white rounded-xl border border-gray-100 p-4">
@@ -1777,7 +1781,7 @@ const renderCalendarGrid = () => {
                 <div className="flex items-start gap-3 p-3 bg-rose-50 border border-rose-100 rounded-xl">
                   <span className="text-xl flex-shrink-0 mt-0.5">✅</span>
                   <p className="text-sm text-rose-900 font-medium">
-                    Registrá tu asistencia en las clases de esta semana tocando cada clase
+                    Registrá tu asistencia tocando la clase de hoy — solo se puede marcar el mismo día
                   </p>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">

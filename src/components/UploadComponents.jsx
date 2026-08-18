@@ -9,7 +9,7 @@ import { BANK_INFO, copyToClipboard } from './PublicPortalComponents.jsx';
 import { __uploadReceiptInline__PATCH__ } from '../utils/authHelpers.js';
 import { resizeImageFile } from '../utils/imageResize.js';
 import { Toast } from './Toast.jsx';
-export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, receipts = [] }) {
+export function MinimalReceiptUpload({ appId, student, totalHoy, aplicaRecargo, onRecalculate, receipts = [] }) {
   const [file, setFile] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -31,7 +31,12 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, onRecalculate, 
   const isAlreadyPending = receiptStatus === 'pending';
   const isApproved = receiptStatus === 'approved';
   const isRejected = receiptStatus === 'rejected';
-  const aplicaRecargo = new Date().getDate() >= 9 && (totalHoy || 0) > 0;
+  // aplicaRecargo viene del padre (misma lógica centralizada en
+  // utils/lateSurcharge.js que decide el cartel "Cuota vencida"/"Cuota
+  // pendiente") — antes este componente reimplementaba su propia versión
+  // simplificada ("¿es día 9+?") que ignoraba si la deuda era del mes
+  // actual, mostrando "+10% recargo" incluso sobre saldo atrasado de un mes
+  // anterior sin recargo real.
 
   const fmtAr = (n) => new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(n || 0);
 

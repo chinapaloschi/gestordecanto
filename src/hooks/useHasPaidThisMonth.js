@@ -17,6 +17,7 @@ export function useHasPaidThisMonth(db, appId, studentId) {
 
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
+    const currentYM = `${y}-${String(m + 1).padStart(2, '0')}`;
 
     let lastSub = [], lastGlob = [];
 
@@ -34,6 +35,16 @@ export function useHasPaidThisMonth(db, appId, studentId) {
         arr.forEach(d => {
           const data = d.data ? (d.data() || {}) : d;
           if (!isValidMonthlyPayment(data)) return;
+          // "Pagó este mes" tiene que mirar qué período cubre el pago
+          // (periodStartDate), no cuándo se cargó (paidAt/paymentDate) — un
+          // pago atrasado de un mes anterior cargado hoy no debe marcar el
+          // mes actual como pagado, y uno adelantado cargado antes de fin de
+          // mes sí debe contar para el mes que empieza. Se usa paidAt solo
+          // como respaldo para pagos viejos sin periodStartDate guardado.
+          if (data.periodStartDate) {
+            if (String(data.periodStartDate).slice(0, 7) === currentYM) paid = true;
+            return;
+          }
           const dt = toDate(data.paidAt || data.paymentDate || data.fechaPago);
           if (!dt) return;
           if (dt.getFullYear() === y && dt.getMonth() === m) paid = true;
