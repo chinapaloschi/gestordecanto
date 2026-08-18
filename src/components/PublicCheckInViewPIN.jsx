@@ -159,6 +159,26 @@ export const PublicCheckInViewPIN = ({ db, forcedStudent = null, forcedAppId = n
   const [pendingAutoStudent, setPendingAutoStudent] = React.useState(null);
   const [autoLoginChecked, setAutoLoginChecked] = React.useState(() => !!forcedStudent);
 
+  // Antes esto usaba la hora local cruda del dispositivo (new Date().getDate()
+  // etc.) calculada una sola vez al montar. La Cloud Function que confirma la
+  // asistencia calcula "hoy" con el huso horario de Argentina explícito — si
+  // el reloj/huso del celular está mal configurado, o si el estudiante dejó
+  // la app abierta desde el día anterior, el botón "Presente" parecía no
+  // hacer nada: el pedido se mandaba igual pero el servidor lo rechazaba por
+  // no ser "hoy", y el modal se cierra en el finally tanto en éxito como en
+  // error. Ahora usa el mismo huso horario que el servidor y se recalcula
+  // periódicamente en vez de una sola vez. Declarado temprano en el
+  // componente porque otros efectos más abajo lo usan en su lista de
+  // dependencias — declararlo después de esos efectos revienta el render
+  // entero con un ReferenceError ("Cannot access before initialization").
+  const [todayKey, setTodayKey] = React.useState(() => getArgentinaDateKey());
+  React.useEffect(() => {
+    const iv = setInterval(() => setTodayKey(getArgentinaDateKey()), 60000);
+    const onVisible = () => { if (document.visibilityState === 'visible') setTodayKey(getArgentinaDateKey()); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+
   const [status, setStatus] = React.useState({ step: 'ok', msg: 'Completá tu DNI para ingresar.' });
 
   const [saving, setSaving] = React.useState(false);
@@ -539,23 +559,6 @@ const getCurrentWeekRange = () => {
   const onlyDigits = (s) => (s || '').replace(/\D+/g, '');
 
   
-
-  // Antes esto usaba la hora local cruda del dispositivo (new Date().getDate()
-  // etc.) calculada una sola vez al montar. La Cloud Function que confirma la
-  // asistencia calcula "hoy" con el huso horario de Argentina explícito — si
-  // el reloj/huso del celular está mal configurado, o si el estudiante dejó
-  // la app abierta desde el día anterior, el botón "Presente" parecía no
-  // hacer nada: el pedido se mandaba igual pero el servidor lo rechazaba por
-  // no ser "hoy", y el modal se cierra en el finally tanto en éxito como en
-  // error. Ahora usa el mismo huso horario que el servidor y se recalcula
-  // periódicamente en vez de una sola vez.
-  const [todayKey, setTodayKey] = React.useState(() => getArgentinaDateKey());
-  React.useEffect(() => {
-    const iv = setInterval(() => setTodayKey(getArgentinaDateKey()), 60000);
-    const onVisible = () => { if (document.visibilityState === 'visible') setTodayKey(getArgentinaDateKey()); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible); };
-  }, []);
 
   
 
