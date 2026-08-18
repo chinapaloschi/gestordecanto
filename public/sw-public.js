@@ -1,4 +1,4 @@
-// sw-public.js — PÚBLICO (versión: 2026-08-18T13-20-11-665Z_wadexz)
+// sw-public.js — PÚBLICO (versión: 2026-08-18T13-24-57-020Z_kch2vg)
 
 self.addEventListener('install', (event) => {
   // NO hacemos skipWaiting aquí (evita bucles).

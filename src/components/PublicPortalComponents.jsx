@@ -8,7 +8,6 @@ import { formatMoneyAr, parseMoneyAr } from '../utils/money.js';
 import { formatDateToDDMMYYYY, mapClassTypeToSpanish, daysOfWeekFull } from '../utils/classHelpers.js';
 import { useMergedValidatedPayments } from '../hooks/useMergedValidatedPayments.js';
 import { useHasPaidThisMonth } from '../hooks/useHasPaidThisMonth.js';
-import { useLatestPackagePaid } from '../hooks/useLatestPackagePaid.js';
 import { PaymentHistoryModal } from './PaymentHistoryModal.jsx';
 import { SocialMediaLinks } from './SocialMediaLinks.jsx';
 import { GracePeriodNotice, NextMonthInfoBox } from './PublicPortalWidgets.jsx';

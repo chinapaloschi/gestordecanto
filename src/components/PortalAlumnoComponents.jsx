@@ -12,7 +12,6 @@ import { formatDateToDDMMYYYY, mapClassTypeToSpanish, daysOfWeekFull } from '../
 import { getLocalToday, toLocalYYYYMMDD } from '../utils/dateHelpers.js';
 import { useMergedValidatedPayments } from '../hooks/useMergedValidatedPayments.js';
 import { useHasPaidThisMonth } from '../hooks/useHasPaidThisMonth.js';
-import { useLatestPackagePaid } from '../hooks/useLatestPackagePaid.js';
 import { useNewReceiptsFlag } from '../hooks/useNewReceiptsFlag.js';
 import { GracePeriodNotice, NextMonthInfoBox } from './PublicPortalWidgets.jsx';
 import { SocialMediaLinks } from './SocialMediaLinks.jsx';
@@ -22,8 +21,6 @@ import { EventConfirmationPopup, ConfirmedEventsSection } from './MiscComponents
 import { MassEventsStudentSection } from './MassEvents.jsx';
 import { ROUTES } from '../constants.js';
 import { IconCalendar, IconCreditCard, IconPackage, IconReceipt, IconDownload, IconShare, IconUsers, IconClock } from './Icons.jsx';
-import QRCode from 'qrcode';
-import QRCodeWithLogo from 'qrcode-with-logos';
 import { ROUTES as R } from '../constants.js';
 import { ASSET_VER } from '../constants.js';
 import { IconTrash } from './Icons.jsx';
@@ -32,101 +29,6 @@ import { ReceiptsCenter } from './ReceiptsComponents.jsx';
 import { VoiceNotesCenter } from './VoiceNotesCenter.jsx';
 import { ALLOWED_EMAILS } from './AuthComponents.jsx';
 import { ChromaticTuner } from './PitchPanel.jsx';
-export const TicketMiniCard = ({ appId, eventId, eventMeta, attendee }) => {
-  const [qr, setQr] = React.useState(null);
-  const LOGO_URL = `/nuevologo.gif?v=${ASSET_VER}`;
-
-  const ticketUrl = React.useMemo(() => {
-    const base = `${window.location.origin}/${ROUTES.CHECKIN}`;
-    const p = new URLSearchParams({ a: appId || "", e: eventId || "", s: attendee?.id || "" });
-    return `${base}?${p.toString()}`;
-  }, [appId, eventId, attendee?.id]);
-
-  React.useEffect(() => {
-    if (!ticketUrl) return;
-    QRCode.toDataURL(ticketUrl, { margin: 0, scale: 8 })
-      .then(setQr)
-      .catch(console.error);
-  }, [ticketUrl]);
-
-  const waHref = React.useMemo(() => {
-    const texto = [
-      `🎟️ ${eventMeta?.title || "Evento"}`,
-      eventMeta?.date ? `📅 ${eventMeta.date}${eventMeta?.startTime ? ` · ${eventMeta.startTime}` : ""}` : "",
-      eventMeta?.location ? `📍 ${eventMeta.location}` : "",
-      "",
-      "Entrada:"
-    ].filter(Boolean).join("\\n");
-    return `https://wa.me/?text=${encodeURIComponent(texto + "\\n" + ticketUrl)}`;
-  }, [ticketUrl, eventMeta]);
-
-  return (
-    <div className="max-w-xs bg-white rounded-lg sm:rounded-2xl shadow p-4 flex flex-col items-center gap-2 border border-gray-200">
-      {/* Encabezado con logo */}
-      <div className="flex items-center gap-2">
-        <img
-          src={LOGO_URL}
-          alt="Logo"
-          className="h-8 w-8 rounded-md object-contain ring-1 ring-gray-300 bg-white p-1"
-          onError={(e)=>{ e.currentTarget.style.display='none'; }}
-        />
-        <div className="leading-tight">
-          <div className="text-[11px] uppercase tracking-widest text-gray-500">Entrada</div>
-          <div className="font-bold text-gray-800">{eventMeta?.title || "Evento"}</div>
-        </div>
-      </div>
-
-      {/* Fecha / lugar */}
-      <div className="text-sm sm:text-base sm:text-sm text-gray-600 text-center">
-        {eventMeta?.location || "Lugar"}<br />
-        {eventMeta?.date ? formatDateToDDMMYYYY(eventMeta.date) : "DD/MM/AAAA"}{eventMeta?.startTime ? ` · ${eventMeta.startTime}` : ""}
-      </div>
-
-      {/* QR con overlay de logo (NO muestra URL en texto) */}
-      <div className="relative p-2 bg-white rounded-lg sm:rounded-xl shadow">
-        {qr ? (
-          <div className="relative h-48 w-48">
-            <div className="relative h-[220px] w-[220px] mx-auto">  <img src={qr} alt="QR" className="h-[220px] w-[220px] rounded-md" />  <div className="absolute inset-0 grid place-items-center pointer-events-none">    <div className="h-11 sm:h-14 w-14 rounded-md bg-white grid place-items-center shadow">      <img src={LOGO_URL_QR} alt="Logo" className="h-10 sm:h-12 w-12 object-contain" onError={(e)=>{ e.currentTarget.style.display='none'; }} />    </div>  </div></div>
-            {/* Logo centrado sobre el QR */}
-            <div className="absolute inset-0 grid place-items-center pointer-events-none">
-              <div className="h-10 w-10 rounded-md bg-white grid place-items-center shadow">
-                <img
-                  src={LOGO_URL}
-                  alt="Logo"
-                  className="h-8 w-8 object-contain"
-                  onError={(e)=>{ e.currentTarget.style.display='none'; }}
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="h-48 w-48 grid place-items-center text-gray-400">QR…</div>
-        )}
-      </div>
-
-      {/* Acciones (sin mostrar la URL) */}
-      <div className="flex gap-2">
-        {qr && (
-          <a
-            href={qr}
-            download={`QR_${(eventMeta?.title||"evento").replace(/[^\w\-]+/g,"_")}_${(attendee?.name||"titular").replace(/[^\w\-]+/g,"_")}.png`}
-            className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-800 text-sm sm:text-base sm:text-sm font-medium hover:bg-gray-300"
-          >
-            Descargar PNG
-          </a>
-        )}
-        <a
-          href={waHref}
-          target="_blank"
-          rel="noreferrer"
-          className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm sm:text-base sm:text-sm font-medium hover:bg-green-700"
-        >
-          WhatsApp
-        </a>
-      </div>
-    </div>
-  );
-};
 
 
 // ======== [Messaging Helpers + Components] ========
@@ -179,6 +81,18 @@ export function PublicMessages({ db, appId, student }) {
       return new Set(JSON.parse(localStorage.getItem(key) || '[]'));
     } catch { return new Set(); }
   });
+
+  // Si el componente llega a montarse antes de que student.id esté resuelto,
+  // el estado inicial de arriba se calcula con "undefined" y los mensajes
+  // que el alumno ya había ocultado antes podían volver a aparecer. Se
+  // vuelve a leer del localStorage correcto en cuanto se conoce el id real.
+  React.useEffect(() => {
+    if (!student?.id) return;
+    try {
+      const key = `dismissed_msgs_${student.id}`;
+      setDismissed(new Set(JSON.parse(localStorage.getItem(key) || '[]')));
+    } catch {}
+  }, [student?.id]);
 
   React.useEffect(() => {
     if (!db || !appId || !student?.id) return;

@@ -21,7 +21,6 @@ import { useMergedValidatedPayments } from '../hooks/useMergedValidatedPayments.
 
 import { useHasPaidThisMonth } from '../hooks/useHasPaidThisMonth.js';
 
-import { useLatestPackagePaid } from '../hooks/useLatestPackagePaid.js';
 
 import { PublicPaymentsList, PublicTicketsSection } from './PublicPortalComponents.jsx';
 
@@ -264,7 +263,10 @@ React.useEffect(() => {
 
 const getCurrentWeekRange = () => {
 
-  const today = new Date();
+  // Misma fecha de Argentina que todayKey, no new Date() cruda del
+  // dispositivo — evita que el borde de semana caiga en un día distinto
+  // si el huso horario del celular no coincide.
+  const today = new Date(getArgentinaDateKey() + 'T12:00:00');
 
   const day = today.getDay(); // 0 domingo, 1 lunes ... 6 sábado
 
@@ -1069,12 +1071,18 @@ const renderCalendarGrid = () => {
               if (!day) return <div key={di}/>;
 
               const dateStr  = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-              const cls      = allMonthClasses.find(c => c.classDate === dateStr);
+              // Antes esto tomaba una sola clase del día (allMonthClasses.find)
+              // — si el alumno tenía dos clases el mismo día, el puntito solo
+              // reflejaba el estado de una de las dos. Ahora mira todas las
+              // clases reales (sin contar canceladas) y muestra ausente si
+              // falta a alguna, y un contador chico si hay más de una.
+              const classesForDay = allMonthClasses.filter(c => c.classDate === dateStr && c.status !== 'cancelled');
               const blocked  = blockedSlots.find(b => b.date === dateStr);
               const isToday  = dateStr === todayKey;
-              const present  = cls && isPresent(cls.attendanceStatus);
-              const absent   = cls && isAbsent(cls.attendanceStatus);
-              const hasClass = !!cls && !blocked;
+              const hasClass = classesForDay.length > 0 && !blocked;
+              const present  = hasClass && classesForDay.every(c => isPresent(c.attendanceStatus));
+              const absent   = hasClass && classesForDay.some(c => isAbsent(c.attendanceStatus));
+              const multi    = classesForDay.length > 1;
 
               // Días sin clase y sin hoy → número muy tenue
               if (!hasClass && !isToday && !blocked) {
@@ -1086,7 +1094,7 @@ const renderCalendarGrid = () => {
               }
 
               return (
-                <div key={di} className="flex items-center justify-center" style={{ height: 32 }}>
+                <div key={di} className="relative flex items-center justify-center" style={{ height: 32 }}>
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold select-none
                     ${blocked  ? 'bg-rose-100 text-rose-400 ring-1 ring-rose-200' :
                       present  ? 'bg-green-500 text-white shadow-sm' :
@@ -1096,6 +1104,11 @@ const renderCalendarGrid = () => {
                       'bg-gray-100 text-gray-500'}`}>
                     {day}
                   </div>
+                  {multi && (
+                    <span className="absolute top-0 right-0 w-3.5 h-3.5 rounded-full bg-white ring-1 ring-gray-200 text-[8px] font-bold text-gray-500 flex items-center justify-center">
+                      {classesForDay.length}
+                    </span>
+                  )}
                 </div>
               );
             })}
