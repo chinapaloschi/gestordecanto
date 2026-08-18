@@ -57,6 +57,15 @@ import { FCM_VAPID_KEY } from '../constants.js';
 import { isPresent, isAbsent } from '../utils/studentHelpers.js';
 import { UpdateBanner } from './UpdateBanner.jsx';
 
+// Mismo huso horario que usa confirmAttendance del lado del servidor
+// (functions/index.js) — evita que "hoy" difiera entre cliente y servidor
+// por el huso configurado en el dispositivo.
+const ARGENTINA_TZ = 'America/Argentina/Buenos_Aires';
+function getArgentinaDateKey() {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARGENTINA_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(new Date());
+}
+
 const STUDENT_SESSION_KEY = 'sp_checkin_student_id';
 
 // Antes el registro de notificaciones del alumno era completamente
@@ -523,18 +532,21 @@ const getCurrentWeekRange = () => {
 
   
 
-  const todayKey = useMemo(() => {
-
-    const now = new Date();
-
-    const year = now.getFullYear();
-
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-
-    const day = String(now.getDate()).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
-
+  // Antes esto usaba la hora local cruda del dispositivo (new Date().getDate()
+  // etc.) calculada una sola vez al montar. La Cloud Function que confirma la
+  // asistencia calcula "hoy" con el huso horario de Argentina explícito — si
+  // el reloj/huso del celular está mal configurado, o si el estudiante dejó
+  // la app abierta desde el día anterior, el botón "Presente" parecía no
+  // hacer nada: el pedido se mandaba igual pero el servidor lo rechazaba por
+  // no ser "hoy", y el modal se cierra en el finally tanto en éxito como en
+  // error. Ahora usa el mismo huso horario que el servidor y se recalcula
+  // periódicamente en vez de una sola vez.
+  const [todayKey, setTodayKey] = React.useState(() => getArgentinaDateKey());
+  React.useEffect(() => {
+    const iv = setInterval(() => setTodayKey(getArgentinaDateKey()), 60000);
+    const onVisible = () => { if (document.visibilityState === 'visible') setTodayKey(getArgentinaDateKey()); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible); };
   }, []);
 
   
