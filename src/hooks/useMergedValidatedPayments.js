@@ -29,7 +29,7 @@ export function useMergedValidatedPayments(db, appId, studentId) {
       return Number.isFinite(n) ? n : null;
     };
 
-    const norm = (docSnap) => {
+    const norm = (docSnap, source) => {
       const data = docSnap.data() || {};
       const note = data.concept || data.concepto || data.note || data.nota || "Paquete mensual";
 
@@ -57,15 +57,24 @@ export function useMergedValidatedPayments(db, appId, studentId) {
         amount: paidAmount(data),
         concept: note,
         _order: ultimateTimestamp,
+        _source: source,
       };
     };
 
     const applyMerge = (studDocs, globDocs) => {
       const all = [
-        ...studDocs.filter(d => isValidMonthlyPayment(d.data() || {})).map(norm),
-        ...globDocs.filter(d => isValidMonthlyPayment(d.data() || {})).map(norm),
+        ...studDocs.filter(d => isValidMonthlyPayment(d.data() || {})).map(d => norm(d, 'sub')),
+        ...globDocs.filter(d => isValidMonthlyPayment(d.data() || {})).map(d => norm(d, 'glob')),
       ];
 
+      // El mismo pago puede quedar reflejado en dos colecciones distintas
+      // (la subcolección del alumno y la colección global) con IDs de
+      // documento distintos — por eso se agrupa por fecha+monto+concepto en
+      // vez de por ID. Pero eso solo tiene sentido ENTRE colecciones
+      // distintas: dos pagos con esos mismos tres datos que vienen de la
+      // MISMA colección son casi seguro dos pagos genuinamente distintos
+      // (ej. dos cuotas iguales cargadas el mismo día), no había que
+      // fusionarlos.
       const index = new Map();
       for (const p of all) {
         const key = [
@@ -74,8 +83,11 @@ export function useMergedValidatedPayments(db, appId, studentId) {
           String(p.concept || "").toLowerCase().trim()
         ].join("|");
 
-        if (index.has(key)) {
-          index.set(key, { ...index.get(key), ...p });
+        const existing = index.get(key);
+        if (existing && existing._source !== p._source) {
+          index.set(key, { ...existing, ...p });
+        } else if (existing) {
+          index.set(`${key}|${p.id}`, p);
         } else {
           index.set(key, p);
         }

@@ -42,12 +42,17 @@ service firebase.storage {
     }
 
     // GRABACIONES DE VOZ (Herramientas → Grabador de voz → "Enviar a Sandra")
+    // El borrado va separado de la subida: en un delete, Storage no completa
+    // request.resource, así que un solo "allow write" que lo referencia
+    // rechaza cualquier intento de borrar (el alumno o el admin ven "Borrar"
+    // funcionar en la lista, pero el archivo real queda huérfano en Storage).
     match /artifacts/{appId}/students/{studentId}/voiceNotes/{fileName} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null
+      allow create, update: if request.auth != null
                      && isPublicAppPath(appId)
                      && request.resource.size < 15 * 1024 * 1024
                      && request.resource.contentType.matches('audio/.*');
+      allow delete: if request.auth != null && isPublicAppPath(appId);
     }
 
     // --- REGLA PARA LENCERÍA (CON EL AJUSTE PARA GALERÍAS) ---

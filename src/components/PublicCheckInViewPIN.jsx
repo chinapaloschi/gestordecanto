@@ -476,8 +476,11 @@ const getCurrentWeekRange = () => {
     // (MarkPaymentForm.jsx `totalConRecargo`) — misma función compartida, ver
     // utils/lateSurcharge.js. Antes, acá se aplicaba a toda la deuda pendiente
     // (incluida la de meses anteriores) con sólo mirar la fecha de hoy, mostrando
-    // un total más alto del que realmente se cobra.
-    const now = new Date();
+    // un total más alto del que realmente se cobra. Se usa la fecha de
+    // Argentina (todayKey), no new Date() cruda del dispositivo — mismo
+    // motivo que confirmAttendance/todayKey más abajo: el reloj/huso del
+    // celular del alumno puede no coincidir con el real.
+    const now = new Date(todayKey + 'T12:00:00');
 
     const { total: packageSum, anyApplied: pkgApplied } = sumWithSurcharge(
       currentMonthUnpaidPackages,
@@ -509,7 +512,7 @@ const getCurrentWeekRange = () => {
     setPublicTotalToday(totalHoy > 0 ? totalHoy : null);
     setPublicSurchargeApplies(pkgApplied || clsApplied || flexApplied);
 
-  }, [currentMonthUnpaidPackages, unpaidClasses, unpaidFlexCredits]);
+  }, [currentMonthUnpaidPackages, unpaidClasses, unpaidFlexCredits, todayKey]);
 
 
 
@@ -922,9 +925,16 @@ for (const r of rows) {
 
         setMonthlyByType(groups);
 
-        const abon = rows.length;
+        // "Abonadas"/"Restantes" tienen que reflejar el total real del mes,
+        // no el subconjunto ya filtrado para la lista "Tus clases" (pagadas +
+        // primeros 8 días + semana actual) — antes el número podía "subir
+        // solo" con el correr de la semana sin que hubiera pasado nada, y no
+        // servía para verificar que se facturó bien.
+        const activeClasses = rawClasses.filter(c => c.status !== 'cancelled');
 
-        const usadas = rows.filter(r => isPresent(r.attendanceStatus) || isAbsent(r.attendanceStatus)).length;
+        const abon = activeClasses.length;
+
+        const usadas = activeClasses.filter(r => isPresent(r.attendanceStatus) || isAbsent(r.attendanceStatus)).length;
 
         setAbonadas(abon);
 
@@ -1111,7 +1121,7 @@ const renderCalendarGrid = () => {
 
 };
 
-  const showGracePeriodNotice = !hasPaidThisMonth && (new Date().getDate() <= 8) && (monthlyByType.individual?.length > 0 || monthlyByType.grupal?.length > 0 || monthlyByType.otras?.length > 0);
+  const showGracePeriodNotice = !hasPaidThisMonth && (Number(todayKey.slice(8, 10)) <= 8) && (monthlyByType.individual?.length > 0 || monthlyByType.grupal?.length > 0 || monthlyByType.otras?.length > 0);
 
 
 
@@ -1187,7 +1197,7 @@ const renderCalendarGrid = () => {
                   <input
                     id="dni-input"
                     value={dniInput}
-                    onChange={(e) => setDniInput(onlyDigits(e.target.value))}
+                    onChange={(e) => { setDniInput(onlyDigits(e.target.value)); setNeedsPin(false); setPinInput(''); }}
                     onKeyDown={(e) => e.key === 'Enter' && continuar()}
                     placeholder="Ej: 38123456"
                     inputMode="numeric"
@@ -1314,7 +1324,21 @@ const renderCalendarGrid = () => {
           {/* ════════ TAB: INICIO ════════ */}
           {activeTab === 'inicio' && (() => {
             const aplicaRecargo = publicSurchargeApplies;
-            const allClasses = [...(monthlyByType.individual || []), ...(monthlyByType.grupal || []), ...(monthlyByType.otras || [])];
+            // Antes salía de monthlyByType (el subconjunto ya filtrado para
+            // la lista "Tus clases"): "Próxima clase" podía no aparecer si
+            // caía fuera de los primeros 8 días/semana actual, y las stats
+            // del mes (Abonadas, % de asistencia, barras) no reflejaban el
+            // total real. Ahora sale de allMonthClasses, el set completo del
+            // mes que ya se usa para el calendario.
+            const allClasses = (allMonthClasses || [])
+              .filter(c => c.status !== 'cancelled')
+              .map(c => ({
+                id: c.id,
+                date: c.classDate,
+                time: c.startTime || '--:--',
+                status: c.attendanceStatus || 'pending',
+                realType: c.studentType || c.classType || 'individual',
+              }));
             const now = new Date();
             const next = allClasses
               .map(c => { try { return { ...c, __dt: new Date(`${c.date}T${c.time || '00:00'}:00`) }; } catch { return null; } })

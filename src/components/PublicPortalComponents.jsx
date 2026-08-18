@@ -21,6 +21,7 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
   const [tickets, setTickets] = React.useState([]);
   const [eventsById, setEventsById] = React.useState({});
   const [qrCache, setQrCache] = React.useState({});
+  const [qrErrors, setQrErrors] = React.useState({});
   const [loading, setLoading] = React.useState(true);
 
   const [openEventId, setOpenEventId] = useState(null);
@@ -134,21 +135,25 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
     };
   }, [db, appId, student?.id]);
 
+  const generateOneQr = React.useCallback(async (ticketId, eventId) => {
+    try {
+      const url = `${location.origin}/${ROUTES.TICKET}?e=${encodeURIComponent(eventId||'')}&t=${encodeURIComponent(ticketId)}&a=${encodeURIComponent(appId)}`;
+      const dataUrl = await generateQrWithLogo(url, '/logo.png', 256);
+      setQrCache(prev => ({ ...prev, [ticketId]: dataUrl }));
+      setQrErrors(prev => { const next = { ...prev }; delete next[ticketId]; return next; });
+    } catch (e) {
+      console.error("Error generating QR for modal", e);
+      // Antes un fallo acá dejaba el modal en "Cargando QR..." para siempre
+      // — no había ningún estado de error ni forma de reintentar.
+      setQrErrors(prev => ({ ...prev, [ticketId]: true }));
+    }
+  }, [appId]);
+
   React.useEffect(() => {
-    const generateQRs = async () => {
-        const newCache = { ...qrCache };
-        for (const t of tickets) {
-            if (!newCache[t.id]) {
-                try {
-                    const url = `${location.origin}/${ROUTES.TICKET}?e=${encodeURIComponent(t.eventId||'')}&t=${encodeURIComponent(t.id)}&a=${encodeURIComponent(appId)}`;
-                    newCache[t.id] = await generateQrWithLogo(url, '/logo.png', 256);
-                } catch (e) { console.error("Error generating QR for modal", e); }
-            }
-        }
-        setQrCache(newCache);
-    };
-    if (tickets.length > 0) generateQRs();
-  }, [tickets, appId]);
+    for (const t of tickets) {
+      if (!qrCache[t.id] && !qrErrors[t.id]) generateOneQr(t.id, t.eventId);
+    }
+  }, [tickets, generateOneQr]);
 
   const handleShareOrDownload = async (action, ticket, participantName) => {
     setLoading(true);
@@ -277,6 +282,14 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
             <p className="text-sm text-gray-600 mb-4">{fmtDate(selectedTicket.eventDate, selectedTicket.eventStartTime)}</p>
             {qrCache[selectedTicket.id] ? (
               <img src={qrCache[selectedTicket.id]} alt="QR Code" className="w-56 h-56 rounded-lg shadow-md border" />
+            ) : qrErrors[selectedTicket.id] ? (
+              <div className="w-56 h-56 bg-red-50 border border-red-100 flex flex-col items-center justify-center gap-2 rounded-lg text-sm text-red-600 px-4 text-center">
+                <span>No se pudo generar el código.</span>
+                <button type="button" onClick={() => generateOneQr(selectedTicket.id, selectedTicket.eventId)}
+                  className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition">
+                  Reintentar
+                </button>
+              </div>
             ) : (
               <div className="w-56 h-56 bg-gray-100 flex items-center justify-center rounded-lg text-sm">Cargando QR...</div>
             )}
