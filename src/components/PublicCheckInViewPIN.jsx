@@ -293,6 +293,11 @@ React.useEffect(() => {
   const [blockedSlots, setBlockedSlots] = React.useState([]);
 
   const [allMonthClasses, setAllMonthClasses] = React.useState([]);
+  // Clases ya programadas del mes SIGUIENTE aunque todavía no se haya
+  // pagado — se muestran en el calendario en otro color, separado del
+  // fetch de "Tus clases"/estadísticas para no alterar esos filtros.
+  const [nextMonthClasses, setNextMonthClasses] = React.useState([]);
+  const [calMonthOffset, setCalMonthOffset] = React.useState(0); // 0 = mes actual, 1 = mes siguiente
 
 const getCurrentWeekRange = () => {
 
@@ -979,6 +984,28 @@ for (const r of rows) {
 
   }, [db, appId, student?.id, todayKey, tomorrowKey]);
 
+  // Clases del mes SIGUIENTE, ya programadas aunque todavía no se pagaron —
+  // solo para el calendario, así el alumno ve de antemano qué días tiene
+  // sin necesidad de haber pagado ese mes todavía.
+  React.useEffect(() => {
+    if (!db || !appId || !student?.id) { setNextMonthClasses([]); return; }
+    const now = new Date();
+    const nmStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const nmEnd   = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+    const mk = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const qNext = query(
+      fsCollection(db, `artifacts/${appId}/scheduledClasses`),
+      where('studentId', '==', student.id),
+      where('status', '==', 'scheduled'),
+      where('classDate', '>=', mk(nmStart)),
+      where('classDate', '<=', mk(nmEnd))
+    );
+    const unsub = onSnapshot(qNext, snap => {
+      setNextMonthClasses(snap.docs.map(d => ({ id: d.id, ...(d.data() || {}) })));
+    }, () => setNextMonthClasses([]));
+    return () => unsub();
+  }, [db, appId, student?.id]);
+
 // Abrir popup de eventos al iniciar sesión si hay eventos no confirmados
 
 React.useEffect(() => {
@@ -1057,8 +1084,12 @@ React.useEffect(() => {
 
 const renderCalendarGrid = () => {
   const now   = new Date();
-  const year  = now.getFullYear();
-  const month = now.getMonth();
+  const year  = new Date(now.getFullYear(), now.getMonth() + calMonthOffset, 1).getFullYear();
+  const month = new Date(now.getFullYear(), now.getMonth() + calMonthOffset, 1).getMonth();
+  // Mes actual → clases ya cargadas (allMonthClasses). Mes siguiente → el
+  // fetch aparte que solo alimenta este calendario (nextMonthClasses), para
+  // no tocar los filtros de "Tus clases"/estadísticas del mes actual.
+  const classesSource = calMonthOffset === 0 ? allMonthClasses : nextMonthClasses;
 
   // Construir semanas del mes
   const firstDay  = new Date(year, month, 1);
@@ -1073,13 +1104,23 @@ const renderCalendarGrid = () => {
   const weeks = [];
   for (let i = 0; i < allDays.length; i += 7) weeks.push(allDays.slice(i, i + 7));
 
-  const monthLabel = now.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+  const monthLabel = firstDay.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
   const DAY_NAMES  = ['L','M','M','J','V','S','D'];
 
   return (
     <div className="mb-4">
-      {/* Header */}
-      <p className="font-display italic text-sm text-gray-500 mb-3 capitalize">{monthLabel}</p>
+      {/* Header + navegación mes actual / siguiente */}
+      <div className="flex items-center justify-between mb-3">
+        <button type="button" onClick={() => setCalMonthOffset(0)} disabled={calMonthOffset === 0}
+          className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-0 disabled:pointer-events-none transition">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <p className="font-display italic text-sm text-gray-500 capitalize">{monthLabel}</p>
+        <button type="button" onClick={() => setCalMonthOffset(1)} disabled={calMonthOffset === 1}
+          className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-0 disabled:pointer-events-none transition">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
 
       {/* Encabezados de columna */}
       <div className="grid grid-cols-7 mb-1">
@@ -1101,12 +1142,17 @@ const renderCalendarGrid = () => {
               // reflejaba el estado de una de las dos. Ahora mira todas las
               // clases reales (sin contar canceladas) y muestra ausente si
               // falta a alguna, y un contador chico si hay más de una.
-              const classesForDay = allMonthClasses.filter(c => c.classDate === dateStr && c.status !== 'cancelled');
+              const classesForDay = classesSource.filter(c => c.classDate === dateStr && c.status !== 'cancelled');
               const blocked  = blockedSlots.find(b => b.date === dateStr);
               const isToday  = dateStr === todayKey;
               const hasClass = classesForDay.length > 0 && !blocked;
               const present  = hasClass && classesForDay.every(c => isPresent(c.attendanceStatus));
               const absent   = hasClass && classesForDay.some(c => isAbsent(c.attendanceStatus));
+              // Ninguna de las clases de ese día está pagada todavía — se
+              // muestra distinto para que se note que es un día ya
+              // programado pero sin abonar (típico del mes siguiente, antes
+              // de pagar la cuota).
+              const unpaid   = hasClass && !present && !absent && classesForDay.every(c => c.isPaid !== true);
               const multi    = classesForDay.length > 1;
 
               // Días sin clase y sin hoy → número muy tenue
@@ -1125,6 +1171,7 @@ const renderCalendarGrid = () => {
                       present  ? 'bg-green-500 text-white shadow-sm' :
                       absent   ? 'bg-red-400   text-white shadow-sm' :
                       isToday  ? 'bg-rose-600  text-white shadow-sm ring-2 ring-rose-300' :
+                      unpaid   ? 'bg-blue-50   text-blue-600 ring-1 ring-blue-200' :
                       hasClass ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-300' :
                       'bg-gray-100 text-gray-500'}`}>
                     {day}
@@ -1146,6 +1193,7 @@ const renderCalendarGrid = () => {
         {[
           { color: 'bg-green-500', label: 'Presente' },
           { color: 'bg-amber-200 ring-1 ring-amber-300', label: 'Clase' },
+          { color: 'bg-blue-50 ring-1 ring-blue-200', label: 'Sin pagar' },
           { color: 'bg-red-400', label: 'Ausente' },
         ].map(l => (
           <div key={l.label} className="flex items-center gap-1">
