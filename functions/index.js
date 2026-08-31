@@ -761,16 +761,18 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
 
       const result = await admin.messaging().sendEachForMulticast({
         tokens: tokenDocs.map(d => d.data().token),
-        // Sin campo "notification": así el navegador siempre pasa por
-        // onBackgroundMessage en firebase-messaging-sw.js en vez de mostrar
-        // la notificación por su cuenta — necesario para que aparezcan los
-        // botones "Voy"/"No puedo" (actions), que ese handler arma a mano.
+        // Volvió a llevar "notification": la versión solo-datos (para poder
+        // armar los botones "Voy"/"No puedo" a mano) resultó menos confiable
+        // para que el navegador la muestre — sobre todo en iPhone, donde
+        // esos botones no se pueden mostrar de todos modos (WebKit no los
+        // soporta). Se prioriza que el aviso llegue por sobre esos botones.
+        notification: { title, body },
         data: {
-          title, body, url: portalUrl,
-          classId: info.classId || '', studentId, appId,
+          url: portalUrl, classId: info.classId || '', studentId, appId,
           type: 'classReminder',
         },
         webpush: {
+          notification: { title, body, icon: '/icon-192.png', badge: '/icon-32.png', vibrate: [200, 100, 200] },
           fcmOptions: { link: portalUrl },
         },
       });
