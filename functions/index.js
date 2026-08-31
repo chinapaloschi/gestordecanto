@@ -758,32 +758,53 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
       const dayStr  = dayName ? ` el ${dayName}` : ' mañana';
       const body = `Hola ${firstName}! 🎵 Te recuerdo que tenés clase${dayStr}${timeStr}. ¡Nos vemos!`;
       const portalUrl = `https://estudiosandrapaloschi.web.app/#/checkin?a=${appId}`;
+      const commonData = {
+        url: portalUrl, classId: info.classId || '', studentId, appId,
+        type: 'classReminder',
+      };
 
-      const result = await admin.messaging().sendEachForMulticast({
-        tokens: tokenDocs.map(d => d.data().token),
-        // Volvió a llevar "notification": la versión solo-datos (para poder
-        // armar los botones "Voy"/"No puedo" a mano) resultó menos confiable
-        // para que el navegador la muestre — sobre todo en iPhone, donde
-        // esos botones no se pueden mostrar de todos modos (WebKit no los
-        // soporta). Se prioriza que el aviso llegue por sobre esos botones.
-        notification: { title, body },
-        data: {
-          url: portalUrl, classId: info.classId || '', studentId, appId,
-          type: 'classReminder',
-        },
-        webpush: {
-          notification: { title, body, icon: '/icon-192.png', badge: '/icon-32.png', vibrate: [200, 100, 200] },
-          fcmOptions: { link: portalUrl },
-        },
-      });
-      // Igual que en sendPushNotification — antes ningún token de alumno se
-      // limpiaba nunca, así que uno vencido se reintentaba para siempre.
-      result.responses.forEach((resp, idx) => {
-        if (!resp.success && (resp.error?.code === 'messaging/registration-token-not-registered' || resp.error?.code === 'messaging/invalid-registration-token')) {
-          staleRefs.push(tokenDocs[idx].ref);
-        }
-      });
-      totalSent++;
+      // iOS (WebKit) no soporta botones de acción en notificaciones de todos
+      // modos, y ahí el formato "solo datos" resultó menos confiable para que
+      // el navegador la muestre — así que solo a iOS/desconocido se le manda
+      // con "notification" (entrega garantizada). Android/Web sí reciben el
+      // formato solo-datos, que ahí es confiable y deja armar los botones
+      // "Voy"/"No puedo" en el service worker (ver firebase-messaging-sw.js).
+      const iosTokenDocs   = tokenDocs.filter(d => d.data()?.platform !== 'Android' && d.data()?.platform !== 'Web');
+      const otherTokenDocs = tokenDocs.filter(d => d.data()?.platform === 'Android' || d.data()?.platform === 'Web');
+      let anySuccess = false;
+
+      const handleResult = (result, docs) => {
+        result.responses.forEach((resp, idx) => {
+          if (resp.success) anySuccess = true;
+          if (!resp.success && (resp.error?.code === 'messaging/registration-token-not-registered' || resp.error?.code === 'messaging/invalid-registration-token')) {
+            staleRefs.push(docs[idx].ref);
+          }
+        });
+      };
+
+      if (iosTokenDocs.length) {
+        const result = await admin.messaging().sendEachForMulticast({
+          tokens: iosTokenDocs.map(d => d.data().token),
+          notification: { title, body },
+          data: commonData,
+          webpush: {
+            notification: { title, body, icon: '/icon-192.png', badge: '/icon-32.png', vibrate: [200, 100, 200] },
+            fcmOptions: { link: portalUrl },
+          },
+        });
+        handleResult(result, iosTokenDocs);
+      }
+
+      if (otherTokenDocs.length) {
+        const result = await admin.messaging().sendEachForMulticast({
+          tokens: otherTokenDocs.map(d => d.data().token),
+          data: { ...commonData, title, body },
+          webpush: { fcmOptions: { link: portalUrl } },
+        });
+        handleResult(result, otherTokenDocs);
+      }
+
+      if (anySuccess) totalSent++;
     } catch (e) {
       errorCount++;
       console.error(`[Reminders] Error para ${studentId}:`, e.message);
