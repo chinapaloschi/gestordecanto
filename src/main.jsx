@@ -30,11 +30,13 @@ function registerAdminSW() {
       // una visita anterior al portal /checkin en este mismo dispositivo —
       // ambos comparten scope '/' y dejarla generaba banners de actualización
       // pegados reaccionando al service worker que no correspondía.
+      // OJO: nunca tocar firebase-messaging-sw.js acá — es el que procesa
+      // los taps de las notificaciones push.
       try {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.filter(r => {
           const url = r.active?.scriptURL || r.installing?.scriptURL || r.waiting?.scriptURL || '';
-          return url && !url.endsWith('/sw-admin.js');
+          return url && !url.endsWith('/sw-admin.js') && !url.endsWith('/firebase-messaging-sw.js');
         }).map(r => r.unregister().catch(() => {})));
       } catch {}
 

@@ -26,11 +26,15 @@ export async function registerPublicSW() {
   // momento (sw-admin.js) — ambos comparten scope '/', así que si no se
   // limpia, quedan las dos registraciones para siempre y el banner de
   // actualización puede terminar reaccionando a la que no corresponde.
+  // OJO: nunca tocar firebase-messaging-sw.js acá — es el que procesa los
+  // taps de las notificaciones push (incluidos los botones "Voy"/"No
+  // puedo"). Antes esta limpieza lo desregistraba en cada visita al
+  // portal, dejando las notificaciones sin nadie que las escuchara.
   try {
     const regs = await navigator.serviceWorker.getRegistrations();
     await Promise.all(regs.filter(r => {
       const url = r.active?.scriptURL || r.installing?.scriptURL || r.waiting?.scriptURL || '';
-      return url && !url.endsWith('/sw-public.js');
+      return url && !url.endsWith('/sw-public.js') && !url.endsWith('/firebase-messaging-sw.js');
     }).map(r => r.unregister().catch(() => {})));
   } catch {}
 
