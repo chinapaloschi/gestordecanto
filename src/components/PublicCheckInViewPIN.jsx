@@ -790,7 +790,28 @@ const saveAttendance = async (classId, status) => {
 
 };
 
-
+// Si el alumno tocó "✅ Voy" / "❌ No puedo" directo desde los botones del
+// push de recordatorio, el service worker abre la app con estos parámetros
+// en el hash — se procesa automáticamente apenas hay sesión, sin que tenga
+// que buscar la clase y tocarla de nuevo.
+const [quickAttendanceHandled, setQuickAttendanceHandled] = React.useState(false);
+React.useEffect(() => {
+  if (!student?.id || quickAttendanceHandled) return;
+  try {
+    const [hashPath, hashQuery] = (window.location.hash || '').split('?');
+    const qs = new URLSearchParams(hashQuery || '');
+    const action = qs.get('quickAttendance');
+    const classId = qs.get('classId');
+    if ((action !== 'presente' && action !== 'ausente') || !classId) return;
+    setQuickAttendanceHandled(true);
+    saveAttendance(classId, action);
+    // Limpiar los parámetros para que un refresh no vuelva a marcar.
+    qs.delete('quickAttendance');
+    qs.delete('classId');
+    const rest = qs.toString();
+    window.history.replaceState(null, '', window.location.pathname + window.location.search + hashPath + (rest ? `?${rest}` : ''));
+  } catch (e) { console.error(e); }
+}, [student?.id, quickAttendanceHandled]);
 
 const handleClassClick = (classItem) => {
 

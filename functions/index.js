@@ -720,13 +720,16 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
   }
 
   // Agrupar por alumno (el horario más temprano del día)
+  // El campo real en scheduledClasses es startTime — classTime nunca
+  // existió, así que "info.time" siempre había sido '' y el recordatorio
+  // nunca decía la hora (quedaba "Sin hora" en el log de envíos).
   const studentMap = {};
   classesSnap.forEach(d => {
     const cls = d.data();
     if (!cls.studentId || cls.status === 'cancelled') return;
     const existing = studentMap[cls.studentId];
-    if (!existing || (cls.classTime || '') < existing.time) {
-      studentMap[cls.studentId] = { time: cls.classTime || '' };
+    if (!existing || (cls.startTime || '') < existing.time) {
+      studentMap[cls.studentId] = { time: cls.startTime || '', classId: d.id };
     }
   });
 
@@ -758,10 +761,16 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
 
       const result = await admin.messaging().sendEachForMulticast({
         tokens: tokenDocs.map(d => d.data().token),
-        notification: { title, body },
-        data: { url: portalUrl },
+        // Sin campo "notification": así el navegador siempre pasa por
+        // onBackgroundMessage en firebase-messaging-sw.js en vez de mostrar
+        // la notificación por su cuenta — necesario para que aparezcan los
+        // botones "Voy"/"No puedo" (actions), que ese handler arma a mano.
+        data: {
+          title, body, url: portalUrl,
+          classId: info.classId || '', studentId, appId,
+          type: 'classReminder',
+        },
         webpush: {
-          notification: { title, body, icon: '/icon-192.png', badge: '/icon-32.png', vibrate: [200, 100, 200] },
           fcmOptions: { link: portalUrl },
         },
       });
