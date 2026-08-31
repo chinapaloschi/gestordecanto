@@ -813,6 +813,43 @@ React.useEffect(() => {
   } catch (e) { console.error(e); }
 }, [student?.id, quickAttendanceHandled]);
 
+// Si tocó la notificación entera (no un botón), openAttendance trae el
+// classId horneado en el link mismo — así funciona aunque el sistema
+// resuelva el tap por su cuenta y nunca lleguen los datos al service
+// worker (el caso típico en iOS). Busca la clase directo por ID (no
+// depende de que ya esté en alguna lista filtrada) y abre el modal para
+// que el alumno elija Presente/Ausente con un toque más.
+const [openAttendanceHandled, setOpenAttendanceHandled] = React.useState(false);
+React.useEffect(() => {
+  if (!db || !appId || !student?.id || openAttendanceHandled) return;
+  (async () => {
+    try {
+      const [hashPath, hashQuery] = (window.location.hash || '').split('?');
+      const qs = new URLSearchParams(hashQuery || '');
+      const classId = qs.get('openAttendance');
+      if (!classId) return;
+      setOpenAttendanceHandled(true);
+
+      qs.delete('openAttendance');
+      const rest = qs.toString();
+      window.history.replaceState(null, '', window.location.pathname + window.location.search + hashPath + (rest ? `?${rest}` : ''));
+
+      const snap = await getDoc(doc(db, `artifacts/${appId}/scheduledClasses/${classId}`));
+      if (!snap.exists()) return;
+      const cls = snap.data();
+      if (cls.studentId !== student.id) return;
+
+      if (isPresent(cls.attendanceStatus) || isAbsent(cls.attendanceStatus)) {
+        showToast('Ya registraste tu estado para esta clase.', 'info');
+        return;
+      }
+
+      setSelectedClassForAttendance({ id: classId, label: dayLabel(cls.classDate), time: cls.startTime || '--:--' });
+      setShowAttendanceOptions(true);
+    } catch (e) { console.error(e); }
+  })();
+}, [db, appId, student?.id, openAttendanceHandled]);
+
 const handleClassClick = (classItem) => {
 
   if (saving) return;

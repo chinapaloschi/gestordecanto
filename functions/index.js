@@ -757,7 +757,13 @@ async function _sendRemindersForDate(appId, dateKey, source, skipIfAlreadySent =
       const timeStr = info.time ? ` a las ${info.time} hs` : '';
       const dayStr  = dayName ? ` el ${dayName}` : ' mañana';
       const body = `Hola ${firstName}! 🎵 Te recuerdo que tenés clase${dayStr}${timeStr}. ¡Nos vemos!`;
-      const portalUrl = `https://estudiosandrapaloschi.web.app/#/checkin?a=${appId}`;
+      // openAttendance va HORNEADO en la URL del link (no solo en "data"):
+      // en iOS, tocar la notificación puede resolverse con el manejo nativo
+      // del sistema en vez de pasar por nuestro notificationclick, y ahí
+      // "data" no llega — pero fcmOptions.link sí se respeta siempre. Así el
+      // alumno abre directo el modal de marcar asistencia de esa clase, en
+      // vez de tener que buscarla a mano en la pestaña Clases.
+      const portalUrl = `https://estudiosandrapaloschi.web.app/#/checkin?a=${appId}${info.classId ? `&openAttendance=${encodeURIComponent(info.classId)}` : ''}`;
       const commonData = {
         url: portalUrl, classId: info.classId || '', studentId, appId,
         type: 'classReminder',
