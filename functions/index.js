@@ -66,17 +66,19 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
   assertC(classId.length > 0, "Falta classId.");
 
   const db = admin.firestore();
-  const dateKey = todayKey();
+  const todayD = todayKey();
+  const tomorrowD = tomorrowKey();
   const clsRef = db.doc(`artifacts/${appId}/scheduledClasses/${classId}`);
-  const attId = `public_${studentId}_${dateKey}`;
-  const attRef = db.doc(`artifacts/${appId}/attendance/${attId}`);
 
   await db.runTransaction(async (tx) => {
     const clsSnap = await tx.get(clsRef);
     assertC(clsSnap.exists, "Clase no encontrada.");
     const cls = clsSnap.data();
     assertC(cls.studentId === studentId, "Clase no corresponde al alumno.");
-    assertC(cls.classDate === dateKey, "La clase no es hoy.");
+    // Se puede confirmar el día de la clase o la víspera (cuando llega el
+    // recordatorio push "tenés clase mañana"), para que Sandra sepa de
+    // antemano si el alumno va a venir.
+    assertC(cls.classDate === todayD || cls.classDate === tomorrowD, "Sólo podés marcar la clase de hoy o de mañana.");
 
     if (cls.attendanceStatus === "presente" || cls.attendanceStatus === "present") return;
 
@@ -85,9 +87,14 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
     const st = stSnap.exists ? stSnap.data() : {};
     const studentName = st.name || st.fullName || "";
 
+    // Usa la fecha real de la clase (no "hoy") para no mezclar el registro
+    // de una confirmación anticipada con el de la clase de hoy del mismo alumno.
+    const attId = `public_${studentId}_${cls.classDate}`;
+    const attRef = db.doc(`artifacts/${appId}/attendance/${attId}`);
+
     tx.set(attRef, {
       studentId, studentName, classId,
-      dateKey, checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+      dateKey: cls.classDate, checkedAt: admin.firestore.FieldValue.serverTimestamp(),
       via: "public_pin"
     }, { merge: true });
 

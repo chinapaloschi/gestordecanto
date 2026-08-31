@@ -65,6 +65,12 @@ function getArgentinaDateKey() {
   const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARGENTINA_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
   return fmt.format(new Date());
 }
+function getArgentinaTomorrowKey() {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: ARGENTINA_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return fmt.format(d);
+}
 
 const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
@@ -172,9 +178,14 @@ export const PublicCheckInViewPIN = ({ db, forcedStudent = null, forcedAppId = n
   // dependencias — declararlo después de esos efectos revienta el render
   // entero con un ReferenceError ("Cannot access before initialization").
   const [todayKey, setTodayKey] = React.useState(() => getArgentinaDateKey());
+  // El recordatorio push de "tenés clase mañana" llega la noche anterior —
+  // dejamos confirmar presente/ausente desde ese momento, no solo el día,
+  // para que Sandra sepa de antemano si el alumno viene. El servidor
+  // (confirmAttendance) acepta exactamente estos mismos dos días.
+  const [tomorrowKey, setTomorrowKey] = React.useState(() => getArgentinaTomorrowKey());
   React.useEffect(() => {
-    const iv = setInterval(() => setTodayKey(getArgentinaDateKey()), 60000);
-    const onVisible = () => { if (document.visibilityState === 'visible') setTodayKey(getArgentinaDateKey()); };
+    const iv = setInterval(() => { setTodayKey(getArgentinaDateKey()); setTomorrowKey(getArgentinaTomorrowKey()); }, 60000);
+    const onVisible = () => { if (document.visibilityState === 'visible') { setTodayKey(getArgentinaDateKey()); setTomorrowKey(getArgentinaTomorrowKey()); } };
     document.addEventListener('visibilitychange', onVisible);
     return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible); };
   }, []);
@@ -782,7 +793,7 @@ const handleClassClick = (classItem) => {
 
   const alreadyMarked = isPresent(classItem.status) || isAbsent(classItem.status);
 
-  if (classItem.isToday && !alreadyMarked) {
+  if ((classItem.isToday || classItem.isTomorrow) && !alreadyMarked) {
 
     setSelectedClassForAttendance(classItem);
 
@@ -794,9 +805,10 @@ const handleClassClick = (classItem) => {
 
   } else if (classItem.isInCurrentWeek) {
 
-    // Sólo se puede marcar la clase del día de hoy — el servidor rechaza
-    // cualquier otra, aunque sea de esta misma semana.
-    showToast('Sólo podés marcar la clase del día de hoy.', 'info');
+    // Se puede marcar la clase de hoy o la de mañana (apenas llega el
+    // recordatorio) — el servidor rechaza cualquier otro día, aunque sea de
+    // esta misma semana.
+    showToast('Sólo podés marcar la clase de hoy o de mañana.', 'info');
 
   }
 
@@ -900,10 +912,12 @@ for (const r of rows) {
 
   const isInCurrentWeek = r.classDate >= weekRange.start && r.classDate <= weekRange.end;
 
-  // El servidor (confirmAttendance) sólo acepta marcar la clase de HOY —
-  // antes se ofrecía "Marcar →" en toda la semana, lo que hacía fallar el
-  // pedido en silencio para cualquier otro día. Ver hooks más abajo.
+  // El servidor (confirmAttendance) acepta marcar la clase de hoy o la de
+  // mañana (para que el alumno pueda confirmar apenas le llega el
+  // recordatorio la noche anterior) — cualquier otro día, antes se ofrecía
+  // "Marcar →" igual, lo que hacía fallar el pedido en silencio.
   const isToday = r.classDate === todayKey;
+  const isTomorrow = r.classDate === tomorrowKey;
 
   groups[g].push({
 
@@ -920,6 +934,7 @@ for (const r of rows) {
     isInCurrentWeek,   // ← nueva propiedad
 
     isToday,
+    isTomorrow,
 
     topicLink: r.topicLink || null,
 
@@ -962,7 +977,7 @@ for (const r of rows) {
 
     return () => unsub();
 
-  }, [db, appId, student?.id, todayKey]);
+  }, [db, appId, student?.id, todayKey, tomorrowKey]);
 
 // Abrir popup de eventos al iniciar sesión si hay eventos no confirmados
 
@@ -1729,7 +1744,7 @@ const renderCalendarGrid = () => {
                                 const absent   = isAbsent(c.status);
                                 const isWeek   = c.isInCurrentWeek;
                                 const isPast   = new Date(c.date + 'T00:00:00') < today;
-                                const canMark  = c.isToday && !present && !absent;
+                                const canMark  = (c.isToday || c.isTomorrow) && !present && !absent;
                                 const tipo     = (c.realType || '').toLowerCase();
                                 const typeLabel = (tipo === 'choir' || tipo === 'coral') ? 'Coral' : (tipo === 'group' || tipo === 'grupal') ? 'Grupal' : 'Individual';
 
@@ -1828,7 +1843,7 @@ const renderCalendarGrid = () => {
                 <div className="flex items-start gap-3 p-3 bg-rose-50 border border-rose-100 rounded-xl">
                   <span className="text-xl flex-shrink-0 mt-0.5">✅</span>
                   <p className="text-sm text-rose-900 font-medium">
-                    Registrá tu asistencia tocando la clase de hoy — solo se puede marcar el mismo día
+                    Registrá tu asistencia tocando la clase de hoy o de mañana — apenas te llega el recordatorio ya podés avisar si venís
                   </p>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">
