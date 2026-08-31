@@ -82,7 +82,7 @@ const STUDENT_SESSION_KEY = 'sp_checkin_student_id';
 // de Sandra que sí muestra el estado del permiso. Sólo se muestra cuando
 // hay algo para resolver (no se pidió el permiso todavía, o está bloqueado)
 // — si ya está activo, no ocupa lugar en la pantalla principal.
-function NotificationStatusBanner({ appId, studentId, showToast }) {
+function NotificationStatusBanner({ db, appId, studentId, showToast }) {
   const [status, setStatus] = React.useState(() =>
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
   );
@@ -1502,7 +1502,7 @@ const renderCalendarGrid = () => {
                 </div>
               )}
 
-              {!forcedStudent && <NotificationStatusBanner appId={appId} studentId={student?.id} showToast={showToast} />}
+              {!forcedStudent && <NotificationStatusBanner db={db} appId={appId} studentId={student?.id} showToast={showToast} />}
 
               {/* CTA pago */}
               {showCta && (
