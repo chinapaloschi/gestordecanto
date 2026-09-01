@@ -203,9 +203,18 @@ const StudentCardImpl = ({
                 Archivado
               </span>
             ) : hasNewReceipt ? (
-              <span className="text-[10px] font-extrabold bg-amber-100 text-amber-700 px-2.5 py-0.5 rounded-full uppercase">
-                Comprobante ⏳
-              </span>
+              hasDebt ? (
+                <button
+                  onClick={e => { e.stopPropagation(); setShowDebtDetails(true); }}
+                  className="text-[11px] font-extrabold bg-amber-100 text-amber-700 hover:bg-amber-200 px-2.5 py-0.5 rounded-full transition"
+                >
+                  <MaskedAmount>{formatMoneyAr(debt)}</MaskedAmount> ⏳
+                </button>
+              ) : (
+                <span className="text-[10px] font-extrabold bg-amber-100 text-amber-700 px-2.5 py-0.5 rounded-full uppercase">
+                  Comprobante ⏳
+                </span>
+              )
             ) : hasDebt ? (
               <button
                 onClick={e => { e.stopPropagation(); setShowDebtDetails(true); }}
