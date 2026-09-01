@@ -356,13 +356,17 @@ const getCurrentWeekRange = () => {
 
     const qPay = query(pCol, where("studentId", "==", student.id), where("paymentMethod", "==", "monthly_package_payment"), where("isPaidForPackage", "==", false));
 
-    
+    // La cuota pendiente estaba invisible para varios alumnos entrando desde
+    // el celular (PWA o navegador móvil) mientras que desde una computadora
+    // se veía bien — mismo código, mismos datos: apunta a que el listener en
+    // vivo (onSnapshot) a veces no llega a establecer la conexión en una red
+    // móvil y se queda pegado en "sin resultados todavía" para siempre. Se
+    // agrega una lectura única (getDocs) en paralelo como respaldo — si el
+    // listener en vivo nunca llega, esta al menos carga el estado correcto
+    // una vez al entrar.
+    const applyPackagesSnapshot = (docs) => {
 
-    const unsubPay = onSnapshot(qPay, (snap) => {
-
-      const allUnpaidPackages = snap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
-
-      // ... (Lógica de filtrado de paquetes existente se mantiene igual) ...
+      const allUnpaidPackages = docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
 
       const now = new Date();
 
@@ -408,7 +412,10 @@ const getCurrentWeekRange = () => {
 
       setNextMonthPackage(futurePackage);
 
-    });
+    };
+
+    const unsubPay = onSnapshot(qPay, (snap) => applyPackagesSnapshot(snap.docs));
+    getDocs(qPay).then(snap => applyPackagesSnapshot(snap.docs)).catch(() => {});
 
 
 
@@ -416,21 +423,17 @@ const getCurrentWeekRange = () => {
 
     const qCls = query(cCol, where("studentId", "==", student.id), where("scheduleType", "==", "single"), where("isPaid", "==", false));
 
-    const unsubCls = onSnapshot(qCls, (snap) => {
-
-      const classes = snap.docs.map(d => d.data() || {});
-
-      setUnpaidClasses(classes);
-
-    });
+    const applyClassesSnapshot = (docs) => setUnpaidClasses(docs.map(d => d.data() || {}));
+    const unsubCls = onSnapshot(qCls, (snap) => applyClassesSnapshot(snap.docs));
+    getDocs(qCls).then(snap => applyClassesSnapshot(snap.docs)).catch(() => {});
 
 
 
     // Abonos flexibles pendientes de cobro
     const qFlex = query(pCol, where("studentId", "==", student.id), where("paymentMethod", "==", "abono_flexible"), where("isPaidForPackage", "==", false));
-    const unsubFlex = onSnapshot(qFlex, (snap) => {
-      setUnpaidFlexCredits(snap.docs.map(d => ({ id: d.id, ...(d.data() || {}) })));
-    });
+    const applyFlexSnapshot = (docs) => setUnpaidFlexCredits(docs.map(d => ({ id: d.id, ...(d.data() || {}) })));
+    const unsubFlex = onSnapshot(qFlex, (snap) => applyFlexSnapshot(snap.docs));
+    getDocs(qFlex).then(snap => applyFlexSnapshot(snap.docs)).catch(() => {});
 
     // ✅ NUEVO: Escuchar días bloqueados (Globales)
 
