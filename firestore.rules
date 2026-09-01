@@ -106,25 +106,22 @@ service cloud.firestore {
       allow update, delete: if isStaff();
     }
 
-    // ✅ REGLA CORREGIDA PARA SCHEDULEDCLASSES (permite presente Y ausente)
+    // Presente Y ausente pasan los dos por confirmAttendance (Cloud
+    // Function, Admin SDK) desde hoy -- valida ahí server-side que la clase
+    // sea de ese alumno y sea la de hoy/mañana antes de escribir. Antes
+    // "ausente" se guardaba directo desde acá sin ese mismo chequeo de día.
+    // El cliente ya no necesita ningún permiso de escritura sobre esto.
     match /artifacts/{appId}/scheduledClasses/{classId} {
       allow read: if isPublicAppPath(appId);
-      allow update: if isPublicAppPath(appId)
-                  && request.resource.data.attendanceSource == 'public'
-                  && request.resource.data.attendanceStatus in ['presente', 'present', 'ausente', 'absent']
-                  && resource.data.classDate == request.resource.data.classDate
-                  && resource.data.studentId == request.resource.data.studentId;
-      allow create, delete: if false;
+      allow write: if isStaff();
     }
 
+    // Igual que arriba: la única escritura viene de confirmAttendance
+    // (Admin SDK), que no pasa por estas reglas. Nada en el cliente
+    // escribe acá directo.
     match /artifacts/{appId}/attendance/{attId} {
       allow read: if isPublicAppPath(appId);
-      allow create: if isPublicAppPath(appId)
-                  && request.auth != null
-                  && request.resource.data.status in ['present','presente']
-                  && request.resource.data.isPresent == true
-                  && request.resource.data.source == 'public';
-      allow update, delete: if false;
+      allow write: if isStaff();
     }
 
     match /artifacts/{appId}/publicPushTokens/{token} {

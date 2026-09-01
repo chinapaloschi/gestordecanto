@@ -61,6 +61,10 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
   const appId = String(data?.appId || "");
   const studentId = String(data?.studentId || "");
   const classId = String(data?.classId || "");
+  // "Ausente" viajaba directo del cliente (updateDoc) sin este mismo chequeo
+  // de día -- un alumno podía, en teoría, marcar ausente una clase que no
+  // fuera hoy/mañana. Ahora pasa por la misma transacción validada acá.
+  const status = data?.status === "ausente" ? "ausente" : "presente";
   assertC(appId.length > 0, "Falta appId.");
   assertC(studentId.length > 0, "Falta studentId.");
   assertC(classId.length > 0, "Falta classId.");
@@ -80,7 +84,21 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
     // antemano si el alumno va a venir.
     assertC(cls.classDate === todayD || cls.classDate === tomorrowD, "Sólo podés marcar la clase de hoy o de mañana.");
 
-    if (cls.attendanceStatus === "presente" || cls.attendanceStatus === "present") return;
+    // Ya tiene un estado final registrado -- no lo pisamos (evita que un
+    // doble tap, o presente+ausente en rápida sucesión, revierta un
+    // "presente" ya sumado a créditos/asistencia).
+    const already = cls.attendanceStatus === "presente" || cls.attendanceStatus === "present"
+      || cls.attendanceStatus === "ausente" || cls.attendanceStatus === "absent";
+    if (already) return;
+
+    if (status === "ausente") {
+      tx.set(clsRef, {
+        attendanceStatus: "ausente",
+        attendanceSource: "public",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return;
+    }
 
     const stRef = db.doc(`artifacts/${appId}/students/${studentId}`);
     const stSnap = await tx.get(stRef);
@@ -104,6 +122,7 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
       // comparan el valor sin normalizar no reconocían el check-in.
       attendanceStatus: "presente",
       attendanceRefId: attRef.id,
+      attendanceSource: "public",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
@@ -112,7 +131,7 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
     }
   });
 
-  return { status: "ok", message: "Presente registrado." };
+  return { status: "ok", message: status === "ausente" ? "Ausencia registrada." : "Presente registrado." };
 });
 
 // ---------------- 2b) Login de alumno por DNI (+ PIN opcional) ----------------

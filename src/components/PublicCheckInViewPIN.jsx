@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
 
-import { collection as fsCollection, doc, getDoc, getDocs, updateDoc, addDoc as fsAddDoc, query, where, orderBy, onSnapshot, serverTimestamp, writeBatch, limit } from 'firebase/firestore';
+import { collection as fsCollection, doc, getDoc, getDocs, addDoc as fsAddDoc, query, where, orderBy, onSnapshot, serverTimestamp, writeBatch, limit } from 'firebase/firestore';
 
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -764,19 +764,12 @@ const saveAttendance = async (classId, status) => {
 
   try {
 
-    if (status === 'presente') {
-      // Marcar presente pasa por la Cloud Function, que valida server-side
-      // que la clase sea de este alumno y sea la de hoy antes de escribir.
-      const confirmFn = httpsCallable(getFunctions(), 'confirmAttendance');
-      await confirmFn({ appId, studentId: student.id, classId });
-    } else {
-      const clsRef = doc(db, `artifacts/${appId}/scheduledClasses/${classId}`);
-      await updateDoc(clsRef, {
-        attendanceStatus: status,
-        attendanceCheckedAt: new Date(),
-        attendanceSource: 'public'
-      });
-    }
+    // Presente y ausente pasan los dos por la Cloud Function, que valida
+    // server-side que la clase sea de este alumno y sea la de hoy/mañana
+    // antes de escribir — antes "ausente" se guardaba directo desde el
+    // cliente sin ese mismo chequeo de día.
+    const confirmFn = httpsCallable(getFunctions(), 'confirmAttendance');
+    await confirmFn({ appId, studentId: student.id, classId, status });
 
     setFrozenIds(prev => Array.from(new Set([...(prev||[]), classId])));
 
