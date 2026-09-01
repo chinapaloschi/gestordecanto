@@ -210,6 +210,42 @@ service cloud.firestore {
       allow update, delete: if isStaff();
     }
 
+    // ===================================================================
+    // -------- REGLAS PARA collectionGroup() (panel de admin) -----------
+    // ===================================================================
+    // Cloud Firestore NO usa las reglas de path fijo de arriba (ej. la de
+    // receipts/voiceNotes más arriba) para autorizar una consulta
+    // collectionGroup() -- esas solo sirven para un get() puntual o una
+    // collection() con padre ya conocido. Para que una consulta
+    // collectionGroup() (que junta la misma subcolección de TODOS los
+    // alumnos a la vez) sea válida, Firestore exige una regla con el
+    // comodín recursivo {path=**} escrito ANTES del nombre de colección.
+    // Sin esto: la tarjeta "comprobante pendiente" del roster, el Panel
+    // de hoy, el Centro de Comprobantes, el panel de notas de voz
+    // pendientes y la Copia de seguridad (exportar/restaurar) fallaban
+    // con permission-denied, aunque para el alumno individual (que lee
+    // por path fijo) andaba perfecto.
+    // OJO: NO indexar el {path=**} capturado (ej. path[1]) en la condición
+    // de estas reglas -- probado empíricamente que Firestore no puede
+    // demostrar que ese acceso a índice sea siempre seguro para una
+    // consulta collectionGroup() y rechaza toda la consulta con
+    // permission-denied, aunque la condición en sí sería válida para un
+    // get() puntual. isStaff() no toca path, así que no tiene ese problema.
+    // Ningún llamador real de estas 4 consultas es público (todas viven en
+    // el panel de admin), así que alcanza con isStaff().
+    match /{path=**}/receipts/{docId} {
+      allow read: if isStaff();
+    }
+    match /{path=**}/voiceNotes/{noteId} {
+      allow read: if isStaff();
+    }
+    match /{path=**}/tickets/{ticketId} {
+      allow read: if isStaff();
+    }
+    match /{path=**}/repertoire/{songId} {
+      allow read: if isStaff();
+    }
+
     // --- REGLAS PRIVADAS (solo para staff) ---
 
     match /apps/{appId}/students/{studentId} {
