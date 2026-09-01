@@ -1604,7 +1604,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
 
         />
 
-        <div className="min-h-screen flex flex-col font-inter text-sm text-gray-900 pb-24 sm:pb-0 max-w-[1600px] mx-auto w-full sm:shadow-2xl sm:shadow-slate-300/60" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="min-h-screen flex flex-col font-body text-sm text-ink pb-24 sm:pb-0 max-w-[1600px] mx-auto w-full sm:shadow-2xl sm:shadow-ink/10" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
 
             {/* ══════ TOP BAR FULL-WIDTH ══════ */}
             <div
@@ -1612,7 +1612,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
               style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
             >
               <div className="flex items-center justify-between px-4 sm:px-6 py-2.5">
-                {/* Izquierda: logo en placa de color + nombre */}
+                {/* Izquierda: logo en placa de color + nombre + ecualizador de marca */}
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-rose-600 to-pink-500 flex items-center justify-center shadow-md flex-shrink-0 p-2">
                     <img src="/nuevologo.gif" alt="Logo"
@@ -1621,9 +1621,17 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
                       onError={e => { e.currentTarget.style.display='none'; }}
                     />
                   </div>
-                  <div className="min-w-0">
-                    <h1 className="text-gray-900 font-black text-lg sm:text-xl leading-none tracking-tight truncate">Sandra Paloschi</h1>
-                    <p className="text-rose-500 text-[10px] sm:text-[11px] font-bold tracking-[0.18em] uppercase mt-1">Estudio de Canto</p>
+                  <div className="min-w-0 flex items-center gap-2.5">
+                    <div>
+                      <h1 className="font-display text-ink font-semibold text-lg sm:text-xl leading-none tracking-tight truncate">Sandra Paloschi</h1>
+                      <p className="text-rose-500 text-[10px] sm:text-[11px] font-bold tracking-[0.18em] uppercase mt-1">Estudio de Canto</p>
+                    </div>
+                    <div className="hidden sm:flex items-end gap-[2.5px] h-5 flex-shrink-0" aria-hidden="true">
+                      {[40,90,60,100,55].map((h, i) => (
+                        <span key={i} className={`w-[3px] rounded-sm motion-safe:animate-pulse ${i === 3 ? 'bg-gold' : 'bg-rose-400'}`}
+                          style={{ height: `${h}%`, animationDelay: `${i * 150}ms`, animationDuration: '1.4s' }} />
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -1670,13 +1678,13 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
                 </div>
               </div>
               {/* Línea de acento de marca */}
-              <div className="h-[3px] bg-gradient-to-r from-rose-600 via-pink-500 to-rose-600" />
+              <div className="h-[3px] bg-gradient-to-r from-rose-600 via-gold to-rose-600" />
             </div>
 
-            <div className="flex flex-1 bg-white overflow-hidden">
+            <div className="flex flex-1 bg-paper overflow-hidden">
 
               {/* ═══ SIDEBAR (solo desktop, sin header propio) ═══ */}
-              <aside className="hidden sm:flex flex-col w-56 lg:w-64 bg-white border-r border-gray-100 flex-shrink-0">
+              <aside className="hidden sm:flex flex-col w-56 lg:w-64 bg-paper-2 border-r border-ink/5 flex-shrink-0">
 
                 {/* Navegación */}
                 <nav className="flex-1 py-4 px-2.5 overflow-y-auto space-y-4">

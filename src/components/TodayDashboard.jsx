@@ -168,6 +168,16 @@ function formatDateShort(dateStr) {
 }
 
 // ── Métricas ──────────────────────────────────────────────────────────────────
+// Barritas de ecualizador — la misma firma visual del catálogo público y de
+// la propuesta de rediseño, acá como acento discreto detrás del número.
+function MiniWave({ bars, className = '' }) {
+  return (
+    <div className={`absolute right-2.5 bottom-2.5 flex items-end gap-[2.5px] h-4 opacity-40 ${className}`} aria-hidden="true">
+      {bars.map((h, i) => <span key={i} className="w-[3px] rounded-sm bg-current" style={{ height: `${h}%` }} />)}
+    </div>
+  );
+}
+
 function MetricCard({ icon, value, label, color = 'gray', sub = '', isMoney = false }) {
   const { amountsHidden } = useAmountsHidden();
   const colors = {
@@ -180,11 +190,12 @@ function MetricCard({ icon, value, label, color = 'gray', sub = '', isMoney = fa
   };
   const c = colors[color] || colors.gray;
   return (
-    <div className={`rounded-xl border p-3 ${c.card}`}>
+    <div className={`relative overflow-hidden rounded-xl border p-3 ${c.card}`}>
       <div className={`mb-1.5 ${c.icon}`}>{icon}</div>
-      <div className={`text-xl font-black leading-none ${c.val}`}>{isMoney && amountsHidden ? '••••••' : value}</div>
+      <div className={`font-ticket text-xl font-semibold leading-none tabular-nums ${c.val}`}>{isMoney && amountsHidden ? '••••••' : value}</div>
       <div className="text-[11px] font-medium text-gray-500 mt-1 leading-tight">{label}</div>
       {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
+      <MiniWave bars={[40, 75, 55, 95]} className={c.val} />
     </div>
   );
 }
@@ -373,14 +384,14 @@ export function TodayDashboard({
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="mb-4 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className="mb-4 bg-white rounded-2xl border border-ink/5 shadow-sm overflow-hidden">
       {/* Header */}
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition text-left">
         <div>
-          <h2 className="font-black text-gray-900 text-sm">Panel de hoy</h2>
-          <p className="text-xs text-gray-400 capitalize">{fmtHoy()}</p>
+          <h2 className="font-display font-semibold text-ink text-base">Panel de hoy</h2>
+          <p className="text-xs text-ink-faint capitalize">{fmtHoy()}</p>
         </div>
         <div className="flex items-center gap-2">
           {metrics.unmarkedCount > 0 && (
@@ -443,8 +454,8 @@ export function TodayDashboard({
 
           {/* Clases de hoy */}
           <div>
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-              Clases de hoy · {todayClasses.length}
+            <p className="font-display text-sm font-semibold text-ink mb-2">
+              Clases de hoy <span className="font-ticket text-ink-faint text-xs align-middle">· {todayClasses.length}</span>
             </p>
             <TodayClasses
               classes={todayClasses}
@@ -457,7 +468,7 @@ export function TodayDashboard({
 
           {/* Pendientes */}
           <div>
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Pendientes</p>
+            <p className="font-display text-sm font-semibold text-ink mb-2">Pendientes</p>
             <PendingAlerts
               studentsWithStats={studentsWithStats}
               pendingReceiptsCount={pendingReceipts}
