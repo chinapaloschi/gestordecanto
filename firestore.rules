@@ -166,6 +166,45 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ===================================================================
+    // Estas colecciones dependían SOLO del catch-all genérico del final
+    // (match /artifacts/{appId}/{path=**}). Probado en vivo (contra una
+    // colección de prueba sin datos reales, así que no expuso nada): ese
+    // catch-all evalúa isInternalOnlyCollection(path), que indexa
+    // path[0] -- igual que con collectionGroup(), Firestore no puede
+    // probar que ese acceso a índice sea siempre seguro para una
+    // consulta (list/query), y rechaza TODA la consulta con
+    // permission-denied -- incluso una sin filtros. Un get() puntual a un
+    // ID conocido no tiene este problema, solo las consultas. Por eso
+    // "Mensajes", "Convocatorias" y el repertorio del propio alumno
+    // aparecían vacíos o con error para cualquier alumno, siempre, no
+    // solo a veces. Regla explícita y sin indexar el comodín = sin
+    // ambigüedad, igual que ya se hizo arriba con payments/receipts.
+    match /artifacts/{appId}/massEvents/{eventId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow write: if isStaff();
+    }
+    match /artifacts/{appId}/massEvents/{eventId}/options/{optionId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow write: if isStaff();
+    }
+    match /artifacts/{appId}/publicMessages/{msgId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow write: if isStaff();
+    }
+    match /artifacts/{appId}/studentMessages/{studentId}/messages/{msgId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow write: if isStaff();
+    }
+    match /artifacts/{appId}/students/{studentId}/repertoire/{songId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow write: if isStaff();
+    }
+    match /artifacts/{appId}/blockedSlots/{slotId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow write: if isStaff();
+    }
+
     // REGLA PARA EL CATÁLOGO PÚBLICO DE LENCERÍA
     match /artifacts/{appId}/lenceriaStock/{productId} {
       allow read: if isPublicAppPath(appId);
