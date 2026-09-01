@@ -637,7 +637,12 @@ const getCurrentWeekRange = () => {
     (async () => {
       try {
         const snap = await getDoc(doc(db, `artifacts/${appId}/students`, savedId));
-        if (snap.exists()) {
+        // Si el alumno fue archivado (o el registro ya no existe) desde que
+        // este celular guardó la sesión, el auto-login lo llevaba igual a
+        // esa ficha vieja/congelada — mostrando datos de pago desactualizados
+        // aunque loginStudent (DNI/PIN) sí rechaza los archivados. Mismo
+        // chequeo acá.
+        if (snap.exists() && snap.data()?.isArchived !== true) {
           setPendingAutoStudent({ id: snap.id, ...snap.data() });
         } else {
           localStorage.removeItem(STUDENT_SESSION_KEY);

@@ -1,5 +1,5 @@
 /* PUBLIC SERVICE WORKER (único) */
-const SW_VERSION = '1788275502042';
+const SW_VERSION = '1788276279195';
 const SHELL = [
   '/', '/index.html', '/offline.html',
   '/icons/app-192.png', '/icons/app-512.png',
