@@ -6,40 +6,8 @@
       "fields": [
         { "fieldPath": "studentId", "order": "ASCENDING" },
         { "fieldPath": "dateKey", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "scheduledClasses",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "monthlyPaymentRefId", "order": "ASCENDING" },
-        { "fieldPath": "classDate", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "scheduledClasses",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "studentId", "order": "ASCENDING" },
-        { "fieldPath": "classDate", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "scheduledClasses",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "studentId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "classDate", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "scheduledClasses",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "studentType", "order": "ASCENDING" },
-        { "fieldPath": "classDate", "order": "ASCENDING" }
-      ]
+      ],
+      "density": "SPARSE_ALL"
     },
     {
       "collectionGroup": "payments",
@@ -47,7 +15,35 @@
       "fields": [
         { "fieldPath": "isPaidForPackage", "order": "ASCENDING" },
         { "fieldPath": "paidAt", "order": "ASCENDING" }
-      ]
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "studentId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledClasses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "monthlyPaymentRefId", "order": "ASCENDING" },
+        { "fieldPath": "classDate", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledClasses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "studentId", "order": "ASCENDING" },
+        { "fieldPath": "classDate", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
     },
     {
       "collectionGroup": "scheduledClasses",
@@ -56,16 +52,39 @@
         { "fieldPath": "studentId", "order": "ASCENDING" },
         { "fieldPath": "classDate", "order": "ASCENDING" },
         { "fieldPath": "startTime", "order": "ASCENDING" }
-      ]
+      ],
+      "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "payments",
+      "collectionGroup": "scheduledClasses",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "studentId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "ASCENDING" }
-      ]
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "classDate", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledClasses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "studentType", "order": "ASCENDING" },
+        { "fieldPath": "classDate", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "receipts",
+      "fieldPath": "status",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }

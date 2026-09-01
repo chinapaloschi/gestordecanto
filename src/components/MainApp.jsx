@@ -719,7 +719,7 @@ const closeAddStudentForm = useCallback(() => {
                     if (parts.length >= 4) ids.add(parts[3]);
                 });
                 setStudentsWithNewReceipts(ids);
-            }, () => {}));
+            }, err => console.error('collectionGroup receipts (studentsWithNewReceipts):', err)));
         } catch (e) { console.warn('collectionGroup receipts no disponible:', e.message); }
 
         return () => unsubs.forEach(u => u());

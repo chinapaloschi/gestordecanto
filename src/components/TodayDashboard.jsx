@@ -328,7 +328,7 @@ export function TodayDashboard({
     if (!db || !appId) return;
     try {
       const q = query(collectionGroup(db, 'receipts'), where('status', '==', 'pending'));
-      const unsub = onSnapshot(q, snap => setPendingReceipts(snap.size), () => {});
+      const unsub = onSnapshot(q, snap => setPendingReceipts(snap.size), err => console.error('collectionGroup receipts (TodayDashboard):', err));
       return () => unsub();
     } catch { return undefined; }
   }, [db, appId]);

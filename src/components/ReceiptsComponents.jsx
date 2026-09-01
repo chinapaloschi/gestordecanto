@@ -632,7 +632,7 @@ export function ReceiptsCenter({ db, appId, students }) {
         if (sid && knownIds.has(sid)) map[sid] = (map[sid] || 0) + 1;
       });
       setPendingMap(map);
-    }, () => setPendingMap({}));
+    }, err => { console.error('collectionGroup receipts (ReceiptsCenter):', err); setPendingMap({}); });
     return () => unsub();
   }, [db, appId, knownIds]);
 
