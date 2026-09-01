@@ -61,6 +61,24 @@ service cloud.firestore {
       allow delete: if isStaff();
     }
 
+    // Pagos y paquetes/cuotas del alumno — el portal público consulta esto
+    // con filtros (where studentId/paymentMethod/isPaidForPackage) para
+    // calcular la cuota pendiente. Antes dependía solo del catch-all
+    // genérico del final (misma colección, mismo permiso en teoría), pero
+    // esa regla usa un path comodín recursivo ({path=**}) — para consultas
+    // con filtros (no una lectura puntual de un documento) Firestore a veces
+    // no puede probar que esa regla aplica de forma seria y rechaza con
+    // "permission-denied" en vez de conceder el acceso. Una regla explícita
+    // y directa sobre esta colección puntual no tiene esa ambigüedad.
+    match /artifacts/{appId}/payments/{paymentId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow write: if isStaff();
+    }
+    match /artifacts/{appId}/students/{studentId}/payments/{paymentId} {
+      allow read: if isPublicAppPath(appId) || isStaff();
+      allow write: if isStaff();
+    }
+
     // Grabaciones de voz enviadas por el alumno ("Herramientas → Grabador de
     // voz → Enviar a Sandra"). El alumno crea la suya y puede borrar sus
     // propios envíos ("Mis envíos"); solo el staff las marca como escuchadas.
