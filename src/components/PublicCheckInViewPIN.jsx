@@ -285,6 +285,11 @@ React.useEffect(() => {
 
   const [publicTotalToday, setPublicTotalToday] = React.useState(null);
   const [publicSurchargeApplies, setPublicSurchargeApplies] = React.useState(false);
+  // Varios alumnos reportaron la cuota pendiente invisible desde el celular
+  // (funcionando bien desde una computadora) sin ningún error visible — las
+  // consultas fallaban en silencio. Esto guarda el error real para poder
+  // leerlo directo en pantalla en vez de adivinar a ciegas.
+  const [paymentsLoadError, setPaymentsLoadError] = React.useState(null);
 
   const [showEventPopup, setShowEventPopup] = React.useState(false);
 
@@ -414,8 +419,8 @@ const getCurrentWeekRange = () => {
 
     };
 
-    const unsubPay = onSnapshot(qPay, (snap) => applyPackagesSnapshot(snap.docs));
-    getDocs(qPay).then(snap => applyPackagesSnapshot(snap.docs)).catch(() => {});
+    const unsubPay = onSnapshot(qPay, (snap) => applyPackagesSnapshot(snap.docs), (err) => setPaymentsLoadError(`paquetes (live): ${err.code || err.message}`));
+    getDocs(qPay).then(snap => applyPackagesSnapshot(snap.docs)).catch((err) => setPaymentsLoadError(`paquetes: ${err.code || err.message}`));
 
 
 
@@ -424,16 +429,16 @@ const getCurrentWeekRange = () => {
     const qCls = query(cCol, where("studentId", "==", student.id), where("scheduleType", "==", "single"), where("isPaid", "==", false));
 
     const applyClassesSnapshot = (docs) => setUnpaidClasses(docs.map(d => d.data() || {}));
-    const unsubCls = onSnapshot(qCls, (snap) => applyClassesSnapshot(snap.docs));
-    getDocs(qCls).then(snap => applyClassesSnapshot(snap.docs)).catch(() => {});
+    const unsubCls = onSnapshot(qCls, (snap) => applyClassesSnapshot(snap.docs), (err) => setPaymentsLoadError(`clases (live): ${err.code || err.message}`));
+    getDocs(qCls).then(snap => applyClassesSnapshot(snap.docs)).catch((err) => setPaymentsLoadError(`clases: ${err.code || err.message}`));
 
 
 
     // Abonos flexibles pendientes de cobro
     const qFlex = query(pCol, where("studentId", "==", student.id), where("paymentMethod", "==", "abono_flexible"), where("isPaidForPackage", "==", false));
     const applyFlexSnapshot = (docs) => setUnpaidFlexCredits(docs.map(d => ({ id: d.id, ...(d.data() || {}) })));
-    const unsubFlex = onSnapshot(qFlex, (snap) => applyFlexSnapshot(snap.docs));
-    getDocs(qFlex).then(snap => applyFlexSnapshot(snap.docs)).catch(() => {});
+    const unsubFlex = onSnapshot(qFlex, (snap) => applyFlexSnapshot(snap.docs), (err) => setPaymentsLoadError(`flex (live): ${err.code || err.message}`));
+    getDocs(qFlex).then(snap => applyFlexSnapshot(snap.docs)).catch((err) => setPaymentsLoadError(`flex: ${err.code || err.message}`));
 
     // ✅ NUEVO: Escuchar días bloqueados (Globales)
 
@@ -1487,6 +1492,14 @@ const renderCalendarGrid = () => {
           {/* Contenido scrollable */}
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-md mx-auto px-4 py-3 space-y-3">
+
+          {paymentsLoadError && (
+            <div className="bg-red-50 border border-red-300 rounded-xl p-3">
+              <p className="text-xs font-bold text-red-800">No se pudieron cargar tus pagos</p>
+              <p className="text-[11px] text-red-600 mt-0.5 font-mono break-all">{paymentsLoadError}</p>
+              <p className="text-[10px] text-red-500 mt-1">Mostrale este mensaje a Sandra/Javier.</p>
+            </div>
+          )}
 
           {/* ════════ TAB: INICIO ════════ */}
           {activeTab === 'inicio' && (() => {
