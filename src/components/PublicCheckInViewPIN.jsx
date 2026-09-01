@@ -790,6 +790,21 @@ const saveAttendance = async (classId, status) => {
 
 };
 
+// confirmAttendance (la función que valida "presente" server-side) puede
+// tardar varios segundos en un cold start — sin ningún indicador en el
+// botón, tocar "Presente" parecía no hacer nada durante esa espera. Este
+// wrapper guarda cuál de los dos botones está en curso para mostrar el
+// spinner en el correcto.
+const [pendingAttendanceAction, setPendingAttendanceAction] = React.useState(null); // 'presente' | 'ausente' | null
+const markAttendance = async (classId, status) => {
+  setPendingAttendanceAction(status);
+  try {
+    await saveAttendance(classId, status);
+  } finally {
+    setPendingAttendanceAction(null);
+  }
+};
+
 // Si el alumno tocó "✅ Voy" / "❌ No puedo" directo desde los botones del
 // push de recordatorio, el service worker abre la app con estos parámetros
 // en el hash — se procesa automáticamente apenas hay sesión, sin que tenga
@@ -1989,37 +2004,45 @@ const renderCalendarGrid = () => {
 
       <button
 
-        onClick={() => saveAttendance(selectedClassForAttendance?.id, 'presente')}
+        onClick={() => markAttendance(selectedClassForAttendance?.id, 'presente')}
 
-        className="w-full py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-sm flex items-center justify-center gap-2"
+        disabled={saving}
+
+        className="w-full py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
 
       >
 
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        {pendingAttendanceAction === 'presente' ? (
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+        )}
 
-          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-
-        </svg>
-
-        ✅ Presente
+        {pendingAttendanceAction === 'presente' ? 'Guardando...' : '✅ Presente'}
 
       </button>
 
       <button
 
-        onClick={() => saveAttendance(selectedClassForAttendance?.id, 'ausente')}
+        onClick={() => markAttendance(selectedClassForAttendance?.id, 'ausente')}
 
-        className="w-full py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl shadow-sm flex items-center justify-center gap-2"
+        disabled={saving}
+
+        className="w-full py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
 
       >
 
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        {pendingAttendanceAction === 'ausente' ? (
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        )}
 
-          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-
-        </svg>
-
-        ❌ Ausente
+        {pendingAttendanceAction === 'ausente' ? 'Guardando...' : '❌ Ausente'}
 
       </button>
 
