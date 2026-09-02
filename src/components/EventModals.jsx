@@ -11,6 +11,7 @@ import { formatMoneyAr } from '../utils/money.js';
 import { formatDateToDDMMYYYY } from '../utils/classHelpers.js';
 import { ROUTES } from '../constants.js';
 import { dataUrlToFile, generateQrWithLogo, generateComposedTicketImage } from '../utils/ticketQr.js';
+import { getLocalToday } from '../utils/dateHelpers.js';
 
 const toCsvLine = (arr) => arr.map(v => {
   const s = String(v ?? "").replace(/"/g, '""');
@@ -597,7 +598,10 @@ export const EventsListModal = ({ isOpen, onClose, events = [], onCreate, onSele
   const [queryText, setQueryText] = React.useState('');
   const [scope, setScope] = React.useState('upcoming');
   const [exportingId, setExportingId] = React.useState(null);
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // getLocalToday(), no new Date().toISOString() -- ISO usa UTC, y entre las
+  // 21:00 y medianoche hora Argentina ya muestra la fecha del día siguiente,
+  // clasificando mal eventos de hoy como "pasados" o viceversa.
+  const todayStr = getLocalToday();
 
   React.useEffect(() => { if (!isOpen) setQueryText(''); }, [isOpen]);
 
@@ -1277,7 +1281,10 @@ const handleExportTicketsCSV = async () => {
     }
   };
   const { title, date, startTime, location } = localEvent || {};
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // getLocalToday(), no new Date().toISOString() -- ISO usa UTC, y entre las
+  // 21:00 y medianoche hora Argentina ya muestra la fecha del día siguiente,
+  // clasificando mal eventos de hoy como "pasados" o viceversa.
+  const todayStr = getLocalToday();
   const isPast = (date || '') < todayStr;
   const initials = (name) => {
     const parts = (name || '').trim().split(/\s+/).filter(Boolean);

@@ -301,6 +301,8 @@ const { amountsHidden, toggleAmountsHidden } = useAmountsHidden();
 
     const [loading, setLoading] = useState(true);
     const [studentsWithNewReceipts, setStudentsWithNewReceipts] = useState(() => new Set());
+    // Guard contra doble disparo de handleRenewSelectedSubscription (ver más abajo).
+    const renewSubscriptionInFlightRef = useRef(false);
 
     // Tick diario: fuerza recalcular studentsWithStats exactamente a medianoche
     // para que el recargo aparezca en el día correcto aunque la página esté abierta
@@ -1423,6 +1425,13 @@ const handleDeleteRenewalPackage = async (student, pkg) => {
 };
 
 const handleRenewSelectedSubscription = async (student, packageToRenew, newAmount, expectedPaymentMethod) => {
+    // El abono nuevo se crea con un ID aleatorio (doc() sin id) -- si esta
+    // función se dispara dos veces (doble tap, o el modal tarda un render en
+    // cerrarse de verdad) se generan dos abonos y dos series de clases
+    // duplicadas para el mismo período, cada una con su propio ID. Guard
+    // simple: ignorar cualquier llamada mientras la anterior sigue en curso.
+    if (renewSubscriptionInFlightRef.current) return;
+    renewSubscriptionInFlightRef.current = true;
     setShowRenewSubscriptionModal(false);
 
     // Mes siguiente al de periodEndDate — calculado por mes/año, no sumando
@@ -1543,6 +1552,8 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
     } catch (error) {
         console.error("Error renewing subscription:", error);
         showMessage(`Error al renovar el abono: ${error.message}`, 'error');
+    } finally {
+        renewSubscriptionInFlightRef.current = false;
     }
 };
 

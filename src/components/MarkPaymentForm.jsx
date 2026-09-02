@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { doc, writeBatch, collection as fsCollection, addDoc as fsAddDoc } from 'firebase/firestore';
-import { toLocalYYYYMMDD } from '../utils/dateHelpers.js';
+import { toLocalYYYYMMDD, getLocalToday } from '../utils/dateHelpers.js';
 import { MoneyInput } from './MoneyInput.jsx';
 import { FacturaModal } from './FacturaModal.jsx';
 import { PostPaymentActionsModal } from './PostPaymentActionsModal.jsx';
@@ -20,7 +20,10 @@ export const MarkPaymentForm = ({
 }) => {
   const [amount,              setAmount]              = useState('');
   const [originalAmount,      setOriginalAmount]      = useState(0);
-  const [paymentDate,         setPaymentDate]         = useState(new Date().toISOString().split('T')[0]);
+  // getLocalToday(), no new Date().toISOString() -- ISO usa UTC: entre las
+  // 21:00 y medianoche hora Argentina ya cae en el día siguiente, así que el
+  // campo de fecha arrancaba mostrando "mañana" en vez de "hoy".
+  const [paymentDate,         setPaymentDate]         = useState(getLocalToday());
   const [selectedItemToPay,   setSelectedItemToPay]   = useState('');
   const [paymentMethod,       setPaymentMethod]       = useState('transferencia');
   const [loading,             setLoading]             = useState(false);
@@ -126,11 +129,11 @@ export const MarkPaymentForm = ({
       setSelectedItemToPay(itemToSelect.id);
       const baseAmt = __getBaseAmountFromItem(itemToSelect);
       setOriginalAmount(baseAmt);
-      calculateAndSetAmount(baseAmt, new Date().toISOString().split('T')[0], itemToSelect.data?.periodStartDate || itemToSelect.data?.classDate || '');
+      calculateAndSetAmount(baseAmt, getLocalToday(), itemToSelect.data?.periodStartDate || itemToSelect.data?.classDate || '');
     } else {
       setSelectedItemToPay(''); setAmount(''); setOriginalAmount(0);
     }
-    setPaymentDate(new Date().toISOString().split('T')[0]);
+    setPaymentDate(getLocalToday());
   }, [initialSelectedStudent, scheduledClasses, allPayments, initialPaymentId]);
 
   const handleSubmit = async (e) => {
