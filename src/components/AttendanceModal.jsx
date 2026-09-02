@@ -183,8 +183,19 @@ const handleDeleteEntireMonthlyPackage = async () => {
         setShowConfirmDeleteGroupClassModal(false);
         cancelRemoveStudentFromClassInstance();
     };
-    const handleRemoveStudentFromClassInstanceClick = (clsId, studentName) => {
-        setStudentToRemoveFromClass({ id: clsId, name: studentName });
+    const handleRemoveStudentFromClassInstanceClick = (cls) => {
+        setStudentToRemoveFromClass({
+            id: cls.id,
+            name: cls.studentName,
+            // Si el alumno tiene un paquete mensual (ej. coral/grupal todos los
+            // lunes), sacarlo de "esta clase" solo borra la ocurrencia de hoy
+            // -- sigue apareciendo el resto de las semanas. Guardamos esto acá
+            // para poder ofrecer también la opción de sacarlo del paquete
+            // entero, sin tocar a los demás alumnos del mismo horario (cada
+            // uno tiene su propio monthlyPaymentRefId, aunque compartan clase).
+            monthlyPaymentRefId: cls.monthlyPaymentRefId || null,
+            scheduleType: cls.scheduleType || null,
+        });
         setShowConfirmRemoveStudentFromClassInstanceModal(true);
     };
     // El botón "Sí, Quitar" llamaba a esta función, pero quedó vacía en algún
@@ -213,6 +224,45 @@ const handleDeleteEntireMonthlyPackage = async () => {
         } catch (e) {
             console.error('Error removing student from class:', e);
             showMessage(`Error al quitar el alumno: ${e.message}`, 'error');
+        }
+    };
+    // "Quitar alumno" solo borraba la ocurrencia de ese día -- si el alumno
+    // tiene un paquete mensual (típico en coral/grupal, ej. todos los
+    // lunes), seguía apareciendo el resto de las semanas. Esto saca al
+    // alumno de TODO el paquete: sus propias clases futuras + su pago,
+    // usando su monthlyPaymentRefId propio -- no toca a otros alumnos que
+    // comparten el mismo horario, cada uno tiene su propio pago.
+    const confirmRemoveStudentEntirePackage = async () => {
+        if (!studentToRemoveFromClass?.monthlyPaymentRefId) return;
+        const { id: docId, name: studentName, monthlyPaymentRefId } = studentToRemoveFromClass;
+        try {
+            const paymentRef = doc(db, `artifacts/${appId}/payments`, monthlyPaymentRefId);
+            const paymentSnap = await getDoc(paymentRef);
+            const batch = writeBatch(db);
+            if (paymentSnap.exists()) {
+                const associatedClassIds = paymentSnap.data().associatedClassIds || [];
+                for (const classId of associatedClassIds) {
+                    batch.delete(doc(db, `artifacts/${appId}/scheduledClasses`, classId));
+                }
+                batch.delete(paymentRef);
+            } else {
+                // Sin registro de pago (se borró antes, o nunca existió) --
+                // al menos sacamos la clase de hoy para no dejar el botón sin efecto.
+                batch.delete(doc(db, `artifacts/${appId}/scheduledClasses`, docId));
+            }
+            await batch.commit();
+            showMessage(`${studentName} fue quitado de todo el paquete.`, 'success');
+            setShowConfirmRemoveStudentFromClassInstanceModal(false);
+            setStudentToRemoveFromClass(null);
+            onStudentRemovedFromClass && onStudentRemovedFromClass(docId);
+            setCurrentClassGroup(prev => {
+                const next = prev.filter(c => c.id !== docId);
+                if (next.length === 0) onClose && onClose();
+                return next;
+            });
+        } catch (e) {
+            console.error('Error removing student entire package:', e);
+            showMessage(`Error al quitar el paquete: ${e.message}`, 'error');
         }
     };
     const cancelRemoveStudentFromClassInstance = () => {
@@ -304,7 +354,7 @@ const handleDeleteEntireMonthlyPackage = async () => {
                                         ya funciona de verdad, así que mostrarlo siempre es seguro:
                                         para una individual, quitar al único alumno cierra el modal
                                         igual que "Eliminar esta clase" ya hacía. */}
-                                    <button onClick={() => handleRemoveStudentFromClassInstanceClick(cls.id, cls.studentName)}
+                                    <button onClick={() => handleRemoveStudentFromClassInstanceClick(cls)}
                                         className="p-1.5 rounded-lg bg-red-100 text-red-500 hover:bg-red-200 transition"
                                         title="Quitar alumno">
                                         <IconTrash />
@@ -626,12 +676,24 @@ const handleDeleteEntireMonthlyPackage = async () => {
             <Modal isOpen={showConfirmRemoveStudentFromClassInstanceModal} onClose={cancelRemoveStudentFromClassInstance} title="Quitar Alumno de la Clase" footer={
                  <div className="flex justify-end gap-2">
                     <button onClick={cancelRemoveStudentFromClassInstance} className="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300">Cancelar</button>
-                    <button onClick={confirmRemoveStudentFromClassInstance} className="px-4 py-2 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700">Sí, Quitar</button>
+                    <button onClick={confirmRemoveStudentFromClassInstance} className="px-4 py-2 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-800">
+                        {studentToRemoveFromClass?.monthlyPaymentRefId ? 'Solo esta clase' : 'Sí, Quitar'}
+                    </button>
+                    {studentToRemoveFromClass?.monthlyPaymentRefId && (
+                        <button onClick={confirmRemoveStudentEntirePackage} className="px-4 py-2 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700">
+                            Todo el paquete
+                        </button>
+                    )}
                 </div>
             }>
                 <p className="text-sm text-gray-700">
                     ¿Quitar a <b className="text-gray-900">{studentToRemoveFromClass?.name}</b> de esta clase? Su registro de pago no se verá afectado.
                 </p>
+                {studentToRemoveFromClass?.monthlyPaymentRefId && (
+                    <p className="text-xs text-gray-500 mt-2">
+                        Este alumno tiene un paquete mensual — "Solo esta clase" saca solo la de hoy (sigue viniendo el resto de las semanas); "Todo el paquete" lo saca de todas sus clases futuras de este horario y borra su registro de pago.
+                    </p>
+                )}
             </Modal>
         </>
     );
