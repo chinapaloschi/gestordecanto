@@ -187,7 +187,34 @@ const handleDeleteEntireMonthlyPackage = async () => {
         setStudentToRemoveFromClass({ id: clsId, name: studentName });
         setShowConfirmRemoveStudentFromClassInstanceModal(true);
     };
-    const confirmRemoveStudentFromClassInstance = async () => { /* ...código sin cambios... */ };
+    // El botón "Sí, Quitar" llamaba a esta función, pero quedó vacía en algún
+    // refactor anterior (solo un comentario "sin cambios") -- confirmaba y no
+    // pasaba absolutamente nada, para cualquier tipo de clase. La lógica real
+    // (borrar solo el documento de este alumno, sin tocar su pago) ya existía
+    // en handleRemoveOneFromGroup, usada en el modal "Gestionar Clase
+    // Grupal" -- misma idea acá, adaptada al modal de confirmación propio en
+    // vez de window.confirm.
+    const confirmRemoveStudentFromClassInstance = async () => {
+        if (!studentToRemoveFromClass) return;
+        const { id: docId, name: studentName } = studentToRemoveFromClass;
+        try {
+            await deleteDoc(doc(db, `artifacts/${appId}/scheduledClasses`, docId));
+            showMessage(`${studentName} fue quitado de la clase.`, 'success');
+            setShowConfirmRemoveStudentFromClassInstanceModal(false);
+            setStudentToRemoveFromClass(null);
+            onStudentRemovedFromClass && onStudentRemovedFromClass(docId);
+            setCurrentClassGroup(prev => {
+                const next = prev.filter(c => c.id !== docId);
+                // Si era el único alumno (clase individual), no queda nada que
+                // mostrar -- cerramos el modal entero en vez de dejarlo vacío.
+                if (next.length === 0) onClose && onClose();
+                return next;
+            });
+        } catch (e) {
+            console.error('Error removing student from class:', e);
+            showMessage(`Error al quitar el alumno: ${e.message}`, 'error');
+        }
+    };
     const cancelRemoveStudentFromClassInstance = () => {
         setShowConfirmRemoveStudentFromClassInstanceModal(false);
         setStudentToRemoveFromClass(null);
@@ -270,13 +297,18 @@ const handleDeleteEntireMonthlyPackage = async () => {
                                     <button onClick={() => handleMarkAttendance(cls.id, null)}
                                         className="p-1.5 rounded-lg bg-gray-200 text-gray-500 hover:bg-gray-300 transition text-xs"
                                         title="Reiniciar">↻</button>
-                                    {isGroupedClass && (
-                                        <button onClick={() => handleRemoveStudentFromClassInstanceClick(cls.id, cls.studentName)}
-                                            className="p-1.5 rounded-lg bg-red-100 text-red-500 hover:bg-red-200 transition"
-                                            title="Quitar alumno">
-                                            <IconTrash />
-                                        </button>
-                                    )}
+                                    {/* Antes solo aparecía en clases grupales/corales -- en una
+                                        individual no había forma de sacar al alumno desde acá,
+                                        solo el link "Eliminar esta clase" al fondo del modal, que
+                                        no es obvio que hace lo mismo. Ahora confirmRemoveStudent...
+                                        ya funciona de verdad, así que mostrarlo siempre es seguro:
+                                        para una individual, quitar al único alumno cierra el modal
+                                        igual que "Eliminar esta clase" ya hacía. */}
+                                    <button onClick={() => handleRemoveStudentFromClassInstanceClick(cls.id, cls.studentName)}
+                                        className="p-1.5 rounded-lg bg-red-100 text-red-500 hover:bg-red-200 transition"
+                                        title="Quitar alumno">
+                                        <IconTrash />
+                                    </button>
                                 </div>
                             </div>
                             {/* Botones asistencia grandes */}
