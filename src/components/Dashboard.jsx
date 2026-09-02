@@ -170,21 +170,21 @@ const classesOnSelectedDate = React.useMemo(() => {
         <div className="space-y-6">
 
             {/* ── CLASES DEL DÍA — solo desktop (en mobile lo cubre TodayDashboard) ── */}
-            <div className="hidden sm:block bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="hidden sm:block bg-white rounded-xl border border-line shadow-sm overflow-hidden">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-wrap gap-2">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-line flex-wrap gap-2">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-gray-900 text-base">Clases del día</h3>
+                            <h3 className="font-display font-semibold text-ink text-base">Clases del día</h3>
                             {isToday && <span className="text-[9px] font-bold bg-rose-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">Hoy</span>}
                         </div>
                         {allStudentsToday.length > 0 && (
-                            <div className="flex gap-3 text-xs mt-0.5 flex-wrap">
-                                <span className="text-gray-400 font-medium">{allStudentsToday.length} clase{allStudentsToday.length !== 1 ? 's' : ''}</span>
+                            <div className="flex gap-3 text-xs mt-0.5 flex-wrap font-ticket tabular-nums">
+                                <span className="text-ink-faint font-medium">{allStudentsToday.length} clase{allStudentsToday.length !== 1 ? 's' : ''}</span>
                                 {todayPresent > 0 && <span className="text-green-600 font-bold">✓ {todayPresent} presente{todayPresent !== 1 ? 's' : ''}</span>}
                                 {todayAbsent  > 0 && <span className="text-red-500 font-bold">✗ {todayAbsent} ausente{todayAbsent !== 1 ? 's' : ''}</span>}
-                                {todayPending > 0 && <span className="text-gray-400">— {todayPending} pendiente{todayPending !== 1 ? 's' : ''}</span>}
+                                {todayPending > 0 && <span className="text-ink-faint">— {todayPending} pendiente{todayPending !== 1 ? 's' : ''}</span>}
                             </div>
                         )}
                     </div>
@@ -213,10 +213,10 @@ const classesOnSelectedDate = React.useMemo(() => {
                 {classesOnSelectedDate.length === 0 ? (
                     <div className="py-10 text-center">
                         <div className="text-3xl mb-2">📅</div>
-                        <p className="text-gray-400 font-medium text-sm">Sin clases programadas para este día</p>
+                        <p className="text-ink-faint font-medium text-sm">Sin clases programadas para este día</p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-gray-50">
+                    <div className="divide-y divide-line/60">
                         {classesOnSelectedDate.flatMap(group =>
                             group.students.map(student => {
                                 const fullStudent = studentsWithStats.find(s => s.id === student.studentId);
@@ -228,10 +228,10 @@ const classesOnSelectedDate = React.useMemo(() => {
                                 return (
                                     <div key={student.id}
                                         className={`flex items-center gap-3 px-4 py-3 transition-colors
-                                            ${isPresent ? 'bg-green-50' : isAbsent ? 'bg-red-50/60' : 'hover:bg-gray-50'}`}>
+                                            ${isPresent ? 'bg-green-50' : isAbsent ? 'bg-red-50/60' : 'hover:bg-paper-2'}`}>
 
                                         {/* Hora */}
-                                        <div className="w-10 text-xs font-black text-gray-500 tabular-nums flex-shrink-0 leading-tight text-center">
+                                        <div className="w-10 font-ticket tabular-nums text-xs font-semibold text-ink-soft flex-shrink-0 leading-tight text-center">
                                             {group.startTime}
                                         </div>
 
@@ -283,20 +283,20 @@ const classesOnSelectedDate = React.useMemo(() => {
             </div>
 
             {/* --- RESTO DEL DASHBOARD (FILTROS Y TARJETAS DE ALUMNOS) --- */}
-            <div className="bg-gray-50 p-6 rounded-xl shadow-inner border border-gray-200">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-line">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                     <div>
-                        <h3 className="text-lg font-semibold text-gray-800">Alumnos Registrados</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                            <button 
-                                onClick={() => setStudentFilter('active')} 
-                                className={`px-3 py-1 text-xs rounded-full font-semibold ${studentFilter === 'active' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+                        <h3 className="font-display font-semibold text-lg text-ink">Alumnos Registrados</h3>
+                        <div className="flex items-center gap-2 mt-1.5">
+                            <button
+                                onClick={() => setStudentFilter('active')}
+                                className={`px-3 py-1 text-xs rounded-full font-semibold transition ${studentFilter === 'active' ? 'bg-green-600 text-white' : 'bg-paper-2 text-ink-soft hover:bg-line'}`}
                             >
                                 Activos ({activeCount})
                             </button>
-                            <button 
-                                onClick={() => setStudentFilter('archived')} 
-                                className={`px-3 py-1 text-xs rounded-full font-semibold ${studentFilter === 'archived' ? 'bg-gray-800 text-white' : 'bg-gray-200 text-gray-700'}`}
+                            <button
+                                onClick={() => setStudentFilter('archived')}
+                                className={`px-3 py-1 text-xs rounded-full font-semibold transition ${studentFilter === 'archived' ? 'bg-ink text-white' : 'bg-paper-2 text-ink-soft hover:bg-line'}`}
                             >
                                 Archivados ({archivedCount})
                             </button>
@@ -308,12 +308,12 @@ const classesOnSelectedDate = React.useMemo(() => {
                             placeholder="Buscar alumno..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="flex-1 sm:w-56 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-sm"
+                            className="flex-1 sm:w-56 p-2 border border-line rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-300 text-sm"
                         />
                         <select
                             value={sortBy}
                             onChange={e => setSortBy(e.target.value)}
-                            className="px-2 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
+                            className="px-2 py-2 border border-line rounded-lg text-sm text-ink-soft bg-white focus:outline-none focus:ring-2 focus:ring-rose-300 cursor-pointer"
                         >
                             <option value="name">A–Z</option>
                             <option value="debt">Mayor deuda</option>
@@ -365,7 +365,7 @@ const classesOnSelectedDate = React.useMemo(() => {
                                     .reduce((sum, s) => sum + (s.pendingBalance || 0), 0);
                                 alert(`💰 Total deuda de alumnos activos: $${total.toLocaleString('es-AR')}`);
                             }}
-                            className="inline-flex items-center px-2 py-0.5 sm:px-4 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 whitespace-nowrap"
+                            className="inline-flex items-center px-2 py-0.5 sm:px-4 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold border border-line bg-white text-ink-soft hover:bg-paper-2 whitespace-nowrap"
                         >
                             Total en pesos
                         </button>
@@ -373,7 +373,7 @@ const classesOnSelectedDate = React.useMemo(() => {
                 )}
 
                 {filteredStudents.length === 0 ? (
-                    <p className="text-gray-600 text-center py-4">
+                    <p className="text-ink-soft text-center py-4">
                         No se encontraron alumnos en esta vista.
                     </p>
                 ) : (

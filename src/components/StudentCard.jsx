@@ -150,7 +150,7 @@ const StudentCardImpl = ({
   return (
     <>
       <div className={`bg-white rounded-2xl shadow-sm border transition-shadow
-        ${student.isArchived ? 'border-gray-200 opacity-70' : hasDebt ? 'border-rose-100' : 'border-gray-100'}`}
+        ${student.isArchived ? 'border-line opacity-70' : hasDebt ? 'border-rose-100' : 'border-line'}`}
       >
         {/* ── Cabecera con avatar y nombre ── */}
         <div
@@ -191,7 +191,7 @@ const StudentCardImpl = ({
 
           {/* Sub-info: nivel/voz */}
           {((student.vocal && student.vocal !== 'Sin definir') || student.level) && (
-            <p className="text-[10px] text-gray-400 text-center mt-0.5 truncate w-full">
+            <p className="text-[10px] text-ink-faint text-center mt-0.5 truncate w-full">
               {[student.vocal !== 'Sin definir' && student.vocal, student.level].filter(Boolean).join(' · ')}
             </p>
           )}
@@ -233,28 +233,28 @@ const StudentCardImpl = ({
 
         {/* ── Stats ── */}
         {!student.isArchived && (
-          <div className="mx-3 mb-3 grid grid-cols-3 gap-1 rounded-xl bg-gray-50 p-2">
+          <div className="mx-3 mb-3 grid grid-cols-3 gap-1 rounded-xl bg-paper-2 p-2">
             <button
               onClick={() => setShowClassesModal(true)}
               disabled={!student.totalPaidUnconsumedClasses}
               className="text-center disabled:cursor-default"
             >
-              <div className="text-[8px] text-gray-400 font-bold uppercase tracking-wide">Rest.</div>
-              <div className={`text-base font-black leading-tight ${student.totalPaidUnconsumedClasses > 0 ? 'text-green-700 underline decoration-dotted' : 'text-gray-300'}`}>
+              <div className="text-[8px] text-ink-faint font-bold uppercase tracking-wide">Rest.</div>
+              <div className={`font-ticket tabular-nums text-base font-semibold leading-tight ${student.totalPaidUnconsumedClasses > 0 ? 'text-green-700 underline decoration-dotted' : 'text-ink-faint/60'}`}>
                 {student.totalPaidUnconsumedClasses || 0}
               </div>
             </button>
-            <div className="text-center border-x border-gray-200">
-              <div className="text-[8px] text-gray-400 font-bold uppercase tracking-wide">Mes</div>
-              <div className="text-base font-black text-blue-700 leading-tight">
+            <div className="text-center border-x border-line">
+              <div className="text-[8px] text-ink-faint font-bold uppercase tracking-wide">Mes</div>
+              <div className="font-ticket tabular-nums text-base font-semibold text-blue-700 leading-tight">
                 {student.totalPaidClassesThisMonth || 0}
               </div>
             </div>
             <div className="text-center">
-              <div className="text-[8px] text-gray-400 font-bold uppercase tracking-wide">
+              <div className="text-[8px] text-ink-faint font-bold uppercase tracking-wide">
                 {flexCredit ? 'Flex' : 'Tickets'}
               </div>
-              <div className={`text-base font-black leading-tight ${flexCredit ? 'text-violet-600' : 'text-gray-300'}`}>
+              <div className={`font-ticket tabular-nums text-base font-semibold leading-tight ${flexCredit ? 'text-violet-600' : 'text-ink-faint/60'}`}>
                 {flexCredit ? `${flexCredit.remaining}` : (student.hasVisibleTickets ? '🎫' : '—')}
               </div>
             </div>
@@ -263,7 +263,7 @@ const StudentCardImpl = ({
 
         {/* ── Última clase / último pago ── */}
         {!student.isArchived && (student.lastClassDate || student.lastPaymentDate) && (
-          <div className="mx-3 mb-2 flex gap-2 text-[10px] text-gray-400">
+          <div className="mx-3 mb-2 flex gap-2 text-[10px] text-ink-faint">
             {student.lastClassDate && (
               <span className="flex items-center gap-0.5 min-w-0 truncate">
                 <svg className="w-3 h-3 flex-shrink-0 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -291,7 +291,7 @@ const StudentCardImpl = ({
           {student.isArchived ? (
             <button
               onClick={() => onRestoreStudent(student.id)}
-              className="flex-1 py-2 rounded-xl text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
+              className="flex-1 py-2 rounded-xl text-xs font-bold text-ink-soft bg-paper-2 hover:bg-line transition"
             >
               Restaurar
             </button>
@@ -326,7 +326,7 @@ const StudentCardImpl = ({
 
               <button
                 onClick={() => onOpenStudentDetailsModal(student)}
-                className="flex-1 h-9 rounded-xl text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition flex items-center justify-center gap-1"
+                className="flex-1 h-9 rounded-xl text-xs font-bold text-ink-soft bg-paper-2 hover:bg-line transition flex items-center justify-center gap-1"
               >
                 Ver perfil
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

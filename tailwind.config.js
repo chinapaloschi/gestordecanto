@@ -17,6 +17,7 @@ export default {
         'ink-soft':  '#6E5560',
         'ink-faint': '#A6919B',
         gold:    { DEFAULT: '#C9A227', soft: '#FBF3DC', ink: '#8A6D14' },
+        line:    '#EBDFDC',
       },
     },
   },

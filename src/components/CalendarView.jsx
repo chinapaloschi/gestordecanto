@@ -461,33 +461,33 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
         // --- FIN NUEVA FUNCIÓN ---
 
         return (
-            <div className="w-full border border-gray-300 rounded-lg select-none">
+            <div className="w-full border border-line rounded-lg select-none">
                 <div className="grid" style={{ gridTemplateColumns: `auto repeat(${gridCols}, minmax(70px, 1fr))` }}>
-                    <div className="sticky top-0 left-0 bg-gray-50 z-10 p-2 border-b border-r border-gray-200"></div>
+                    <div className="sticky top-0 left-0 bg-paper-2 z-10 p-2 border-b border-r border-line"></div>
                     {weekDates.map((date, index) => {
                         const isTodayCol = date.toDateString() === new Date().toDateString();
                         const shortDate = formatDateToDDMMYYYY(date).slice(0, 5);
                         return (
                             <div key={date.toISOString()}
-                                className={`sticky top-0 z-10 py-2 px-1 text-center border-b border-r border-gray-200 transition-colors
-                                    ${isTodayCol ? 'bg-rose-600 text-white' : 'bg-gray-50 text-gray-600'}`}>
+                                className={`sticky top-0 z-10 py-2 px-1 text-center border-b border-r border-line transition-colors
+                                    ${isTodayCol ? 'bg-rose-600 text-white' : 'bg-paper-2 text-ink-soft'}`}>
                                 <div className="text-[10px] font-semibold uppercase tracking-wide opacity-80">{weekDayHeaders[index]}</div>
-                                <div className={`text-xs font-bold ${isTodayCol ? 'text-white' : 'text-gray-800'}`}>{shortDate}</div>
+                                <div className={`font-ticket tabular-nums text-xs font-semibold ${isTodayCol ? 'text-white' : 'text-ink'}`}>{shortDate}</div>
                                 {isTodayCol && <div className="text-[8px] bg-white/25 rounded px-1 mt-0.5 inline-block font-bold tracking-wider">HOY</div>}
                             </div>
                         );
                     })}
-                    
+
                     {/* SECCIÓN MAÑANA */}
-                    <div onClick={() => toggleSection('morning')} className={`${headerColSpanClass} sticky top-[49px] z-10 flex items-center justify-center gap-2 py-1 bg-gray-50/90 backdrop-blur border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition`}>
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mañana</span>
-                        <span className="text-gray-300 text-[10px]">{collapsedSections.morning ? '▾' : '▴'}</span>
+                    <div onClick={() => toggleSection('morning')} className={`${headerColSpanClass} sticky top-[49px] z-10 flex items-center justify-center gap-2 py-1 bg-paper-2/90 backdrop-blur border-b border-line cursor-pointer hover:bg-paper-2 transition`}>
+                        <span className="text-[10px] font-bold text-ink-faint uppercase tracking-widest">Mañana</span>
+                        <span className="text-ink-faint/70 text-[10px]">{collapsedSections.morning ? '▾' : '▴'}</span>
                     </div>
                     {!collapsedSections.morning && (
                         <div style={{ display: 'contents' }}>
-                            <div className="flex flex-col bg-gray-50/80">
+                            <div className="flex flex-col bg-paper-2/80">
                                 {morningTimeSlots.map(slotTime => (
-                                    <div key={slotTime} className="h-[60px] p-2 text-[11px] font-semibold text-gray-400 text-right border-r border-b border-gray-100 relative tabular-nums">
+                                    <div key={slotTime} className="font-ticket h-[60px] p-2 text-[11px] font-semibold text-ink-faint text-right border-r border-b border-line/70 relative tabular-nums">
                                         {slotTime}
                                         <div className="absolute top-[30px] left-0 right-0 border-t border-dashed border-gray-100" />
                                     </div>
@@ -577,17 +577,17 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                     )}
 
                     {/* SECCIÓN TARDE */}
-                    <div onClick={() => toggleSection('afternoon')} className={`${headerColSpanClass} sticky top-[49px] z-10 flex items-center justify-center gap-2 py-1 bg-gray-50/90 backdrop-blur border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition`}>
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tarde</span>
-                        <span className="text-gray-300 text-[10px]">{collapsedSections.afternoon ? '▾' : '▴'}</span>
+                    <div onClick={() => toggleSection('afternoon')} className={`${headerColSpanClass} sticky top-[49px] z-10 flex items-center justify-center gap-2 py-1 bg-paper-2/90 backdrop-blur border-b border-line cursor-pointer hover:bg-paper-2 transition`}>
+                        <span className="text-[10px] font-bold text-ink-faint uppercase tracking-widest">Tarde</span>
+                        <span className="text-ink-faint/70 text-[10px]">{collapsedSections.afternoon ? '▾' : '▴'}</span>
                     </div>
                     {!collapsedSections.afternoon && (
                         <div style={{ display: 'contents' }}>
-                            <div className="flex flex-col bg-gray-50/80">
+                            <div className="flex flex-col bg-paper-2/80">
                                 {afternoonTimeSlots.map(slotTime => (
-                                    <div key={slotTime} className="h-[60px] border-r border-b border-gray-100 relative">
-                                        <span className="absolute top-1 right-2 text-[10px] font-semibold text-gray-400 tabular-nums">{slotTime}</span>
-                                        <div className="absolute top-[30px] left-0 right-0 border-t border-dashed border-gray-100" />
+                                    <div key={slotTime} className="h-[60px] border-r border-b border-line/70 relative">
+                                        <span className="absolute top-1 right-2 font-ticket text-[10px] font-semibold text-ink-faint tabular-nums">{slotTime}</span>
+                                        <div className="absolute top-[30px] left-0 right-0 border-t border-dashed border-line/70" />
                                     </div>
                                 ))}
                             </div>
@@ -699,8 +699,8 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
         return (
             <div>
                 {/* ── RESUMEN DEL MES ── */}
-                <div className="flex flex-wrap gap-2 mb-4">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-xl text-xs font-semibold text-gray-700">
+                <div className="flex flex-wrap gap-2 mb-4 font-ticket tabular-nums">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-paper-2 rounded-xl text-xs font-semibold text-ink-soft">
                         📅 <span>{monthlyStats.total} clase{monthlyStats.total !== 1 ? 's' : ''}</span>
                     </div>
                     <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-100 rounded-xl text-xs font-semibold text-green-800">
@@ -717,10 +717,10 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                 </div>
 
                 {/* ── GRILLA ── */}
-                <div className={`w-full grid ${gridClass} border border-gray-200 rounded-xl overflow-hidden shadow-sm`}>
+                <div className={`w-full grid ${gridClass} border border-line rounded-xl overflow-hidden shadow-sm`}>
                     {/* Encabezados */}
                     {dayHeaders.map(d => (
-                        <div key={d} className="py-2 text-center text-xs font-bold text-gray-500 bg-gray-50 border-b border-gray-200 uppercase tracking-wider">{d}</div>
+                        <div key={d} className="py-2 text-center text-xs font-bold text-ink-faint bg-paper-2 border-b border-line uppercase tracking-wider">{d}</div>
                     ))}
 
                     {/* Celdas */}
@@ -748,27 +748,27 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                             <div
                                 key={idx}
                                 onClick={() => { setSelectedDay(fmt); setShowDayPanel(true); }}
-                                className={`relative border-b border-r border-gray-100 min-h-[110px] cursor-pointer transition-colors
-                                    ${isCurrentM ? 'bg-white' : 'bg-gray-50/60'}
+                                className={`relative border-b border-r border-line/70 min-h-[110px] cursor-pointer transition-colors
+                                    ${isCurrentM ? 'bg-white' : 'bg-paper-2/60'}
                                     ${isToday ? '!bg-rose-50 border-rose-200' : ''}
-                                    ${isSel ? 'ring-2 ring-inset ring-rose-400' : 'hover:bg-gray-50'}
-                                    ${blocked ? 'bg-gray-100' : ''}
+                                    ${isSel ? 'ring-2 ring-inset ring-rose-400' : 'hover:bg-paper-2'}
+                                    ${blocked ? 'bg-paper-2' : ''}
                                 `}
                             >
                                 {/* Número del día */}
                                 <div className={`px-2 pt-1.5 pb-0.5 flex items-center justify-between`}>
-                                    <span className={`text-xs font-bold inline-flex items-center justify-center w-6 h-6 rounded-full
-                                        ${isToday ? 'bg-rose-600 text-white' : isCurrentM ? 'text-gray-700' : 'text-gray-300'}`}>
+                                    <span className={`font-ticket tabular-nums text-xs font-bold inline-flex items-center justify-center w-6 h-6 rounded-full
+                                        ${isToday ? 'bg-rose-600 text-white' : isCurrentM ? 'text-ink-soft' : 'text-ink-faint/50'}`}>
                                         {day.getDate()}
                                     </span>
                                     {dayClasses.length > 0 && (
-                                        <span className="text-[10px] font-bold text-gray-400">{dayClasses.length}</span>
+                                        <span className="font-ticket text-[10px] font-bold text-ink-faint">{dayClasses.length}</span>
                                     )}
                                 </div>
 
                                 {/* Día bloqueado */}
                                 {blocked && (
-                                    <div className="mx-2 mb-1 px-2 py-0.5 bg-gray-200 rounded text-[10px] text-gray-500 font-semibold truncate">
+                                    <div className="mx-2 mb-1 px-2 py-0.5 bg-line rounded text-[10px] text-ink-soft font-semibold truncate">
                                         🚫 {blocked.reason || 'Bloqueado'}
                                     </div>
                                 )}
@@ -803,7 +803,7 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                                         );
                                     })}
                                     {groups.length > 3 && (
-                                        <div className="text-[10px] text-gray-400 font-semibold px-1">+{groups.length - 3} más</div>
+                                        <div className="text-[10px] text-ink-faint font-semibold px-1">+{groups.length - 3} más</div>
                                     )}
                                 </div>
                             </div>
@@ -828,12 +828,12 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                                 onClick={e => e.stopPropagation()}
                             >
                                 {/* Header */}
-                                <div className="px-5 py-4 border-b flex items-center gap-3">
+                                <div className="px-5 py-4 border-b border-line flex items-center gap-3">
                                     <div className="flex-1">
-                                        <h3 className="font-bold text-gray-900 capitalize">{panelDate}</h3>
-                                        <p className="text-xs text-gray-500">{panelClasses.length} clase{panelClasses.length !== 1 ? 's' : ''}</p>
+                                        <h3 className="font-display font-semibold text-ink capitalize">{panelDate}</h3>
+                                        <p className="text-xs text-ink-faint">{panelClasses.length} clase{panelClasses.length !== 1 ? 's' : ''}</p>
                                     </div>
-                                    <button onClick={() => setShowDayPanel(false)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 font-bold">×</button>
+                                    <button onClick={() => setShowDayPanel(false)} className="w-8 h-8 rounded-full bg-paper-2 hover:bg-line flex items-center justify-center text-ink-soft font-bold">×</button>
                                 </div>
 
                                 {/* Lista */}
@@ -900,18 +900,18 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
         const nAbsent  = dayClasses.filter(c => isAbsent(c.attendanceStatus)).length;
 
         return (
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-line rounded-xl overflow-hidden">
                 {/* Navegación de día */}
-                <div className={`flex items-center justify-between px-3 py-3 border-b border-gray-200
-                    ${isTodayDay ? 'bg-rose-600' : 'bg-gray-50'}`}>
+                <div className={`flex items-center justify-between px-3 py-3 border-b border-line
+                    ${isTodayDay ? 'bg-rose-600' : 'bg-paper-2'}`}>
                     <button onClick={() => goDay(-1)}
-                        className={`p-2 rounded-lg transition ${isTodayDay ? 'text-white hover:bg-white/20' : 'text-gray-500 hover:bg-gray-200'}`}>
+                        className={`p-2 rounded-lg transition ${isTodayDay ? 'text-white hover:bg-white/20' : 'text-ink-soft hover:bg-line'}`}>
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
                         </svg>
                     </button>
                     <div className="text-center">
-                        <p className={`font-semibold text-sm capitalize ${isTodayDay ? 'text-white' : 'text-gray-800'}`}>
+                        <p className={`font-display font-semibold text-sm capitalize ${isTodayDay ? 'text-white' : 'text-ink'}`}>
                             {dateLabel}
                         </p>
                         {isTodayDay && (
@@ -921,7 +921,7 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                         )}
                     </div>
                     <button onClick={() => goDay(1)}
-                        className={`p-2 rounded-lg transition ${isTodayDay ? 'text-white hover:bg-white/20' : 'text-gray-500 hover:bg-gray-200'}`}>
+                        className={`p-2 rounded-lg transition ${isTodayDay ? 'text-white hover:bg-white/20' : 'text-ink-soft hover:bg-line'}`}>
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
                         </svg>
@@ -932,7 +932,7 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                 {isBlocked && (
                     <div className="py-10 text-center">
                         <div className="text-4xl mb-2">🚫</div>
-                        <p className="font-medium text-gray-500">Día bloqueado</p>
+                        <p className="font-medium text-ink-soft">Día bloqueado</p>
                     </div>
                 )}
 
@@ -940,13 +940,13 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                 {!isBlocked && dayClasses.length === 0 && (
                     <div className="py-10 text-center">
                         <div className="text-4xl mb-2">📅</div>
-                        <p className="font-medium text-gray-400">Sin clases este día</p>
+                        <p className="font-medium text-ink-faint">Sin clases este día</p>
                     </div>
                 )}
 
                 {/* Lista de clases */}
                 {!isBlocked && dayClasses.length > 0 && (
-                    <div className="divide-y divide-gray-100">
+                    <div className="divide-y divide-line/70">
                         {dayClasses.map(cls => {
                             const present = isPresent(cls.attendanceStatus);
                             const absent  = isAbsent(cls.attendanceStatus);
@@ -966,10 +966,10 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                                     className={`flex items-center gap-3 px-3 py-3 border-l-4 ${borderCls} ${bgCls} cursor-pointer active:brightness-95 transition`}
                                     onClick={() => { setSelectedClassForAttendance([cls]); setShowAttendanceModal(true); }}
                                 >
-                                    <span className="text-sm font-bold text-gray-500 w-12 flex-shrink-0 tabular-nums">{cls.startTime}</span>
+                                    <span className="font-ticket text-sm font-semibold text-ink-soft w-12 flex-shrink-0 tabular-nums">{cls.startTime}</span>
                                     <div className="flex-1 min-w-0">
-                                        <div className="font-semibold text-sm text-gray-900 truncate">{cls.studentName}</div>
-                                        <div className="text-xs text-gray-400">{mapClassTypeToSpanish(cls.studentType)} · {cls.duration} min</div>
+                                        <div className="font-semibold text-sm text-ink truncate">{cls.studentName}</div>
+                                        <div className="text-xs text-ink-faint">{mapClassTypeToSpanish(cls.studentType)} · {cls.duration} min</div>
                                     </div>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                         {present && <span className="text-green-600 font-bold">✓</span>}
@@ -985,7 +985,7 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
 
                 {/* Resumen del día */}
                 {dayClasses.length > 0 && (
-                    <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex gap-3 text-xs text-gray-500">
+                    <div className="px-4 py-2 bg-paper-2 border-t border-line font-ticket tabular-nums flex gap-3 text-xs text-ink-soft">
                         <span className="font-medium">{dayClasses.length} clase{dayClasses.length !== 1 ? 's' : ''}</span>
                         <span>·</span>
                         <span className="text-green-600 font-medium">{nPresent} presente{nPresent !== 1 ? 's' : ''}</span>
@@ -998,11 +998,11 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
     };
 
     return (
-        <div className="bg-white p-3 sm:p-6 rounded-lg sm:rounded-xl shadow-lg border border-gray-200 text-sm">
+        <div className="bg-white p-3 sm:p-6 rounded-lg sm:rounded-xl shadow-lg border border-line text-sm">
 
             {/* ── Header mobile: título + Hoy + Recordar ── */}
             <div className="sm:hidden flex items-center justify-between mb-3 gap-2">
-                <h2 className="font-bold text-gray-800 text-base">Calendario</h2>
+                <h2 className="font-display font-semibold text-ink text-lg">Calendario</h2>
                 <div className="flex items-center gap-2">
                     {tomorrowStudents.length > 0 && (
                         <button
@@ -1023,7 +1023,7 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
 
             {/* ── Header desktop: título + todos los botones ── */}
             <div className="hidden sm:flex sm:justify-between sm:items-center gap-2 mb-4">
-                <h2 className="font-bold text-gray-800">CALENDARIO DE CLASES</h2>
+                <h2 className="font-display font-semibold text-ink text-xl">Calendario de clases</h2>
                 <div className="flex flex-wrap gap-2">
                     <button onClick={() => setCurrentDate(new Date())}
                         className="px-3 py-1.5 rounded-lg border bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 text-sm font-semibold">
@@ -1036,7 +1036,7 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition ${
                             tomorrowStudents.length > 0
                                 ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
-                                : 'bg-gray-50 text-gray-400 border-gray-200 cursor-default'
+                                : 'bg-paper-2 text-ink-faint border-line cursor-default'
                         }`}
                     >
                         🔔 Recordar mañana
@@ -1047,14 +1047,14 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
                         )}
                     </button>
                     <button onClick={() => setShowWeekend(prev => !prev)}
-                        className="px-3 py-1.5 rounded-lg border bg-white text-gray-700 border-gray-300 hover:bg-gray-100 text-sm font-medium">
+                        className="px-3 py-1.5 rounded-lg border bg-white text-ink-soft border-line hover:bg-paper-2 text-sm font-medium">
                         {showWeekend ? 'Ocultar Vie/Sáb' : 'Mostrar Vie/Sáb'}
                     </button>
-                    <button onClick={() => setViewMode('weekly')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${viewMode === 'weekly' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'}`}>
+                    <button onClick={() => setViewMode('weekly')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${viewMode === 'weekly' ? 'bg-ink text-white border-ink' : 'bg-white text-ink-soft border-line hover:bg-paper-2'}`}>
                         <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="4" width="2" height="12" rx="1"/><rect x="6" y="4" width="2" height="12" rx="1"/><rect x="10" y="4" width="2" height="12" rx="1"/><rect x="14" y="4" width="2" height="12" rx="1"/></svg>
                         <span className="text-sm font-medium">Semana</span>
                     </button>
-                    <button onClick={() => setViewMode('monthly')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${viewMode === 'monthly' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'}`}>
+                    <button onClick={() => setViewMode('monthly')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${viewMode === 'monthly' ? 'bg-ink text-white border-ink' : 'bg-white text-ink-soft border-line hover:bg-paper-2'}`}>
                         <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="4" width="14" height="13" rx="2"/><rect x="3" y="7" width="14" height="1.5"/><rect x="5" y="9" width="3" height="3" rx="0.6"/><rect x="9" y="9" width="3" height="3" rx="0.6"/><rect x="13" y="9" width="3" height="3" rx="0.6"/><rect x="5" y="13" width="3" height="3" rx="0.6"/><rect x="9" y="13" width="3" height="3" rx="0.6"/><rect x="13" y="13" width="3" height="3" rx="0.6"/></svg>
                         <span className="text-sm font-medium">Mes</span>
                     </button>
@@ -1068,16 +1068,16 @@ export const CalendarView = ({ db, userId, appId, scheduledClasses, students, sh
             {/* Vista desktop: semana / mes */}
             <div className="hidden sm:block">
                 <div className="flex justify-between items-center mb-6">
-                    <button onClick={handlePrev} className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition">
-                        <svg className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                    <button onClick={handlePrev} className="p-2 rounded-full bg-paper-2 hover:bg-line transition">
+                        <svg className="h-5 w-5 text-ink-soft" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                     </button>
-                    <h3 className="text-sm font-semibold text-gray-800">
+                    <h3 className="font-ticket tabular-nums text-sm font-semibold text-ink">
                         {viewMode === 'weekly'
                             ? `${formatDateToDDMMYYYY(getWeekRange(currentDate, showWeekend)[0])} - ${formatDateToDDMMYYYY(getWeekRange(currentDate, showWeekend)[getWeekRange(currentDate, showWeekend).length - 1])}`
                             : currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase()}
                     </h3>
-                    <button onClick={handleNext} className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition">
-                        <svg className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    <button onClick={handleNext} className="p-2 rounded-full bg-paper-2 hover:bg-line transition">
+                        <svg className="h-5 w-5 text-ink-soft" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                     </button>
                 </div>
                 {viewMode === 'weekly'
