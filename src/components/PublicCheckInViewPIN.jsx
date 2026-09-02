@@ -13,7 +13,7 @@ import { MoneyInput } from './MoneyInput.jsx';
 import { Toast } from './Toast.jsx';
 
 import { formatMoneyAr, parseMoneyAr } from '../utils/money.js';
-import { sumWithSurcharge } from '../utils/lateSurcharge.js';
+import { sumWithSurcharge, withSurcharge } from '../utils/lateSurcharge.js';
 
 import { formatDateToDDMMYYYY } from '../utils/classHelpers.js';
 
@@ -88,7 +88,36 @@ function NotificationStatusBanner({ db, appId, studentId, showToast }) {
   );
   const [loading, setLoading] = React.useState(false);
 
+  // En iPhone, Safari solo entrega notificaciones push si la app está
+  // agregada a la pantalla de inicio (modo standalone) -- abierta como
+  // pestaña normal, el botón de activar no tiene forma de funcionar nunca,
+  // y antes el alumno sólo se enteraba (con suerte) después de tocarlo y
+  // recibir un error genérico de "no soportado".
+  const isIOS = React.useMemo(() => /iPhone|iPad|iPod/i.test(navigator.userAgent || ''), []);
+  const isStandalone = React.useMemo(() => {
+    try {
+      return navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches === true;
+    } catch { return false; }
+  }, []);
+  const iosNeedsInstall = isIOS && !isStandalone;
+
   if (status === 'unsupported' || status === 'granted') return null;
+
+  if (iosNeedsInstall) {
+    return (
+      <div className="w-full rounded-xl p-3 flex items-center gap-3 bg-blue-50 border border-blue-200">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-100">
+          <span className="text-sm">📲</span>
+        </div>
+        <div>
+          <p className="font-display font-semibold text-xs text-blue-800">Sumá esta app a tu pantalla de inicio</p>
+          <p className="text-[11px] mt-0.5 text-blue-700">
+            En iPhone, las notificaciones solo llegan así: tocá <strong>Compartir</strong> y despues <strong>"Agregar a inicio"</strong>.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const activate = async () => {
     setLoading(true);
@@ -190,12 +219,26 @@ export const PublicCheckInViewPIN = ({ db, forcedStudent = null, forcedAppId = n
     return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible); };
   }, []);
 
+  // Todos los bugs de "pantalla vacía sin explicación" arreglados hoy eran
+  // de permisos, pero un alumno con mal wifi/datos ve exactamente la misma
+  // pantalla en blanco por un motivo totalmente distinto (sin conexión) —
+  // este aviso es específico para ese caso, separado de paymentsLoadError.
+  const [isOnline, setIsOnline] = React.useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
+  React.useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+  }, []);
+
   const [status, setStatus] = React.useState({ step: 'ok', msg: 'Completá tu DNI para ingresar.' });
 
   const [saving, setSaving] = React.useState(false);
 
   const [toast, setToast] = React.useState({ open: false, kind: "success", text: "" });
   const [openProfile, setOpenProfile] = React.useState(false);
+  const [showDebtDetail, setShowDebtDetail] = React.useState(false);
   const [openRepertoire, setOpenRepertoire] = React.useState(false);
   const [openNotes, setOpenNotes] = React.useState(false);
   const [repertoire, setRepertoire] = React.useState([]);
@@ -1486,6 +1529,16 @@ const renderCalendarGrid = () => {
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-md mx-auto px-4 py-3 space-y-3">
 
+          {!isOnline && (
+            <div className="bg-gray-100 border border-gray-200 rounded-xl p-3 flex items-center gap-2.5">
+              <span className="text-lg flex-shrink-0">📡</span>
+              <div>
+                <p className="text-xs font-bold text-gray-700">Sin conexión</p>
+                <p className="text-[11px] text-gray-500">Algunas cosas pueden no cargar hasta que vuelvas a tener señal.</p>
+              </div>
+            </div>
+          )}
+
           {paymentsLoadError && (
             <div className="bg-red-50 border border-red-300 rounded-xl p-3">
               <p className="text-xs font-bold text-red-800">No se pudieron cargar tus pagos</p>
@@ -1556,17 +1609,59 @@ const renderCalendarGrid = () => {
                   <div><p className="font-display font-semibold text-green-800 text-sm">Cuota al día</p><p className="text-xs text-green-600 mt-0.5">{mesActualLabel} pagado. Gracias.</p></div>
                 </div>
               )}
-              {showDue && (
-                <div className={`rounded-xl p-4 flex items-center gap-3 ${aplicaRecargo ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${aplicaRecargo ? 'bg-red-100' : 'bg-amber-100'}`}>
-                    <svg className={`w-[18px] h-[18px] ${aplicaRecargo ? 'text-red-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+              {showDue && (() => {
+                // Antes el cartel sólo mostraba el total, sin decir de dónde
+                // salía — un alumno con abono + una clase suelta sin pagar no
+                // tenía forma de saber qué componía ese número sin
+                // preguntarle a Sandra. Mismo cálculo ítem por ítem que ya usa
+                // el total (utils/lateSurcharge.js).
+                const now = new Date(todayKey + 'T12:00:00');
+                const debtItems = [
+                  ...currentMonthUnpaidPackages.map(pkg => {
+                    const base = Number(pkg.amount ?? pkg.monto ?? pkg.total ?? 0);
+                    return { label: 'Abono mensual', amount: withSurcharge(base, pkg.periodStartDate, now).amount };
+                  }),
+                  ...unpaidClasses.map(cls => {
+                    const base = Number(cls.price ?? cls.amount ?? 0);
+                    return { label: `Clase suelta · ${dayLabel(cls.classDate)}`, amount: withSurcharge(base, cls.classDate, now).amount };
+                  }),
+                  ...unpaidFlexCredits.map(fc => {
+                    const total = fc.amount || 0;
+                    const montoPorClase = fc.montoPorClase || (fc.clasesTotal ? Math.round(total / fc.clasesTotal) : total);
+                    const base = Math.max(total - (fc.clasesPagadas || 0) * montoPorClase, 0);
+                    return { label: 'Abono flexible', amount: withSurcharge(base, fc.periodStartDate, now).amount };
+                  }),
+                ];
+                return (
+                  <div className={`rounded-xl p-4 ${aplicaRecargo ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${aplicaRecargo ? 'bg-red-100' : 'bg-amber-100'}`}>
+                        <svg className={`w-[18px] h-[18px] ${aplicaRecargo ? 'text-red-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className={`font-display font-semibold text-sm ${aplicaRecargo ? 'text-red-800' : 'text-amber-800'}`}>{aplicaRecargo ? 'Cuota vencida — 10% de recargo' : 'Cuota pendiente'}</p>
+                        <p className={`text-xs mt-0.5 ${aplicaRecargo ? 'text-red-700' : 'text-amber-700'}`}>Total hoy: <strong className="font-ticket">${new Intl.NumberFormat('es-AR').format(publicTotalToday)}</strong></p>
+                      </div>
+                      {debtItems.length > 0 && (
+                        <button onClick={() => setShowDebtDetail(v => !v)}
+                          className={`text-[11px] font-bold underline flex-shrink-0 ${aplicaRecargo ? 'text-red-700' : 'text-amber-700'}`}>
+                          {showDebtDetail ? 'Ocultar' : 'Ver detalle'}
+                        </button>
+                      )}
+                    </div>
+                    {showDebtDetail && debtItems.length > 0 && (
+                      <div className={`mt-3 pt-3 border-t space-y-1.5 ${aplicaRecargo ? 'border-red-200' : 'border-amber-200'}`}>
+                        {debtItems.map((it, i) => (
+                          <div key={i} className={`flex items-center justify-between text-[11px] ${aplicaRecargo ? 'text-red-700' : 'text-amber-700'}`}>
+                            <span>{it.label}</span>
+                            <span className="font-ticket font-semibold">${new Intl.NumberFormat('es-AR').format(it.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <p className={`font-display font-semibold text-sm ${aplicaRecargo ? 'text-red-800' : 'text-amber-800'}`}>{aplicaRecargo ? 'Cuota vencida — 10% de recargo' : 'Cuota pendiente'}</p>
-                    <p className={`text-xs mt-0.5 ${aplicaRecargo ? 'text-red-700' : 'text-amber-700'}`}>Total hoy: <strong className="font-ticket">${new Intl.NumberFormat('es-AR').format(publicTotalToday)}</strong></p>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {!forcedStudent && <NotificationStatusBanner db={db} appId={appId} studentId={student?.id} showToast={showToast} />}
 

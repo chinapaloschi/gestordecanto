@@ -143,7 +143,16 @@ export function PublicMessages({ db, appId, student }) {
   };
 
   const visible = rows.filter(m => !dismissed.has(m.id));
-  if (!visible.length && !loadError) return null;
+
+  if (!visible.length && !loadError) {
+    return (
+      <div className="rounded-xl border border-gray-100 bg-gray-50 mt-4 px-4 py-6 flex flex-col items-center text-center gap-1.5">
+        <span className="text-2xl">💬</span>
+        <p className="text-xs font-semibold text-gray-500">No tenés mensajes todavía</p>
+        <p className="text-[11px] text-gray-400">Acá van a aparecer los avisos de Sandra.</p>
+      </div>
+    );
+  }
 
   if (!visible.length && loadError) {
     return (
