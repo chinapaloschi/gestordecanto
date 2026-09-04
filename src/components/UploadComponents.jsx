@@ -29,8 +29,15 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, aplicaRecargo, 
   });
   const receiptStatus = thisMonthReceipt?.status || null;
   const isAlreadyPending = receiptStatus === 'pending';
-  const isApproved = receiptStatus === 'approved';
   const isRejected = receiptStatus === 'rejected';
+  // Este componente sólo se monta cuando el padre ya calculó totalHoy > 0
+  // (deuda real, a partir de los ítems sin pagar en Firestore) -- por eso NO
+  // hay que volver a esconder el formulario acá con un "ya está aprobado
+  // este mes": si el alumno pagó una cuota a principios de mes y Sandra le
+  // generó un abono nuevo más tarde en el mismo mes (como pasó con Javier),
+  // "thisMonthReceipt" encuentra el comprobante VIEJO ya aprobado y
+  // escondía el formulario para la deuda NUEVA -- el alumno veía "Cuota
+  // pendiente" arriba pero no tenía forma de mandar el comprobante.
   // aplicaRecargo viene del padre (misma lógica centralizada en
   // utils/lateSurcharge.js que decide el cartel "Cuota vencida"/"Cuota
   // pendiente") — antes este componente reimplementaba su propia versión
@@ -78,12 +85,6 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, aplicaRecargo, 
       <Toast open={!!toast} kind={toast?.kind}>{toast?.text}</Toast>
 
       {/* Banner estado */}
-      {isApproved && (
-        <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-          <span className="text-xl flex-shrink-0">✅</span>
-          <div><p className="font-bold text-green-800 text-sm">Pago confirmado</p><p className="text-xs text-green-600">Tu comprobante fue aprobado para este mes.</p></div>
-        </div>
-      )}
       {isAlreadyPending && (
         <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
           <span className="text-xl flex-shrink-0">🕐</span>
@@ -101,7 +102,7 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, aplicaRecargo, 
         </div>
       )}
 
-      {!isApproved && <>
+      <>
         {/* Paso 1 — monto */}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">① Cuánto transferir</p>
@@ -169,7 +170,7 @@ export function MinimalReceiptUpload({ appId, student, totalHoy, aplicaRecargo, 
             <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>Enviar comprobante</>
           )}
         </button>
-      </>}
+      </>
     </div>
   );
 }
