@@ -3,6 +3,7 @@ import {
   collection as fsCollection, addDoc as fsAddDoc, doc, getDoc, setDoc, updateDoc, deleteDoc,
   query, orderBy, onSnapshot, serverTimestamp,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Modal } from './Modal.jsx';
 import { MoneyInput } from './MoneyInput.jsx';
 import { IconTrash } from './Icons.jsx';
@@ -30,6 +31,8 @@ export function FixedPaymentsPanel({ db, appId, userId, showMessage, expenses = 
   const [payAmount, setPayAmount] = useState('');
   const [payDate, setPayDate] = useState(() => getLocalToday());
   const [payBusy, setPayBusy] = useState(false);
+
+  const [testingPush, setTestingPush] = useState(false);
 
   useEffect(() => {
     if (!db || !appId) return;
@@ -135,6 +138,24 @@ export function FixedPaymentsPanel({ db, appId, userId, showMessage, expenses = 
     } finally { setPayBusy(false); }
   };
 
+  // Botón de prueba: dispara el mismo push que mandaría el aviso automático
+  // (o uno de prueba si no hay nada pendiente), sin esperar al día
+  // configurado ni depender de que la función programada corra a las 10hs.
+  const handleTestPush = async () => {
+    setTestingPush(true);
+    try {
+      const fn = httpsCallable(getFunctions(), 'testFixedPaymentsPush');
+      const { data } = await fn({ appId });
+      if (!data?.sent) {
+        showMessage('No llegó a ningún dispositivo — ¿activaste las notificaciones del panel en este celular/navegador?', 'error');
+      } else {
+        showMessage(`Push de prueba enviado (${data.sent} de ${data.total} dispositivo${data.total !== 1 ? 's' : ''}). Fijate si te llegó.`, 'success');
+      }
+    } catch (e) {
+      showMessage('Error al probar: ' + e.message, 'error');
+    } finally { setTestingPush(false); }
+  };
+
   const undoPay = async (record) => {
     if (!window.confirm(`¿Marcar "${record.description}" como no pagado? Se borra el egreso registrado (${formatMoneyAr(record.amount)}).`)) return;
     try {
@@ -157,6 +178,14 @@ export function FixedPaymentsPanel({ db, appId, userId, showMessage, expenses = 
             {savingDay ? 'Guardando...' : 'Guardar'}
           </button>
         )}
+        <button onClick={handleTestPush} disabled={testingPush}
+          title="Manda un push de prueba ahora, sin esperar al día configurado"
+          className="ml-auto px-3 py-1.5 text-xs font-bold bg-violet-100 text-violet-700 rounded-lg hover:bg-violet-200 disabled:opacity-50 transition flex items-center gap-1.5">
+          {testingPush
+            ? <div className="w-3 h-3 border-2 border-violet-400 border-t-transparent rounded-full animate-spin"/>
+            : '🔔'}
+          {testingPush ? 'Enviando...' : 'Probar notificación'}
+        </button>
       </div>
 
       {/* Grid de servicios */}

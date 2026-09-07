@@ -963,7 +963,24 @@ exports.unmarkedAttendanceReminder = functions.pubsub
 // (artifacts/{appId}/expenses) con fixedPaymentTemplateId apuntando a la
 // plantilla -- "pagado este mes" simplemente significa "existe un egreso con
 // esa referencia y fecha de este mes", no hace falta una colección aparte
-// para el estado mes a mes.
+// para el estado mes a mes. Compartido entre el aviso automático diario y el
+// botón de prueba manual del panel.
+async function _getUnpaidFixedPaymentTemplates(db, appId, periodKey) {
+  const templatesSnap = await db.collection(`artifacts/${appId}/fixedPayments`)
+    .where('isActive', '==', true).get();
+  if (templatesSnap.empty) return [];
+
+  const paidSnap = await db.collection(`artifacts/${appId}/expenses`)
+    .where('date', '>=', `${periodKey}-01`)
+    .where('date', '<=', `${periodKey}-31`)
+    .get();
+  const paidTemplateIds = new Set(
+    paidSnap.docs.map(d => d.data()?.fixedPaymentTemplateId).filter(Boolean)
+  );
+
+  return templatesSnap.docs.filter(d => !paidTemplateIds.has(d.id));
+}
+
 exports.checkUnpaidFixedPayments = functions.pubsub
   .schedule('0 10 * * *')
   .timeZone(TZ)
@@ -982,19 +999,7 @@ exports.checkUnpaidFixedPayments = functions.pubsub
         return { skipped: true, reason: 'before_notify_day' };
       }
 
-      const templatesSnap = await db.collection(`artifacts/${appId}/fixedPayments`)
-        .where('isActive', '==', true).get();
-      if (templatesSnap.empty) return { skipped: true, reason: 'no_templates' };
-
-      const paidSnap = await db.collection(`artifacts/${appId}/expenses`)
-        .where('date', '>=', `${periodKey}-01`)
-        .where('date', '<=', `${periodKey}-31`)
-        .get();
-      const paidTemplateIds = new Set(
-        paidSnap.docs.map(d => d.data()?.fixedPaymentTemplateId).filter(Boolean)
-      );
-
-      const unpaid = templatesSnap.docs.filter(d => !paidTemplateIds.has(d.id));
+      const unpaid = await _getUnpaidFixedPaymentTemplates(db, appId, periodKey);
       if (!unpaid.length) {
         console.log('[FixedPayments] Todos los servicios activos están pagados este mes.');
         return { sent: 0, unpaid: 0 };
@@ -1054,6 +1059,49 @@ exports.checkUnpaidFixedPayments = functions.pubsub
       return { error: e.message };
     }
   });
+
+// Botón "probar notificación" del panel de Fijos -- dispara un push real de
+// una: ignora el día configurado y el registro anti-spam (así se puede
+// probar las veces que haga falta), y si no hay nada pendiente igual manda
+// un aviso de prueba en vez de quedarse callado, para poder confirmar que la
+// entrega en sí funciona sin depender de tener un servicio sin pagar a mano.
+exports.testFixedPaymentsPush = functions.https.onCall(async (data, context) => {
+  assertC(context.auth && context.auth.token && context.auth.token.email, "No autenticado.");
+  assertC(ALLOWED_EMAILS.has(context.auth.token.email), "No autorizado.");
+
+  const appId = String(data?.appId || DEFAULT_APP_ID);
+  const db = admin.firestore();
+  const periodKey = todayKey().slice(0, 7);
+
+  const tokensSnap = await db.collection(`artifacts/${appId}/adminTokens`).get();
+  const tokens = tokensSnap.docs.map(d => d.data()?.token || d.id).filter(t => t && t.length > 20);
+  assertC(tokens.length > 0, "No tenés notificaciones activadas en este dispositivo todavía.");
+
+  const unpaid = await _getUnpaidFixedPaymentTemplates(db, appId, periodKey);
+  const adminUrl = 'https://estudiosandrapaloschi.web.app/';
+  const title = unpaid.length ? '⚠️ Servicios sin pagar (prueba)' : '🔔 Prueba de notificación';
+  const body = unpaid.length
+    ? `${unpaid.map(d => d.data()?.name || 'Servicio').join(', ')} — esto es lo que recibirías si ya tocara avisar.`
+    : 'Esto es una prueba -- por ahora no tenés ningún servicio fijo sin pagar este mes.';
+
+  const result = await admin.messaging().sendEachForMulticast({
+    tokens,
+    notification: { title, body },
+    data: { url: adminUrl },
+    webpush: {
+      headers: { Urgency: "high" },
+      notification: {
+        title, body,
+        icon: '/icon-192-inverted.png',
+        badge: '/icon-32-inverted.png',
+        tag: 'servicios-sin-pagar-test',
+      },
+      fcmOptions: { link: adminUrl },
+    },
+  });
+
+  return { sent: result.successCount, total: tokens.length, unpaid: unpaid.length };
+});
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 5b) FACTURACIÓN ELECTRÓNICA AFIP (Monotributista — Factura C)
