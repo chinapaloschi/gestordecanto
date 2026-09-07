@@ -957,6 +957,105 @@ exports.unmarkedAttendanceReminder = functions.pubsub
   });
 
 // ──────────────────────────────────────────────────────────────────────────────
+// 5a-2) AVISO DE SERVICIOS FIJOS SIN PAGAR (luz, gas, teléfono, cable, etc.)
+// ──────────────────────────────────────────────────────────────────────────────
+// El pago de un servicio fijo se registra como un egreso normal
+// (artifacts/{appId}/expenses) con fixedPaymentTemplateId apuntando a la
+// plantilla -- "pagado este mes" simplemente significa "existe un egreso con
+// esa referencia y fecha de este mes", no hace falta una colección aparte
+// para el estado mes a mes.
+exports.checkUnpaidFixedPayments = functions.pubsub
+  .schedule('0 10 * * *')
+  .timeZone(TZ)
+  .onRun(async () => {
+    const appId = DEFAULT_APP_ID;
+    const db = admin.firestore();
+    try {
+      const today = todayKey();
+      const dayOfMonth = parseInt(today.slice(8, 10), 10);
+      const periodKey = today.slice(0, 7); // YYYY-MM
+
+      const settingsSnap = await db.doc(`artifacts/${appId}/fixedPaymentSettings/config`).get();
+      const notifyDay = settingsSnap.exists() ? (Number(settingsSnap.data()?.notifyDay) || 10) : 10;
+      if (dayOfMonth < notifyDay) {
+        console.log(`[FixedPayments] Día ${dayOfMonth} < ${notifyDay}, todavía no corresponde avisar.`);
+        return { skipped: true, reason: 'before_notify_day' };
+      }
+
+      const templatesSnap = await db.collection(`artifacts/${appId}/fixedPayments`)
+        .where('isActive', '==', true).get();
+      if (templatesSnap.empty) return { skipped: true, reason: 'no_templates' };
+
+      const paidSnap = await db.collection(`artifacts/${appId}/expenses`)
+        .where('date', '>=', `${periodKey}-01`)
+        .where('date', '<=', `${periodKey}-31`)
+        .get();
+      const paidTemplateIds = new Set(
+        paidSnap.docs.map(d => d.data()?.fixedPaymentTemplateId).filter(Boolean)
+      );
+
+      const unpaid = templatesSnap.docs.filter(d => !paidTemplateIds.has(d.id));
+      if (!unpaid.length) {
+        console.log('[FixedPayments] Todos los servicios activos están pagados este mes.');
+        return { sent: 0, unpaid: 0 };
+      }
+
+      // No re-avisar de algo que ya se avisó en este mismo período.
+      const toNotify = [];
+      for (const tDoc of unpaid) {
+        const logSnap = await db.doc(`artifacts/${appId}/fixedPaymentReminderLog/${tDoc.id}_${periodKey}`).get();
+        if (!logSnap.exists()) toNotify.push(tDoc);
+      }
+      if (!toNotify.length) {
+        console.log('[FixedPayments] Ya se había avisado de todos los pendientes este período.');
+        return { sent: 0, unpaid: unpaid.length, alreadyNotified: true };
+      }
+
+      const tokensSnap = await db.collection(`artifacts/${appId}/adminTokens`).get();
+      const tokens = tokensSnap.docs.map(d => d.data()?.token || d.id).filter(t => t && t.length > 20);
+      if (!tokens.length) {
+        console.log('[FixedPayments] Sin tokens de admin registrados.');
+        return { sent: 0, unpaid: toNotify.length, reason: 'no_tokens' };
+      }
+
+      const names = toNotify.map(d => d.data()?.name || 'Servicio').join(', ');
+      const title = '⚠️ Servicios sin pagar';
+      const body = `${names} — todavía ${toNotify.length === 1 ? 'no está pagado' : 'no están pagados'} este mes.`;
+      const adminUrl = 'https://estudiosandrapaloschi.web.app/';
+
+      const result = await admin.messaging().sendEachForMulticast({
+        tokens,
+        notification: { title, body },
+        data: { url: adminUrl },
+        webpush: {
+          headers: { Urgency: "high" },
+          notification: {
+            title, body,
+            icon: '/icon-192-inverted.png',
+            badge: '/icon-32-inverted.png',
+            tag: 'servicios-sin-pagar',
+          },
+          fcmOptions: { link: adminUrl },
+        },
+      });
+
+      const batch = db.batch();
+      toNotify.forEach(tDoc => {
+        batch.set(db.doc(`artifacts/${appId}/fixedPaymentReminderLog/${tDoc.id}_${periodKey}`), {
+          notifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+      await batch.commit();
+
+      console.log(`[FixedPayments] unpaid=${toNotify.length} sent=${result.successCount}/${tokens.length}`);
+      return { sent: result.successCount, unpaid: toNotify.length };
+    } catch (e) {
+      console.error('[FixedPayments] Error:', e.message);
+      return { error: e.message };
+    }
+  });
+
+// ──────────────────────────────────────────────────────────────────────────────
 // 5b) FACTURACIÓN ELECTRÓNICA AFIP (Monotributista — Factura C)
 // ──────────────────────────────────────────────────────────────────────────────
 // Configurar antes del primer uso:

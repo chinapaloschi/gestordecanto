@@ -1,6 +1,7 @@
 ﻿import React, { useState, useMemo } from 'react';
 import { Modal, ModalHeader } from './Modal.jsx';
 import { AddExtraIncomeForm, ManageExpenseCategoriesModal, AddExpenseForm } from './FinancialForms.jsx';
+import { FixedPaymentsPanel } from './FixedPaymentsPanel.jsx';
 import { PricingSettingsModal } from './PricingSettingsModal.jsx';
 import { formatMoneyAr } from '../utils/money.js';
 import { IconTrash } from './Icons.jsx';
@@ -369,7 +370,7 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
             <div className="flex items-center gap-2 flex-wrap">
                 {/* Tabs */}
                 <div className="flex rounded-xl border border-gray-200 overflow-hidden">
-                    {[['ingresos','💚 Ingresos'],['egresos','🔴 Egresos'],['total','📊 Total']].map(([id, label]) => (
+                    {[['ingresos','💚 Ingresos'],['egresos','🔴 Egresos'],['fijos','📌 Fijos'],['total','📊 Total']].map(([id, label]) => (
                         <button key={id} onClick={() => setActiveTab(id)}
                             className={`px-3 py-2 text-xs font-bold transition ${activeTab === id ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                             {label}
@@ -377,6 +378,10 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
                     ))}
                 </div>
 
+                {/* Filtro mes + buscador + acciones — no aplican a "Fijos" (es
+                    el estado del mes actual, no una lista de registros para
+                    filtrar por fecha/texto). */}
+                {activeTab !== 'fijos' && <>
                 {/* Filtro mes */}
                 <select value={selectedMonthFilter} onChange={e => setSelectedMonthFilter(e.target.value)}
                     className="px-2 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300">
@@ -429,6 +434,7 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
                         Tarifario
                     </button>
                 </div>
+                </>}
             </div>
 
             {/* ▼▼▼ UI CALCULADORA INSERTADA AQUÍ ▼▼▼ */}
@@ -549,6 +555,9 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
 
             {activeTab === 'ingresos' && renderFinancialList(incomeData, false)}
             {activeTab === 'egresos' && renderFinancialList(expenseData, true)}
+            {activeTab === 'fijos' && (
+                <FixedPaymentsPanel db={db} appId={appId} userId={userId} showMessage={showMessage} expenses={expenses} />
+            )}
 
             {activeTab === 'total' && (
                 <div className="space-y-3">

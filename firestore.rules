@@ -22,7 +22,8 @@ service cloud.firestore {
     function isInternalOnlyCollection(path) {
       return path.size() > 0 && path[0] in [
         'expenses', 'expenseCategories', 'extraIncomes',
-        'adminTokens', 'reminderLog', 'loginAttempts'
+        'adminTokens', 'reminderLog', 'loginAttempts',
+        'fixedPayments', 'fixedPaymentSettings', 'fixedPaymentReminderLog'
       ];
     }
 
@@ -283,6 +284,21 @@ service cloud.firestore {
     }
 
     // --- REGLAS PRIVADAS (solo para staff) ---
+
+    // Servicios fijos (luz, gas, teléfono, etc.) — plantilla recurrente +
+    // config del día de aviso + registro anti-spam de notificaciones. El
+    // pago en sí se guarda como un egreso normal (expenses), estas 3 solo
+    // existen para el panel de admin.
+    match /artifacts/{appId}/fixedPayments/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /artifacts/{appId}/fixedPaymentSettings/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /artifacts/{appId}/fixedPaymentReminderLog/{docId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
 
     match /apps/{appId}/students/{studentId} {
       allow read: if isStaff();
