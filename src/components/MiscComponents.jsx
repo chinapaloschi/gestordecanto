@@ -211,7 +211,7 @@ export const ConfirmedEventsSection = ({ db, appId, student }) => {
     );
 
     const unsubEvents = onSnapshot(eventsQuery, async (eventsSnap) => {
-      const eventsList = eventsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const eventsList = eventsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(ev => !ev.hiddenFromStudents);
       const confirmedList = [];
 
       for (const ev of eventsList) {
