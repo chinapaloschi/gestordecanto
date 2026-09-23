@@ -48,92 +48,79 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
     }
     setLoading(true);
     let alive = true;
-    const unsubscribers = []; // Para guardar las funciones de limpieza
+    // Antes la lista de "qué eventos me habilitaron a ver" se leía UNA sola
+    // vez con getDocs() al montar -- si Sandra ocultaba (o revelaba) una
+    // entrada mientras el alumno ya tenía el portal abierto, ese cambio
+    // nunca llegaba: el listener de tickets de ese evento seguía corriendo
+    // (o nunca se creaba) hasta que recargara la página a mano. Ahora
+    // también esa parte escucha en vivo.
+    const ticketUnsubs = {}; // eventId -> unsub
+    const allTicketsMap = new Map(); // ticketId -> ticket, de todos los eventos calificados
 
-    const setupListeners = async () => {
-      try {
-        const eventsQuery = query(fsCollection(db, `artifacts/${appId}/events`));
-        const allEventsSnap = await getDocs(eventsQuery);
-
-        // === LÓGICA DE FILTRADO CORREGIDA ===
-        const studentEventsWithVisibleTickets = allEventsSnap.docs.filter(doc => {
-            const participants = doc.data().participants || [];
-            const studentParticipant = participants.find(p => (p.id || p.studentId) === student.id);
-            // El evento solo se incluirá si el participante existe Y su visibilidad está en 'true'
-            return studentParticipant && studentParticipant.ticketsVisible === true;
-        });
-        // === FIN DE LA LÓGICA CORREGIDA ===
-
-        if (!studentEventsWithVisibleTickets.length) {
-          if (alive) { setTickets([]); setLoading(false); }
-          return;
-        }
-
-        const eventDataMap = {};
-        studentEventsWithVisibleTickets.forEach(doc => { eventDataMap[doc.id] = { id: doc.id, ...doc.data() }; });
-        if (alive) setEventsById(eventDataMap);
-
-        const allTicketsMap = new Map();
-
-        studentEventsWithVisibleTickets.forEach(eventDoc => {
-    const ticketsQuery = query(
-  fsCollection(db, `artifacts/${appId}/events/${eventDoc.id}/tickets`),
-  where("assignedTo", "==", student.id),
-  where("status", "in", ["active", "used"]) // <--- ESTA ES LA LÍNEA CLAVE QUE FALTA
-);
-          
-      // ▼▼▼ REEMPLAZÁ EL BLOQUE 'onSnapshot' ENTERO POR ESTA NUEVA VERSIÓN ▼▼▼
-
-          const unsub = onSnapshot(ticketsQuery, (snapshot) => {
-            
-            // --- INICIO DE LA SOLUCIÓN DEFINITIVA ---
-            
-            // Usamos docChanges() para manejar 'added', 'modified', y 'removed'
-            snapshot.docChanges().forEach((change) => {
-              const docData = change.doc.data() || {};
-              const docId = change.doc.id;
-
-              if (change.type === "added") {
-                // Añadimos la nueva entrada al mapa
-                allTicketsMap.set(docId, { id: docId, ...docData });
-              }
-              if (change.type === "modified") {
-                // Modificamos la entrada existente
-                allTicketsMap.set(docId, { id: docId, ...docData });
-              }
-              if (change.type === "removed") {
-                // ¡Esta es la parte clave! Eliminamos la entrada del mapa
-                allTicketsMap.delete(docId);
-              }
-            });
-            // --- FIN DE LA SOLUCIÓN DEFINITIVA ---
-
-            if (alive) {
-              const sortedTickets = Array.from(allTicketsMap.values())
-                .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
-              setTickets(sortedTickets);
-            }
-          }, (error) => {
-            console.error(`Error en listener de tickets para evento ${eventDoc.id}:`, error);
-            if (alive) setLoadError(true);
-          });
-// ...el resto del bloque (la llave de cierre '});' y 'unsubscribers.push(unsub);')
-          unsubscribers.push(unsub);
-        });
-
-      } catch (error) {
-        console.error("Error al buscar entradas públicas:", error);
-        if (alive) setLoadError(true);
-      } finally {
-        if (alive) setLoading(false);
-      }
+    const applyTickets = () => {
+      if (!alive) return;
+      const sorted = Array.from(allTicketsMap.values())
+        .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      setTickets(sorted);
     };
 
-    setupListeners();
-    
-    return () => { 
+    const eventsQuery = query(fsCollection(db, `artifacts/${appId}/events`));
+    const unsubEvents = onSnapshot(eventsQuery, (allEventsSnap) => {
+      const studentEventsWithVisibleTickets = allEventsSnap.docs.filter(doc => {
+        const participants = doc.data().participants || [];
+        const studentParticipant = participants.find(p => (p.id || p.studentId) === student.id);
+        return studentParticipant && studentParticipant.ticketsVisible === true;
+      });
+      const qualifyingIds = new Set(studentEventsWithVisibleTickets.map(d => d.id));
+
+      const eventDataMap = {};
+      studentEventsWithVisibleTickets.forEach(doc => { eventDataMap[doc.id] = { id: doc.id, ...doc.data() }; });
+      if (alive) setEventsById(eventDataMap);
+
+      // Dar de baja eventos que dejaron de estar habilitados (o se borraron)
+      // y sacar sus entradas de la lista mostrada.
+      Object.keys(ticketUnsubs).forEach(eventId => {
+        if (qualifyingIds.has(eventId)) return;
+        ticketUnsubs[eventId]();
+        delete ticketUnsubs[eventId];
+        for (const [ticketId, t] of allTicketsMap) {
+          if (t.eventId === eventId) allTicketsMap.delete(ticketId);
+        }
+      });
+      applyTickets();
+
+      // Suscribirse a los eventos que recién ahora califican.
+      studentEventsWithVisibleTickets.forEach(eventDoc => {
+        if (ticketUnsubs[eventDoc.id]) return; // ya escuchando
+        const ticketsQuery = query(
+          fsCollection(db, `artifacts/${appId}/events/${eventDoc.id}/tickets`),
+          where("assignedTo", "==", student.id),
+          where("status", "in", ["active", "used"])
+        );
+        ticketUnsubs[eventDoc.id] = onSnapshot(ticketsQuery, (snapshot) => {
+          snapshot.docChanges().forEach((change) => {
+            const docData = change.doc.data() || {};
+            const docId = change.doc.id;
+            if (change.type === "removed") allTicketsMap.delete(docId);
+            else allTicketsMap.set(docId, { id: docId, ...docData });
+          });
+          applyTickets();
+        }, (error) => {
+          console.error(`Error en listener de tickets para evento ${eventDoc.id}:`, error);
+          if (alive) setLoadError(true);
+        });
+      });
+
+      if (alive) setLoading(false);
+    }, (error) => {
+      console.error("Error al escuchar eventos públicos:", error);
+      if (alive) { setLoadError(true); setLoading(false); }
+    });
+
+    return () => {
       alive = false;
-      unsubscribers.forEach(unsub => unsub());
+      unsubEvents();
+      Object.values(ticketUnsubs).forEach(unsub => unsub());
     };
   }, [db, appId, student?.id]);
 

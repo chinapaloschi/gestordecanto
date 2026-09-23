@@ -1115,7 +1115,15 @@ export const EventDetailModal = ({ isOpen, onClose, event, db, appId, showMessag
       if (!participant || saving) return;
       setSaving(true);
       const oldSoldCount = Number(participant.ticketsSold || 0);
-      const newSoldCount = clamp(0, newSoldValue, participant.ticketsDelivered || 0);
+      // Antes esto clampeaba contra ticketsDelivered -- si por cualquier
+      // motivo Vendidas ya estaba por encima de Entregadas (por ejemplo, una
+      // entrada cargada desde el otro botón simple de +1/-1, que en su
+      // momento no mantenía los dos campos sincronizados), esto dejaba el
+      // valor pegado ahí para siempre: cualquier intento de subir se
+      // recortaba de vuelta al mismo número. Ahora sólo se cuida que no sea
+      // negativo; Entregadas se ajusta más abajo para que nunca quede por
+      // debajo, en vez de ser un techo que puede trabar el contador.
+      const newSoldCount = Math.max(0, Number(newSoldValue) || 0);
       const studentId = getPid(participant);
       const studentName = getPname(participant);
       const isExternal = !!participant.isExternal;
@@ -1161,13 +1169,21 @@ export const EventDetailModal = ({ isOpen, onClose, event, db, appId, showMessag
                   });
               }
               const nextParticipants = [...participants];
-              nextParticipants[idx] = { ...participant, ticketsSold: newSoldCount };
+              nextParticipants[idx] = {
+                ...participant,
+                ticketsSold: newSoldCount,
+                ticketsDelivered: Math.max(Number(participant.ticketsDelivered || 0), newSoldCount),
+              };
               const updatePayload = { participants: nextParticipants };
               if (diff > 0) updatePayload.lastTicketNumberIssued = lastIssued;
               transaction.update(eventRef, updatePayload);
           });
           const nextParticipantsState = [...participants];
-          nextParticipantsState[idx] = { ...participant, ticketsSold: newSoldCount };
+          nextParticipantsState[idx] = {
+            ...participant,
+            ticketsSold: newSoldCount,
+            ticketsDelivered: Math.max(Number(participant.ticketsDelivered || 0), newSoldCount),
+          };
           setLocalEvent(prev => ({...prev, participants: nextParticipantsState}));
           showMessage(`Se ${diff > 0 ? 'generaron' : 'eliminaron'} ${Math.abs(diff)} entrada(s) para ${studentName}.`, 'success');
       } catch (e) {
@@ -1456,8 +1472,8 @@ const handleExportTicketsCSV = async () => {
                               <div className="flex items-center gap-1.5">
                                 Vendidas
                                 <button type="button" onClick={() => handleSoldInput(p.originalIndex, (p.ticketsSold || 0) - 1)} disabled={saving || (p.ticketsSold || 0) <= 0} className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 font-bold">−</button>
-                                <input type="number" min="0" max={p.ticketsDelivered || 0} value={p.ticketsSold || 0} onChange={(e) => handleSoldInput(p.originalIndex, Number(e.target.value))} className="w-12 text-center p-1 border border-gray-200 rounded-lg" />
-                                <button type="button" onClick={() => handleSoldInput(p.originalIndex, (p.ticketsSold || 0) + 1)} disabled={saving || (p.ticketsSold || 0) >= (p.ticketsDelivered || 0)} className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 font-bold">+</button>
+                                <input type="number" min="0" value={p.ticketsSold || 0} onChange={(e) => handleSoldInput(p.originalIndex, Number(e.target.value))} className="w-12 text-center p-1 border border-gray-200 rounded-lg" />
+                                <button type="button" onClick={() => handleSoldInput(p.originalIndex, (p.ticketsSold || 0) + 1)} disabled={saving} className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 font-bold">+</button>
                               </div>
                               <span className="font-bold text-gray-800">${fmtMoney((p.ticketsSold || 0) * price)}</span>
                             </div>
