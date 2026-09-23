@@ -200,7 +200,17 @@ const adjustTicketCount = async (participant, amount) => {
 
                 const nextParticipants = [...currentParticipants];
                 nextParticipants[pIndex].ticketsSold = (nextParticipants[pIndex].ticketsSold || 0) + 1;
-                
+                // El stepper Entregadas/Vendidas de "Gestionar Entradas"
+                // (EventDetailModal) exige ticketsSold <= ticketsDelivered
+                // para dejar sumar -- este botón simple nunca tocaba
+                // ticketsDelivered, así que una entrada creada acá dejaba
+                // ese otro modal con "Vendidas" ya por encima de "Entregadas"
+                // y el botón "+" trabado en falso.
+                nextParticipants[pIndex].ticketsDelivered = Math.max(
+                    nextParticipants[pIndex].ticketsDelivered || 0,
+                    nextParticipants[pIndex].ticketsSold
+                );
+
                 transaction.update(eventRef, {
                     participants: nextParticipants,
                     lastTicketNumberIssued: newTicketNumber, // ✅ Actualizamos el contador
@@ -1000,6 +1010,25 @@ export const EventDetailModal = ({ isOpen, onClose, event, db, appId, showMessag
   };
 
   React.useEffect(() => { setLocalEvent(event || null); }, [event]);
+
+  // El prop "event" es una foto fija tomada en el momento en que se
+  // seleccionó de la lista (MainApp guarda selectedEvent una sola vez, no
+  // lo vuelve a sincronizar cuando la lista de eventos cambia). Si algo
+  // modifica el evento mientras este modal está abierto -- típicamente
+  // ManageTicketsModal, que se abre ARRIBA de este mismo modal y sí escucha
+  // en vivo -- acá seguía mostrando "0 entradas" para un alumno que ya
+  // tenía una entrada real recién creada, y el botón "+" de Vendidas
+  // quedaba deshabilitado porque comparaba contra ese Entregadas viejo.
+  React.useEffect(() => {
+    if (!isOpen || !db || !appId || !event?.id) return;
+    const ref = doc(db, `artifacts/${appId}/events/${event.id}`);
+    const unsub = onSnapshot(ref, (snap) => {
+      if (snap.exists()) setLocalEvent({ id: snap.id, ...snap.data() });
+    }, (err) => {
+      console.error('Error escuchando el evento en vivo:', err);
+    });
+    return () => unsub();
+  }, [isOpen, db, appId, event?.id]);
 
   const fmtDate = (yyyy_mm_dd) => {
     if (!yyyy_mm_dd) return '';
