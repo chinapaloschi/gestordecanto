@@ -1462,14 +1462,23 @@ const handleExportTicketsCSV = async () => {
                               <span className="font-bold text-gray-800">${fmtMoney((p.ticketsSold || 0) * price)}</span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button onClick={() => toggleTicketsVisibility(p.originalIndex)} title={p.ticketsVisible ? 'Visible para el alumno' : 'Oculto para el alumno'} className={`w-8 h-8 flex items-center justify-center rounded-lg transition ${p.ticketsVisible ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-300 hover:bg-gray-50'}`}>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {/* Antes era un ícono de ojo suelto, gris tanto activado como
+                                no -- se perdía entre los otros dos íconos de al lado y nadie
+                                se acordaba de tocarlo, dejando entradas creadas invisibles
+                                para el alumno sin que se notara. Ahora es una pastilla con
+                                texto, en ámbar bien visible mientras esté oculta -- misma
+                                idea que el "Sin pagar" de arriba. */}
+                            <button onClick={() => toggleTicketsVisibility(p.originalIndex)}
+                              title={p.ticketsVisible ? 'El alumno puede ver esta entrada en su portal' : 'El alumno todavía NO puede ver esta entrada'}
+                              className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-1.5 rounded-full transition ${p.ticketsVisible ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100'}`}>
                               {p.ticketsVisible ? <IconEye /> : <IconEyeOff />}
+                              {p.ticketsVisible ? 'Visible' : 'Oculta'}
                             </button>
-                            <button onClick={() => setStudentForTickets(p)} title={`Ver entradas de ${getPname(p)}`} disabled={(p.ticketsSold || 0) === 0} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 transition">
+                            <button onClick={() => setStudentForTickets(p)} title={`Ver entradas de ${getPname(p)}`} disabled={(p.ticketsSold || 0) === 0} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 transition flex-shrink-0">
                               <IconTicket />
                             </button>
-                            <button onClick={() => removeParticipant(p.originalIndex)} title={`Quitar a ${getPname(p)}`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition">
+                            <button onClick={() => removeParticipant(p.originalIndex)} title={`Quitar a ${getPname(p)}`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition flex-shrink-0">
                               <IconTrash />
                             </button>
                           </div>
