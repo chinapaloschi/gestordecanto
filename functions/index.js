@@ -134,6 +134,43 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
   return { status: "ok", message: status === "ausente" ? "Ausencia registrada." : "Presente registrado." };
 });
 
+// ---------------- 2a) PIN de acceso a la página de escaneo standalone ----------------
+// El PIN vive en artifacts/{appId}/scanAccess/config, protegido por reglas
+// staff-only (ver firestore.rules). Se verifica acá, server-side, para no
+// exponer el valor del PIN en una lectura pública de Firestore.
+exports.verifyScanPin = functions.https.onCall(async (data, context) => {
+  const appId = String(data?.appId || "");
+  const pin = String(data?.pin || "").trim();
+  assertC(appId.length > 0, "Falta appId.");
+  assertC(pin.length > 0, "PIN inválido.");
+
+  const db = admin.firestore();
+  const snap = await db.doc(`artifacts/${appId}/scanAccess/config`).get();
+  const storedPin = String(snap.exists ? (snap.data().pin || "") : "");
+  if (!storedPin || storedPin !== pin) {
+    return { ok: false };
+  }
+  return { ok: true };
+});
+
+// Permite al staff configurar/ver el PIN desde el panel de admin.
+exports.setScanPin = functions.https.onCall(async (data, context) => {
+  assertC(!!context.auth, "No autorizado.");
+  assertC(ALLOWED_EMAILS.has(context.auth.token.email), "No autorizado.");
+  const appId = String(data?.appId || "");
+  const pin = String(data?.pin || "").trim();
+  assertC(appId.length > 0, "Falta appId.");
+  assertC(pin.length >= 4, "El PIN debe tener al menos 4 caracteres.");
+
+  const db = admin.firestore();
+  await db.doc(`artifacts/${appId}/scanAccess/config`).set({
+    pin,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedBy: context.auth.token.email,
+  }, { merge: true });
+  return { status: "ok" };
+});
+
 // ---------------- 2b) Login de alumno por DNI (+ PIN opcional) ----------------
 // Reemplaza las lecturas directas del cliente a `students`/`pinIndex` (que
 // permitían enumerar DNIs sin límite) por una única función server-side con

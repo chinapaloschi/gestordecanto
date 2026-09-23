@@ -8,6 +8,7 @@ import { MainApp } from './components/MainApp.jsx';
 import { PublicCheckInViewPIN } from './components/PublicCheckInViewPIN.jsx';
 import { PublicEventsPortal } from './components/PublicEventsPortal.jsx';
 import { PublicTicketView } from './components/PublicTicketView.jsx';
+import { ScanPage } from './components/ScanPage.jsx';
 import { LenceriaStockModal } from './components/LenceriaStockModal.jsx';
 import { InscripcionPage } from './components/InscripcionPage.jsx';
 import { PrivacyProvider } from './context/PrivacyContext.jsx';
@@ -85,6 +86,7 @@ export default function App() {
   if (h.startsWith(ROUTES.PORTAL))   return null; // redirigiendo a /#/checkin (ver useEffect arriba)
   if (h.startsWith(ROUTES.CHECKIN))  return <PublicCheckInViewPIN db={db} />;
   if (h.startsWith(ROUTES.TICKET))   return <PublicTicketView db={db} />;
+  if (h.startsWith(ROUTES.SCAN))     return <ScanPage db={db} appId={appId} />;
 
   if (h.startsWith(ROUTES.LENCERIA)) {
     return (

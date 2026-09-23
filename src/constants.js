@@ -19,6 +19,7 @@ export const ROUTES = {
   LENCERIA:    '#/lenceria',
   INSCRIPCION: '#/inscripcion',
   FINANZAS:    '#/finanzas',
+  SCAN:        '#/scan',
 };
 
 // ─── Colecciones Firestore (relativas a artifacts/${appId}/) ──────────────────
@@ -83,3 +84,8 @@ export const ticketUrl = (appId, eventId, ticketId) =>
 
 export const checkinBaseUrl = () =>
   `${window.location.origin}/${ROUTES.CHECKIN}`;
+
+export const scanUrl = (eventId) =>
+  eventId
+    ? `${location.origin}/${ROUTES.SCAN}?e=${encodeURIComponent(eventId)}`
+    : `${location.origin}/${ROUTES.SCAN}`;

@@ -9,7 +9,7 @@ import { MoneyInput } from './MoneyInput.jsx';
 import { IconTicket, IconCalendar, IconPlusCircle, IconDownload, IconShare, IconTrash, IconMic, IconEye, IconEyeOff, IconEdit, IconUsers, IconBanknote, IconBan, IconQrCode } from './Icons.jsx';
 import { formatMoneyAr } from '../utils/money.js';
 import { formatDateToDDMMYYYY } from '../utils/classHelpers.js';
-import { ROUTES } from '../constants.js';
+import { ROUTES, scanUrl } from '../constants.js';
 import { dataUrlToFile, generateQrWithLogo, generateComposedTicketImage } from '../utils/ticketQr.js';
 import { getLocalToday } from '../utils/dateHelpers.js';
 
@@ -1325,6 +1325,32 @@ const handleExportTicketsCSV = async () => {
       setSaving(false);
     }
   };
+  const handleShareScanLink = async () => {
+    // El PIN se guarda una sola vez por estudio (no por evento) en
+    // artifacts/{appId}/scanAccess/config -- lo verifica verifyScanPin.
+    const currentPin = window.prompt(
+      "PIN de acceso a la página de escaneo (para el personal de puerta).\nDejalo vacío para no cambiarlo, o escribí uno nuevo (mín. 4 caracteres):",
+      ""
+    );
+    if (currentPin !== null && currentPin.trim().length > 0) {
+      try {
+        const fn = httpsCallable(getFunctions(), 'setScanPin');
+        await fn({ appId, pin: currentPin.trim() });
+        showMessage && showMessage("PIN actualizado.", "success");
+      } catch (e) {
+        console.error(e);
+        showMessage && showMessage(e.message || "No se pudo guardar el PIN.", "error");
+        return;
+      }
+    }
+    const link = scanUrl(localEvent?.id);
+    try {
+      await navigator.clipboard.writeText(link);
+      showMessage && showMessage("Link de escaneo copiado al portapapeles.", "success");
+    } catch {
+      window.prompt("Copiá el link de escaneo:", link);
+    }
+  };
   const { title, date, startTime, location } = localEvent || {};
   // getLocalToday(), no new Date().toISOString() -- ISO usa UTC, y entre las
   // 21:00 y medianoche hora Argentina ya muestra la fecha del día siguiente,
@@ -1356,6 +1382,9 @@ const handleExportTicketsCSV = async () => {
                 </button>
                 <button onClick={()=> setShowScanQR(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-white bg-gray-900 hover:bg-black shadow-sm transition">
                   <IconQrCode /> Escanear
+                </button>
+                <button onClick={handleShareScanLink} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-200 shadow-sm transition">
+                  <IconShare /> Link Escaneo
                 </button>
                 <button onClick={handleExportTicketsCSV} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 disabled:opacity-50 transition">
                   <IconDownload /> Exportar Excel

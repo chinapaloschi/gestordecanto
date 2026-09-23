@@ -23,7 +23,8 @@ service cloud.firestore {
       return path.size() > 0 && path[0] in [
         'expenses', 'expenseCategories', 'extraIncomes',
         'adminTokens', 'reminderLog', 'loginAttempts',
-        'fixedPayments', 'fixedPaymentSettings', 'fixedPaymentReminderLog'
+        'fixedPayments', 'fixedPaymentSettings', 'fixedPaymentReminderLog',
+        'scanAccess'
       ];
     }
 
@@ -201,6 +202,12 @@ service cloud.firestore {
     match /artifacts/{appId}/blockedSlots/{slotId} {
       allow read: if isPublicAppPath(appId) || isStaff();
       allow write: if isStaff();
+    }
+    // PIN de acceso a la página de escaneo standalone (no-admin). Nunca
+    // legible por clientes públicos: se verifica server-side vía la
+    // Cloud Function verifyScanPin (Admin SDK, ignora estas reglas).
+    match /artifacts/{appId}/scanAccess/{docId} {
+      allow read, write: if isStaff();
     }
 
     // REGLA PARA EL CATÁLOGO PÚBLICO DE LENCERÍA
