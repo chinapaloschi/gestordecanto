@@ -2,7 +2,7 @@
 import { writeBatch, collection as fsCollection, doc, getDocs, addDoc as fsAddDoc, deleteDoc, query, where, orderBy, updateDoc, serverTimestamp , getDoc , onSnapshot , setDoc, getCountFromServer } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Modal, ModalHeader } from './Modal.jsx';
-import { IconCalendar, IconEdit, IconTrash } from './Icons.jsx';
+import { IconCalendar, IconEdit, IconTrash, IconEye, IconEyeOff } from './Icons.jsx';
 import { formatDateToDDMMYYYY } from '../utils/classHelpers.js';
 import { auth } from '../firebaseConfig.js';
 
@@ -347,6 +347,20 @@ export const MassEventsAdminModal = ({ isOpen, onClose, db, appId, students, sho
     }
   };
 
+  // A diferencia de las entradas pagas (que arrancan ocultas hasta que Sandra
+  // las revela), una convocatoria tiene sentido que llegue a los alumnos
+  // apenas se crea -- por eso acá es al revés: visible por defecto (sin el
+  // campo, o en false), y este botón la pausa sin borrarla ni tocar las
+  // confirmaciones ya hechas.
+  const toggleEventVisibility = async (event) => {
+    try {
+      const eventRef = doc(db, `artifacts/${appId}/massEvents`, event.id);
+      await updateDoc(eventRef, { hiddenFromStudents: !event.hiddenFromStudents });
+    } catch (err) {
+      showMessage(`Error: ${err.message}`, 'error');
+    }
+  };
+
   const handleViewAttendees = async (event) => {
     setViewAttendeesEvent(event);
     setAttendeesLoading(true);
@@ -545,6 +559,7 @@ export const MassEventsAdminModal = ({ isOpen, onClose, db, appId, students, sho
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-bold text-gray-800">{ev.title}</h4>
                         {meta?.isPast && <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Finalizado</span>}
+                        {ev.hiddenFromStudents && <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 ring-1 ring-amber-200 px-2 py-0.5 rounded-full">Oculto para alumnos</span>}
                       </div>
                       {ev.description && <p className="text-sm text-gray-500 mt-0.5">{ev.description}</p>}
                       <div className="flex items-center gap-3 mt-2 flex-wrap text-xs text-gray-500">
@@ -563,6 +578,11 @@ export const MassEventsAdminModal = ({ isOpen, onClose, db, appId, students, sho
                     <div className="flex gap-1.5 flex-shrink-0">
                       <button onClick={() => handleViewAttendees(ev)} className="px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition">
                         Ver confirmados
+                      </button>
+                      <button onClick={() => toggleEventVisibility(ev)}
+                        title={ev.hiddenFromStudents ? 'Los alumnos no ven esta convocatoria -- tocá para mostrarla' : 'Los alumnos ven esta convocatoria -- tocá para ocultarla'}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg transition flex-shrink-0 ${ev.hiddenFromStudents ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}>
+                        {ev.hiddenFromStudents ? <IconEyeOff /> : <IconEye />}
                       </button>
                       <button onClick={() => handleDuplicateEvent(ev)} disabled={duplicatingId === ev.id} title="Duplicar evento"
                         className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition disabled:opacity-40">
@@ -655,7 +675,7 @@ export const MassEventsStudentSection = ({ db, appId, student, showMessage: show
     const q = query(fsCollection(db, `artifacts/${appId}/massEvents`));
 
     const unsub = onSnapshot(q, async (snap) => {
-      const evList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const evList = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(ev => !ev.hiddenFromStudents);
       const enriched = await Promise.all(evList.map(async (ev) => {
         // 🔑 CLAVE: Verificar si el alumno tiene un documento attendee
         const attendeeRef = doc(db, `artifacts/${appId}/massEvents/${ev.id}/attendees/${student.id}`);

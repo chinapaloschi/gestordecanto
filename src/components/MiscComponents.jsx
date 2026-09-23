@@ -24,7 +24,7 @@ export const EventConfirmationPopup = ({ isOpen, onClose, db, appId, student, sh
     );
 
     const unsub = onSnapshot(q, async (snap) => {
-      const evList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const evList = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(ev => !ev.hiddenFromStudents);
       const enriched = await Promise.all(evList.map(async (ev) => {
         // 🔑 CLAVE: Verificar si el alumno tiene un documento attendee
         const attendeeRef = doc(db, `artifacts/${appId}/massEvents/${ev.id}/attendees/${student.id}`);
