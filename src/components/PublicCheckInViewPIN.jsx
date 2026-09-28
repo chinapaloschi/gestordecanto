@@ -1679,6 +1679,26 @@ const renderCalendarGrid = () => {
               {/* Convocatorias / eventos masivos pendientes de confirmar */}
               <MassEventsStudentSection db={db} appId={appId} student={student} showMessage={(text, kind) => showToast(text, kind)} />
 
+              {/* Muestras (entradas) y eventos confirmados -- antes vivían en
+                  la pestaña Clases, donde quedaban escondidos; ahora se ven
+                  apenas se entra al portal. */}
+              <PublicTicketsSection db={db} appId={appId} student={student} />
+              <EventConfirmationPopup
+                isOpen={showEventPopup}
+                onClose={() => setShowEventPopup(false)}
+                db={db}
+                appId={appId}
+                student={student}
+                showMessage={showToast}
+              />
+              {new Date().getMonth() === 11 && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <p className="font-display font-semibold text-amber-900 text-sm">Matrícula Anual</p>
+                  <p className="text-xs text-amber-800 mt-1">Para reservar tu vacante del año entrante se abona una matrícula única del 50% de tu cuota mensual.</p>
+                </div>
+              )}
+              <ConfirmedEventsSection db={db} appId={appId} student={student} />
+
               {/* Próxima clase — boleta de función */}
               {showNext && (
                 <div className="relative rounded-2xl border border-gray-100 shadow-md bg-white">
@@ -2010,38 +2030,6 @@ const renderCalendarGrid = () => {
                 })()}
 
             </div>
-
-
-
-            <PublicTicketsSection db={db} appId={appId} student={student} />
-
-      <EventConfirmationPopup
-
-  isOpen={showEventPopup}
-
-  onClose={() => setShowEventPopup(false)}
-
-  db={db}
-
-  appId={appId}
-
-  student={student}
-
-  showMessage={showToast}
-
-/>
-
-            
-
-      {/* Matrícula anual - solo en diciembre */}
-{new Date().getMonth() === 11 && (
-  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-    <p className="font-display font-semibold text-amber-900 text-sm">Matrícula Anual</p>
-    <p className="text-xs text-amber-800 mt-1">Para reservar tu vacante del año entrante se abona una matrícula única del 50% de tu cuota mensual.</p>
-  </div>
-)}
-
-<ConfirmedEventsSection db={db} appId={appId} student={student} />
 
           </div>}{/* FIN CLASES */}
 
