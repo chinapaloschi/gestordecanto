@@ -15,6 +15,7 @@ import { IconClock, IconCalendar, IconTicket, IconDownload, IconShare } from './
 import { ROUTES } from '../constants.js';
 import { dataUrlToFile, generateQrWithLogo, generateComposedTicketImage } from '../utils/ticketQr.js';
 import { exportPaymentPDF, sharePayment } from '../utils/paymentPDF.js';
+import { getLocalToday } from '../utils/dateHelpers.js';
 // ▼▼▼ REEMPLAZÁ TU COMPONENTE PublicTicketsSection ENTERO CON ESTA VERSIÓN ▼▼▼
 export const PublicTicketsSection = ({ db, appId, student }) => {
   const [tickets, setTickets] = React.useState([]);
@@ -64,23 +65,33 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
       setTickets(sorted);
     };
 
+    const todayStr = getLocalToday();
     const eventsQuery = query(fsCollection(db, `artifacts/${appId}/events`));
     const unsubEvents = onSnapshot(eventsQuery, (allEventsSnap) => {
-      const studentEventsWithVisibleTickets = allEventsSnap.docs.filter(doc => {
-        const participants = doc.data().participants || [];
-        const studentParticipant = participants.find(p => (p.id || p.studentId) === student.id);
-        return studentParticipant && studentParticipant.ticketsVisible === true;
-      });
-      const qualifyingIds = new Set(studentEventsWithVisibleTickets.map(d => d.id));
+      // El evento se muestra apenas el alumno es participante (aunque
+      // todavía no tenga entradas, o Sandra no haya habilitado el QR
+      // todavía) -- antes hacía falta ticketsVisible === true para que la
+      // muestra apareciera, así que un alumno recién agregado como
+      // participante no veía nada. ticketsVisible ahora solo controla si,
+      // además, se revela el código QR de sus entradas.
+      const studentEvents = allEventsSnap.docs
+        .map(d => ({ id: d.id, data: d.data() }))
+        .filter(({ data }) => (data.date || '') >= todayStr)
+        .filter(({ data }) => (data.participants || []).some(p => (p.id || p.studentId) === student.id));
 
       const eventDataMap = {};
-      studentEventsWithVisibleTickets.forEach(doc => { eventDataMap[doc.id] = { id: doc.id, ...doc.data() }; });
+      const visibleIds = new Set();
+      studentEvents.forEach(({ id, data }) => {
+        const myParticipant = (data.participants || []).find(p => (p.id || p.studentId) === student.id);
+        eventDataMap[id] = { id, ...data, _myParticipant: myParticipant };
+        if (myParticipant?.ticketsVisible === true) visibleIds.add(id);
+      });
       if (alive) setEventsById(eventDataMap);
 
-      // Dar de baja eventos que dejaron de estar habilitados (o se borraron)
-      // y sacar sus entradas de la lista mostrada.
+      // Dar de baja eventos que dejaron de tener el QR habilitado (o se
+      // borraron) y sacar sus entradas de la lista mostrada.
       Object.keys(ticketUnsubs).forEach(eventId => {
-        if (qualifyingIds.has(eventId)) return;
+        if (visibleIds.has(eventId)) return;
         ticketUnsubs[eventId]();
         delete ticketUnsubs[eventId];
         for (const [ticketId, t] of allTicketsMap) {
@@ -89,15 +100,15 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
       });
       applyTickets();
 
-      // Suscribirse a los eventos que recién ahora califican.
-      studentEventsWithVisibleTickets.forEach(eventDoc => {
-        if (ticketUnsubs[eventDoc.id]) return; // ya escuchando
+      // Suscribirse a los eventos que recién ahora tienen el QR habilitado.
+      visibleIds.forEach(eventId => {
+        if (ticketUnsubs[eventId]) return; // ya escuchando
         const ticketsQuery = query(
-          fsCollection(db, `artifacts/${appId}/events/${eventDoc.id}/tickets`),
+          fsCollection(db, `artifacts/${appId}/events/${eventId}/tickets`),
           where("assignedTo", "==", student.id),
           where("status", "in", ["active", "used"])
         );
-        ticketUnsubs[eventDoc.id] = onSnapshot(ticketsQuery, (snapshot) => {
+        ticketUnsubs[eventId] = onSnapshot(ticketsQuery, (snapshot) => {
           snapshot.docChanges().forEach((change) => {
             const docData = change.doc.data() || {};
             const docId = change.doc.id;
@@ -106,7 +117,7 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
           });
           applyTickets();
         }, (error) => {
-          console.error(`Error en listener de tickets para evento ${eventDoc.id}:`, error);
+          console.error(`Error en listener de tickets para evento ${eventId}:`, error);
           if (alive) setLoadError(true);
         });
       });
@@ -202,28 +213,32 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
   };
 
   const groups = React.useMemo(() => {
-    const m = new Map();
-    for (const t of tickets) {
-      const key = t.eventId || "_no_event";
-      if (!m.has(key)) {
-        const ev = eventsById[key];
-        const title = ev?.title || t.eventTitle || "Entradas";
-        const when = ev ? fmtDate(ev.date, ev.startTime) : '';
-        m.set(key, { title, when, rows: [] });
-      }
-      m.get(key).rows.push(t);
-    }
-    return Array.from(m.entries()).map(([id, data]) => ({ id, ...data }));
+    return Object.values(eventsById)
+      .map(ev => {
+        const p = ev._myParticipant || {};
+        return {
+          id: ev.id,
+          title: ev.title || "Muestra",
+          when: fmtDate(ev.date, ev.startTime),
+          location: ev.location || '',
+          date: ev.date || '',
+          ticketsVisible: p.ticketsVisible === true,
+          ticketsSold: Number(p.ticketsSold || 0),
+          paid: !!p.paid,
+          rows: tickets.filter(t => t.eventId === ev.id),
+        };
+      })
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   }, [tickets, eventsById]);
 
   if (loading) return null;
 
-  if (tickets.length === 0) {
+  if (groups.length === 0) {
     if (!loadError) return null;
     return (
       <div className="rounded-xl border border-amber-100 bg-amber-50 shadow-sm mt-4 px-4 py-3 flex items-center gap-2">
         <span className="text-lg flex-shrink-0">⚠️</span>
-        <p className="text-xs text-amber-800">No pudimos cargar tus entradas. Revisá tu conexión y volvé a intentar.</p>
+        <p className="text-xs text-amber-800">No pudimos cargar tus muestras. Revisá tu conexión y volvé a intentar.</p>
       </div>
     );
   }
@@ -232,11 +247,13 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
     <>
       <div className="rounded-lg border border-gray-200 p-4 bg-white shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-semibold text-gray-900">Tus entradas</div>
+          <div className="text-sm font-semibold text-gray-900">Tus muestras</div>
         </div>
         <div className="space-y-2">
           {groups.map(g => {
             const isExpanded = openEventId === g.id;
+            const hasSold = g.ticketsSold > 0;
+            const canReveal = g.ticketsVisible && g.rows.length > 0;
             return (
               <div key={g.id} className="rounded-xl border border-amber-300 bg-amber-100 shadow-md overflow-hidden">
                 <button
@@ -246,7 +263,11 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
                 >
                   <div className="leading-tight">
                     <span className="font-semibold text-amber-900">{g.title}</span>
-                    <span className="ml-2 text-xs text-amber-800">({g.rows.length} {g.rows.length === 1 ? 'entrada' : 'entradas'})</span>
+                    {hasSold && (
+                      <span className="ml-2 text-xs text-amber-800">
+                        ({g.ticketsSold} {g.ticketsSold === 1 ? 'entrada' : 'entradas'}{g.paid ? ' · Pagado' : ' · Pendiente de pago'})
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-4 flex-shrink-0">
                       <span className="text-xs font-mono text-amber-800">{g.when}</span>
@@ -255,16 +276,25 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
                 </button>
                 {isExpanded && (
                   <div className="px-4 pb-4 pt-2 bg-white border-t border-amber-200">
-                    <ul className="divide-y divide-gray-200">
-                      {g.rows.map(t => (
-                        <li key={t.id}>
-                          <button type="button" onClick={() => setSelectedTicket(t)} className="w-full flex justify-between items-center py-2 text-left hover:bg-rose-50 rounded-md px-2">
-                            <span className="font-semibold text-sm text-gray-800">{t.ticketNumber ? `Entrada N° ${t.ticketNumber}` : `ID: ${t.id.slice(0, 6)}...`}</span>
-                            <StatusBadge status={t.status} />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    {g.location && <p className="text-xs text-gray-500 mb-2">📍 {g.location}</p>}
+                    {canReveal ? (
+                      <ul className="divide-y divide-gray-200">
+                        {g.rows.map(t => (
+                          <li key={t.id}>
+                            <button type="button" onClick={() => setSelectedTicket(t)} className="w-full flex justify-between items-center py-2 text-left hover:bg-rose-50 rounded-md px-2">
+                              <span className="font-semibold text-sm text-gray-800">{t.ticketNumber ? `Entrada N° ${t.ticketNumber}` : `ID: ${t.id.slice(0, 6)}...`}</span>
+                              <StatusBadge status={t.status} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : hasSold ? (
+                      <p className="text-xs text-gray-500 py-2">
+                        Tenés {g.ticketsSold} {g.ticketsSold === 1 ? 'entrada confirmada' : 'entradas confirmadas'}. El código para presentar en la puerta va a aparecer acá cuando esté habilitado.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-500 py-2">Sos parte de esta muestra. Todavía no tenés entradas asignadas.</p>
+                    )}
                   </div>
                 )}
               </div>
