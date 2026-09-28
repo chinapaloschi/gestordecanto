@@ -245,62 +245,81 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
 
   return (
     <>
-      <div className="rounded-lg border border-gray-200 p-4 bg-white shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-semibold text-gray-900">Tus muestras</div>
-        </div>
-        <div className="space-y-2">
-          {groups.map(g => {
-            const isExpanded = openEventId === g.id;
-            const hasSold = g.ticketsSold > 0;
-            const canReveal = g.ticketsVisible && g.rows.length > 0;
-            return (
-              <div key={g.id} className="rounded-xl border border-amber-300 bg-amber-100 shadow-md overflow-hidden">
-                <button
-                  type="button"
-                  className="w-full flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-4 py-3 text-left hover:bg-amber-200 transition-colors"
-                  onClick={() => setOpenEventId(isExpanded ? null : g.id)}
-                >
-                  <div className="leading-tight">
-                    <span className="font-semibold text-amber-900">{g.title}</span>
-                    {hasSold && (
-                      <span className="ml-2 text-xs text-amber-800">
-                        ({g.ticketsSold} {g.ticketsSold === 1 ? 'entrada' : 'entradas'}{g.paid ? ' · Pagado' : ' · Pendiente de pago'})
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-4 flex-shrink-0">
-                      <span className="text-xs font-mono text-amber-800">{g.when}</span>
-                      <span className={`transform transition-transform text-amber-900 ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
-                  </div>
-                </button>
-                {isExpanded && (
-                  <div className="px-4 pb-4 pt-2 bg-white border-t border-amber-200">
-                    {g.location && <p className="text-xs text-gray-500 mb-2">📍 {g.location}</p>}
-                    {canReveal ? (
-                      <ul className="divide-y divide-gray-200">
-                        {g.rows.map(t => (
-                          <li key={t.id}>
-                            <button type="button" onClick={() => setSelectedTicket(t)} className="w-full flex justify-between items-center py-2 text-left hover:bg-rose-50 rounded-md px-2">
-                              <span className="font-semibold text-sm text-gray-800">{t.ticketNumber ? `Entrada N° ${t.ticketNumber}` : `ID: ${t.id.slice(0, 6)}...`}</span>
-                              <StatusBadge status={t.status} />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : hasSold ? (
-                      <p className="text-xs text-gray-500 py-2">
-                        Tenés {g.ticketsSold} {g.ticketsSold === 1 ? 'entrada confirmada' : 'entradas confirmadas'}. El código para presentar en la puerta va a aparecer acá cuando esté habilitado.
-                      </p>
-                    ) : (
-                      <p className="text-xs text-gray-500 py-2">Sos parte de esta muestra. Todavía no tenés entradas asignadas.</p>
-                    )}
-                  </div>
-                )}
+      <div className="space-y-3">
+        <p className="font-ticket text-[10px] tracking-[0.2em] uppercase text-gray-400 pl-1">
+          {groups.length === 1 ? 'Tu muestra' : 'Tus muestras'}
+        </p>
+        {groups.map(g => {
+          const isExpanded = openEventId === g.id;
+          const hasSold = g.ticketsSold > 0;
+          const canReveal = g.ticketsVisible && g.rows.length > 0;
+          return (
+            <div key={g.id} className="relative rounded-2xl border border-gray-100 shadow-md bg-white overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setOpenEventId(isExpanded ? null : g.id)}
+                className="w-full text-left rounded-t-2xl px-5 pt-4 pb-5 bg-gradient-to-r from-rose-700 to-pink-600"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-ticket text-[10px] tracking-[0.2em] uppercase text-rose-200">Muestra</p>
+                  {hasSold && (
+                    <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wide text-white bg-white/15 px-2 py-0.5 rounded-full">
+                      {g.paid ? '✓ Pagado' : 'Pendiente de pago'}
+                    </span>
+                  )}
+                </div>
+                <p className="font-display italic text-xl mt-1.5 leading-snug text-white">{g.title}</p>
+                <p className="text-rose-100 text-sm mt-1 capitalize">{g.when} hs</p>
+              </button>
+
+              {/* Perforación */}
+              <div className="relative">
+                <div className="absolute -left-[9px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] rounded-full bg-gray-50 border border-gray-100"/>
+                <div className="absolute -right-[9px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] rounded-full bg-gray-50 border border-gray-100"/>
+                <div className="mx-5 border-t border-dashed border-gray-200"/>
               </div>
-            );
-          })}
-        </div>
+
+              <button
+                type="button"
+                onClick={() => setOpenEventId(isExpanded ? null : g.id)}
+                className="w-full flex items-center justify-between gap-3 px-5 py-3 text-left hover:bg-gray-50 transition"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {g.location && <span className="text-xs text-gray-500 truncate">📍 {g.location}</span>}
+                  {hasSold && (
+                    <span className="font-ticket text-xs font-semibold text-gray-700 flex-shrink-0">
+                      {g.ticketsSold} {g.ticketsSold === 1 ? 'entrada' : 'entradas'}
+                    </span>
+                  )}
+                </div>
+                <svg className={`w-4 h-4 text-gray-300 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+              </button>
+
+              {isExpanded && (
+                <div className="px-5 pb-4 pt-1 border-t border-gray-100">
+                  {canReveal ? (
+                    <ul className="divide-y divide-gray-100">
+                      {g.rows.map(t => (
+                        <li key={t.id}>
+                          <button type="button" onClick={() => setSelectedTicket(t)} className="w-full flex justify-between items-center py-2.5 text-left hover:bg-rose-50 rounded-md px-2 transition">
+                            <span className="font-semibold text-sm text-gray-800">{t.ticketNumber ? `Entrada N° ${t.ticketNumber}` : `ID: ${t.id.slice(0, 6)}...`}</span>
+                            <StatusBadge status={t.status} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : hasSold ? (
+                    <p className="text-xs text-gray-500 py-2">
+                      Tenés {g.ticketsSold} {g.ticketsSold === 1 ? 'entrada confirmada' : 'entradas confirmadas'}. El código para presentar en la puerta va a aparecer acá cuando esté habilitado.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 py-2">Sos parte de esta muestra. Todavía no tenés entradas asignadas.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       <Modal isOpen={!!selectedTicket} onClose={() => setSelectedTicket(null)} size="sm">
         {selectedTicket && (
