@@ -350,47 +350,59 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
       </div>
       <Modal isOpen={!!selectedTicket} onClose={() => setSelectedTicket(null)} size="sm">
         {selectedTicket && (
-          <div className="p-4 flex flex-col items-center text-center">
-            <h3 className="font-bold text-lg text-gray-900">{selectedTicket.eventTitle}</h3>
-            <p className="text-sm text-gray-600 mb-4">{fmtDate(selectedTicket.eventDate, selectedTicket.eventStartTime)}</p>
-            {qrCache[selectedTicket.id] ? (
-              <img src={qrCache[selectedTicket.id]} alt="QR Code" className="w-56 h-56 rounded-lg shadow-md border" />
-            ) : qrErrors[selectedTicket.id] ? (
-              <div className="w-56 h-56 bg-red-50 border border-red-100 flex flex-col items-center justify-center gap-2 rounded-lg text-sm text-red-600 px-4 text-center">
-                <span>No se pudo generar el código.</span>
-                <button type="button" onClick={() => generateOneQr(selectedTicket.id, selectedTicket.eventId)}
-                  className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition">
-                  Reintentar
-                </button>
-              </div>
-            ) : (
-              <div className="w-56 h-56 bg-gray-100 flex items-center justify-center rounded-lg text-sm">Cargando QR...</div>
-            )}
-            <p className="mt-4 font-semibold text-gray-800">{selectedTicket.ticketNumber ? `Entrada N° ${selectedTicket.ticketNumber}` : `ID: ${selectedTicket.id.slice(0, 10)}...`}</p>
+          <div className="-mx-4 sm:-mx-6 -my-3 sm:-my-4 rounded-2xl overflow-hidden bg-[#18151b] text-white shadow-xl">
+            <div className="px-6 pt-7 pb-5 text-center">
+              <p className="font-ticket text-[10px] tracking-[0.25em] uppercase text-rose-400">Entrada</p>
+              <p className="font-display italic text-2xl mt-1.5 leading-snug">{selectedTicket.eventTitle}</p>
+              <p className="text-gray-400 text-sm mt-1">{fmtDate(selectedTicket.eventDate, selectedTicket.eventStartTime)}</p>
+            </div>
 
-            <div className="mt-4 w-full text-left">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Nombre del invitado (opcional)</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={guestNameDraft}
-                  onChange={(e) => setGuestNameDraft(e.target.value)}
-                  onBlur={handleSaveGuestName}
-                  placeholder="¿Quién va a usar esta entrada?"
-                  maxLength={80}
-                  className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-400"
-                />
-              </div>
-              <p className="text-[11px] text-gray-400 mt-1">
+            <div className="flex justify-center px-6">
+              {qrCache[selectedTicket.id] ? (
+                <div className="bg-white rounded-2xl p-4 shadow-lg">
+                  <img src={qrCache[selectedTicket.id]} alt="QR Code" className="w-48 h-48" />
+                </div>
+              ) : qrErrors[selectedTicket.id] ? (
+                <div className="w-56 h-56 bg-white rounded-2xl shadow-lg flex flex-col items-center justify-center gap-2 text-sm text-red-600 px-4 text-center">
+                  <span>No se pudo generar el código.</span>
+                  <button type="button" onClick={() => generateOneQr(selectedTicket.id, selectedTicket.eventId)}
+                    className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition">
+                    Reintentar
+                  </button>
+                </div>
+              ) : (
+                <div className="w-56 h-56 bg-white rounded-2xl shadow-lg flex items-center justify-center text-sm text-gray-400">Cargando QR...</div>
+              )}
+            </div>
+
+            <div className="text-center mt-5">
+              <p className="font-ticket text-[10px] tracking-[0.25em] uppercase text-rose-400">Entrada</p>
+              <p className="font-ticket text-3xl font-bold tracking-wide mt-0.5">
+                N° {selectedTicket.ticketNumber ?? selectedTicket.id.slice(0, 6)}
+              </p>
+            </div>
+
+            <div className="px-6 mt-6 text-left">
+              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Nombre del invitado (opcional)</label>
+              <input
+                type="text"
+                value={guestNameDraft}
+                onChange={(e) => setGuestNameDraft(e.target.value)}
+                onBlur={handleSaveGuestName}
+                placeholder="¿Quién va a usar esta entrada?"
+                maxLength={80}
+                className="w-full px-3 py-2.5 bg-white/10 border border-white/15 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
+              />
+              <p className="text-[11px] text-gray-500 mt-1.5">
                 {savingGuestName ? 'Guardando...' : 'Se guarda solo, al salir del campo.'}
               </p>
             </div>
 
-            <div className="mt-4 w-full space-y-2">
-              <button onClick={() => handleShareOrDownload('download', selectedTicket, student.name)} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gray-100 text-gray-800 font-semibold hover:bg-gray-200 disabled:opacity-50">
-                <IconDownload /> {loading ? 'Generando...' : 'Descargar PNG'}
+            <div className="px-6 pt-6 pb-7 flex gap-2.5">
+              <button onClick={() => handleShareOrDownload('download', selectedTicket, student.name)} disabled={loading} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-semibold transition disabled:opacity-50">
+                <IconDownload /> {loading ? 'Generando...' : 'Descargar'}
               </button>
-              <button onClick={() => handleShareOrDownload('share', selectedTicket, student.name)} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gray-100 text-gray-800 font-semibold hover:bg-gray-200 disabled:opacity-50">
+              <button onClick={() => handleShareOrDownload('share', selectedTicket, student.name)} disabled={loading} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold transition disabled:opacity-50">
                 <IconShare /> {loading ? 'Preparando...' : 'Compartir'}
               </button>
             </div>
