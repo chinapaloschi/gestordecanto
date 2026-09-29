@@ -1107,7 +1107,59 @@ export const EventDetailModal = ({ isOpen, onClose, event, db, appId, showMessag
     await updateEvent({ participants: next });
   };
 
-  const handleDeliveredInput = (idx, val) => mutateParticipant(idx, p => ({...p, ticketsDelivered: clamp(0, val, 9999), ticketsSold: Math.min(Number(p.ticketsSold || 0), clamp(0, val, 9999))}));
+  const handleDeliveredInput = async (idx, val) => {
+    const participant = participants[idx];
+    if (!participant || saving) return;
+    const newDelivered = clamp(0, val, 9999);
+    const currentSold = Number(participant.ticketsSold || 0);
+    const newSold = Math.min(currentSold, newDelivered);
+
+    if (newSold === currentSold) {
+      await mutateParticipant(idx, p => ({ ...p, ticketsDelivered: newDelivered }));
+      return;
+    }
+
+    // Bajar Entregadas por debajo de Vendidas fuerza a bajar Vendidas
+    // también -- antes eso solo tocaba el contador acá, dejando vivas las
+    // entradas reales de la subcolección: el alumno las seguía viendo en
+    // su portal aunque acá figurara 0. Ahora borramos esas entradas igual
+    // que hace el +/- de Vendidas.
+    setSaving(true);
+    const studentId = getPid(participant);
+    const studentName = getPname(participant);
+    const isExternal = !!participant.isExternal;
+    const eventRef = doc(db, `artifacts/${appId}/events/${event.id}`);
+    const ticketsToDelete = currentSold - newSold;
+    try {
+      await runTransaction(db, async (transaction) => {
+        const q = query(
+          fsCollection(db, `artifacts/${appId}/events/${event.id}/tickets`),
+          where("assignedTo", "==", studentId),
+          where("status", "in", ["active", "used"]),
+          limit(ticketsToDelete)
+        );
+        const snapshot = await getDocs(q);
+        snapshot.forEach(ticketDoc => {
+          transaction.delete(ticketDoc.ref);
+          if (!isExternal && studentId) {
+            transaction.delete(doc(db, `artifacts/${appId}/studentTickets/${studentId}/tickets/${ticketDoc.id}`));
+          }
+        });
+        const nextParticipants = participants.map((p, i) => i === idx ? { ...p, ticketsDelivered: newDelivered, ticketsSold: newSold } : p);
+        transaction.update(eventRef, { participants: nextParticipants });
+      });
+      setLocalEvent(prev => ({
+        ...prev,
+        participants: participants.map((p, i) => i === idx ? { ...p, ticketsDelivered: newDelivered, ticketsSold: newSold } : p),
+      }));
+      showMessage(`Se eliminaron ${ticketsToDelete} entrada(s) para ${studentName}.`, 'success');
+    } catch (e) {
+      console.error("Error al actualizar entradas entregadas:", e);
+      showMessage(`Error: ${e.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
   const togglePaid = (idx) => mutateParticipant(idx, p => ({ ...p, paid: !p.paid }));
 
   const handleSoldInput = async (idx, newSoldValue) => {
@@ -1157,9 +1209,14 @@ export const EventDetailModal = ({ isOpen, onClose, event, db, appId, showMessag
                   }
               } else if (diff < 0) {
                   const ticketsToDelete = Math.abs(diff);
-                  const q = query( fsCollection(db, `artifacts/${appId}/events/${event.id}/tickets`), where("assignedTo", "==", studentId), where("status", "==", "active"), limit(ticketsToDelete) );
+                  // "in" active+used (no solo active): si el admin baja Vendidas,
+                  // la intención es revocar esas entradas aunque ya se hayan
+                  // escaneado en la puerta -- si solo borrábamos las activas, una
+                  // entrada ya usada quedaba huérfana en la subcolección y le
+                  // seguía apareciendo al alumno en su portal.
+                  const q = query( fsCollection(db, `artifacts/${appId}/events/${event.id}/tickets`), where("assignedTo", "==", studentId), where("status", "in", ["active", "used"]), limit(ticketsToDelete) );
                   const snapshot = await getDocs(q);
-                  if (snapshot.size < ticketsToDelete) throw new Error(`No hay suficientes entradas activas para eliminar.`);
+                  if (snapshot.size < ticketsToDelete) throw new Error(`No hay suficientes entradas para eliminar.`);
                   snapshot.forEach(ticketDoc => {
                       transaction.delete(ticketDoc.ref);
                       if (!isExternal && studentId) {
@@ -1520,7 +1577,12 @@ const handleExportTicketsCSV = async () => {
                               {p.ticketsVisible ? <IconEye /> : <IconEyeOff />}
                               {p.ticketsVisible ? 'Visible' : 'Oculta'}
                             </button>
-                            <button onClick={() => setStudentForTickets(p)} title={`Ver entradas de ${getPname(p)}`} disabled={(p.ticketsSold || 0) === 0} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 transition flex-shrink-0">
+                            {/* Antes se deshabilitaba con ticketsSold === 0, pero ese
+                                contador puede quedar en 0 mientras todavía existan
+                                entradas reales huérfanas en la subcolección (el bug
+                                que este botón sirve para destrabar) -- ahora siempre
+                                se puede abrir. */}
+                            <button onClick={() => setStudentForTickets(p)} title={`Ver entradas de ${getPname(p)}`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition flex-shrink-0">
                               <IconTicket />
                             </button>
                             <button onClick={() => removeParticipant(p.originalIndex)} title={`Quitar a ${getPname(p)}`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition flex-shrink-0">
