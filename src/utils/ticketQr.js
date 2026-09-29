@@ -64,94 +64,76 @@ export async function generateQrWithLogo(qrData, logoSrc, qrSize = 128) {
   }
 }
 
-export async function generateComposedTicketImage(qrData, eventInfo, logoSrc) {
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`No se pudo cargar la imagen: ${src}`));
+    img.src = src;
+  });
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// El flyer del estudio (afiche completo, con título/fecha/lugar ya
+// diseñados) va intacto en la parte de arriba de la imagen; el QR y los
+// datos de la entrada van en una franja propia debajo, en vez de superponer
+// texto sobre el afiche y arriesgar que quede ilegible.
+export async function generateComposedTicketImage(qrData, eventInfo, logoSrc, backgroundSrc = '/images/entrada-fondo.jpg') {
   try {
+    const bgImage = await loadImage(backgroundSrc);
+
+    const cardWidth = 750;
+    const flyerHeight = Math.round(cardWidth * (bgImage.naturalHeight / bgImage.naturalWidth));
+    const footerHeight = 340;
+    const cardHeight = flyerHeight + footerHeight;
+
     const finalCanvas = document.createElement('canvas');
-    const ctx = finalCanvas.getContext('2d');
-
-    const cardWidth = 350;
-    const cardHeight = 450;
-    const padding = 25;
-
     finalCanvas.width = cardWidth;
     finalCanvas.height = cardHeight;
+    const ctx = finalCanvas.getContext('2d');
 
-    // Fondo blanco
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, cardWidth, cardHeight);
+    ctx.drawImage(bgImage, 0, 0, cardWidth, flyerHeight);
 
-    // --- LÓGICA MODIFICADA PARA EL TÍTULO ---
-    let currentY = padding + 25; // Posición Y inicial para el texto
-    const titleFont = 'bold 20px Arial';
-    const titleLineHeight = 24; // Espacio entre renglones
+    // Franja inferior, mismo tono oscuro/cálido que las sombras del afiche.
+    ctx.fillStyle = '#170f0c';
+    ctx.fillRect(0, flyerHeight, cardWidth, footerHeight);
 
-    ctx.fillStyle = '#1f2937';
-    ctx.font = titleFont;
-    ctx.textAlign = 'center';
+    let y = flyerHeight + 46;
 
-    const fullTitle = eventInfo.title.toUpperCase();
-    const splitIndex = fullTitle.indexOf('('); // Busca el paréntesis
-
-    let line1 = fullTitle;
-    let line2 = null;
-
-    // Si encuentra un paréntesis, divide el texto
-    if (splitIndex > 0) {
-        line1 = fullTitle.substring(0, splitIndex).trim();
-        line2 = fullTitle.substring(splitIndex).trim();
-    }
-
-    // Dibuja la primera línea
-    ctx.fillText(line1, cardWidth / 2, currentY);
-
-    // Si hay una segunda línea, la dibuja y actualiza la posición
-    if (line2) {
-        currentY += titleLineHeight;
-        ctx.fillText(line2, cardWidth / 2, currentY);
-    }
-    // --- FIN DE LA LÓGICA MODIFICADA ---
-
-    // Dibuja el subtítulo (fecha y hora) ajustando su posición
-    currentY += 30;
-    ctx.font = '16px Arial';
-    ctx.fillStyle = '#4b5563';
-    ctx.fillText(eventInfo.subtitle, cardWidth / 2, currentY);
-
-    // Dibuja el código QR, ajustando su posición
-    currentY += 20;
-    const qrCodeWithLogoUrl = await generateQrWithLogo(qrData, logoSrc, 200); // Un poco más chico para dar espacio
+    const qrSize = 210;
+    const qrCodeWithLogoUrl = await generateQrWithLogo(qrData, logoSrc, qrSize * 2);
     if (!qrCodeWithLogoUrl) throw new Error("Falló la generación del QR con logo.");
+    const qrImage = await loadImage(qrCodeWithLogoUrl);
 
-    const qrImage = new Image();
-    qrImage.src = qrCodeWithLogoUrl;
-    await new Promise(resolve => { qrImage.onload = resolve; });
+    const qrPad = 14;
+    const qrBoxSize = qrSize + qrPad * 2;
+    const qrBoxX = (cardWidth - qrBoxSize) / 2;
+    ctx.fillStyle = '#ffffff';
+    roundRectPath(ctx, qrBoxX, y, qrBoxSize, qrBoxSize, 18);
+    ctx.fill();
+    ctx.drawImage(qrImage, qrBoxX + qrPad, y + qrPad, qrSize, qrSize);
+    y += qrBoxSize + 38;
 
-    ctx.drawImage(qrImage, (cardWidth - 200) / 2, currentY, 200, 200);
-    currentY += 200; // Avanza la posición vertical
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e3c17e';
+    ctx.font = 'bold 28px Georgia, "Times New Roman", serif';
+    ctx.fillText(eventInfo.ticketNumber ? `ENTRADA N° ${eventInfo.ticketNumber}` : 'ENTRADA', cardWidth / 2, y);
 
-    // Dibuja el resto de los elementos ajustando su posición
-    currentY += 30;
-    ctx.font = '16px Arial';
-    ctx.fillStyle = '#4b5563';
-    ctx.fillText('Entrada para:', cardWidth / 2, currentY);
-
-    currentY += 25;
-    ctx.font = 'bold 20px Arial';
-    ctx.fillStyle = '#D81B60';
-    ctx.fillText(eventInfo.attendee.toUpperCase(), cardWidth / 2, currentY);
-
-    currentY += 25;
-    if (eventInfo.ticketNumber) {
-        ctx.font = '16px Arial';
-        ctx.fillStyle = '#4b5563';
-        ctx.fillText(`Entrada N° ${eventInfo.ticketNumber}`, cardWidth / 2, currentY);
-        currentY += 15;
-    }
-
-    if (eventInfo.ticketId) {
-        ctx.font = '10px "Courier New", monospace';
-        ctx.fillStyle = '#9ca3af';
-        ctx.fillText(`ID: ${eventInfo.ticketId}`, cardWidth / 2, currentY);
+    if (eventInfo.attendee) {
+      y += 36;
+      ctx.fillStyle = '#f5efe4';
+      ctx.font = '22px Georgia, "Times New Roman", serif';
+      ctx.fillText(eventInfo.attendee.toUpperCase(), cardWidth / 2, y);
     }
 
     return finalCanvas.toDataURL('image/png');

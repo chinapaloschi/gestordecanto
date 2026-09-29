@@ -73,7 +73,7 @@ const handleShareOrDownload = async (action, ticket, participantName) => {
       const eventInfo = {
         title: ticket.eventTitle,
         subtitle: fmtEventDate(ticket.eventDate, ticket.eventStartTime),
-        attendee: participantName,
+        attendee: ticket.guestName || participantName,
         ticketNumber: ticket.ticketNumber,
          ticketId: ticket.id
 
@@ -854,7 +854,7 @@ export const StudentTicketsViewerModal = ({ isOpen, onClose, student, event, db,
       const eventInfo = {
         title: ticket.eventTitle,
         subtitle: fmtDate(ticket.eventDate, ticket.eventStartTime),
-        attendee: participantName,
+        attendee: ticket.guestName || participantName,
         ticketNumber: ticket.ticketNumber,
         ticketId: ticket.id
       };

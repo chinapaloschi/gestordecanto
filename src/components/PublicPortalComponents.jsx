@@ -186,7 +186,7 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
       const eventInfo = {
         title: ticket.eventTitle,
         subtitle: fmtDate(ticket.eventDate, ticket.eventStartTime),
-        attendee: participantName,
+        attendee: ticket.guestName || participantName,
         ticketNumber: ticket.ticketNumber,
         ticketId: ticket.id
       };
@@ -351,13 +351,19 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
       <Modal isOpen={!!selectedTicket} onClose={() => setSelectedTicket(null)} size="sm">
         {selectedTicket && (
           <div className="-mx-4 sm:-mx-6 -my-3 sm:-my-4 rounded-2xl overflow-hidden bg-[#18151b] text-white shadow-xl">
-            <div className="px-6 pt-7 pb-5 text-center">
-              <p className="font-ticket text-[10px] tracking-[0.25em] uppercase text-rose-400">Entrada</p>
-              <p className="font-display italic text-2xl mt-1.5 leading-snug">{selectedTicket.eventTitle}</p>
-              <p className="text-gray-400 text-sm mt-1">{fmtDate(selectedTicket.eventDate, selectedTicket.eventStartTime)}</p>
+            <div
+              className="relative h-48 bg-cover bg-top flex items-end"
+              style={{ backgroundImage: "url(/images/entrada-fondo.jpg)" }}
+            >
+              <div className="absolute inset-0 bg-gradient-to-t from-[#18151b] via-[#18151b]/20 to-transparent" />
+              <div className="relative px-6 pb-4 text-center w-full">
+                <p className="font-ticket text-[10px] tracking-[0.25em] uppercase text-rose-300 drop-shadow">Entrada</p>
+                <p className="font-display italic text-2xl mt-1 leading-snug drop-shadow-md">{selectedTicket.eventTitle}</p>
+                <p className="text-gray-200 text-sm mt-1 drop-shadow">{fmtDate(selectedTicket.eventDate, selectedTicket.eventStartTime)}</p>
+              </div>
             </div>
 
-            <div className="flex justify-center px-6">
+            <div className="flex justify-center px-6 pt-5">
               {qrCache[selectedTicket.id] ? (
                 <div className="bg-white rounded-2xl p-4 shadow-lg">
                   <img src={qrCache[selectedTicket.id]} alt="QR Code" className="w-48 h-48" />
