@@ -351,19 +351,17 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
       <Modal isOpen={!!selectedTicket} onClose={() => setSelectedTicket(null)} size="sm">
         {selectedTicket && (
           <div className="-mx-4 sm:-mx-6 -my-3 sm:-my-4 rounded-2xl overflow-hidden bg-[#18151b] text-white shadow-xl">
-            <div
-              className="relative h-48 bg-cover bg-top flex items-end"
-              style={{ backgroundImage: "url(/images/entrada-fondo.jpg)" }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-t from-[#18151b] via-[#18151b]/20 to-transparent" />
-              <div className="relative px-6 pb-4 text-center w-full">
-                <p className="font-ticket text-[10px] tracking-[0.25em] uppercase text-rose-300 drop-shadow">Entrada</p>
-                <p className="font-display italic text-2xl mt-1 leading-snug drop-shadow-md">{selectedTicket.eventTitle}</p>
-                <p className="text-gray-200 text-sm mt-1 drop-shadow">{fmtDate(selectedTicket.eventDate, selectedTicket.eventStartTime)}</p>
-              </div>
+            {/* El flyer ya trae título, fecha y lugar diseñados -- antes le
+                superponíamos nuestro propio texto encima y, al ser más alto
+                que el recorte de 192px, se desbordaba sobre la sección del
+                QR de abajo. Ahora es solo la imagen, sin texto propio ni
+                overlay, con su contención explícita. */}
+            <div className="relative h-72 overflow-hidden">
+              <img src="/images/entrada-fondo.jpg" alt="" className="absolute inset-0 w-full h-full object-cover object-top" />
+              <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#18151b] to-transparent" />
             </div>
 
-            <div className="flex justify-center px-6 pt-5">
+            <div className="flex justify-center px-6 pt-6">
               {qrCache[selectedTicket.id] ? (
                 <div className="bg-white rounded-2xl p-4 shadow-lg">
                   <img src={qrCache[selectedTicket.id]} alt="QR Code" className="w-48 h-48" />
