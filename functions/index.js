@@ -171,6 +171,40 @@ exports.setScanPin = functions.https.onCall(async (data, context) => {
   return { status: "ok" };
 });
 
+// ---------------- 2a-bis) Alumno asigna nombre de invitado a su entrada ----------------
+// El alumno le pone nombre y apellido a cada entrada que revende (antes solo
+// figuraba el nombre del alumno comprador, no de quién realmente entra). Va
+// por Cloud Function en vez de un permiso público de escritura directo a
+// Firestore para poder validar acá que la entrada realmente le pertenece a
+// ese studentId antes de aceptar el cambio.
+exports.setTicketGuestName = functions.https.onCall(async (data, context) => {
+  const appId = String(data?.appId || "");
+  const eventId = String(data?.eventId || "");
+  const ticketId = String(data?.ticketId || "");
+  const studentId = String(data?.studentId || "");
+  const guestName = String(data?.guestName || "").trim().slice(0, 80);
+  assertC(appId.length > 0, "Falta appId.");
+  assertC(eventId.length > 0, "Falta eventId.");
+  assertC(ticketId.length > 0, "Falta ticketId.");
+  assertC(studentId.length > 0, "Falta studentId.");
+
+  const db = admin.firestore();
+  const ticketRef = db.doc(`artifacts/${appId}/events/${eventId}/tickets/${ticketId}`);
+  const snap = await ticketRef.get();
+  assertC(snap.exists, "La entrada no existe.");
+  assertC(snap.data().assignedTo === studentId, "Esa entrada no te pertenece.");
+
+  await ticketRef.set({ guestName }, { merge: true });
+
+  const studentTicketRef = db.doc(`artifacts/${appId}/studentTickets/${studentId}/tickets/${ticketId}`);
+  const studentTicketSnap = await studentTicketRef.get();
+  if (studentTicketSnap.exists) {
+    await studentTicketRef.set({ guestName }, { merge: true });
+  }
+
+  return { status: "ok" };
+});
+
 // ---------------- 2b) Login de alumno por DNI (+ PIN opcional) ----------------
 // Reemplaza las lecturas directas del cliente a `students`/`pinIndex` (que
 // permitían enumerar DNIs sin límite) por una única función server-side con

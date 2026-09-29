@@ -422,10 +422,14 @@ export const ScanTicketsView = ({ isOpen, onClose, db, appId, event, showMessage
         if (data.status !== 'active') throw new Error(`El ticket no está activo (estado: ${data.status})`);
         tx.update(tRef, { status: 'used', usedAt: serverTimestamp() });
       });
+      // Preferimos el nombre del invitado (lo carga el alumno que revende la
+      // entrada) sobre el nombre del alumno comprador -- es lo que la
+      // persona de la puerta necesita para chequear contra su lista.
+      const attendeeName = ticketInfoForDisplay.guestName || ticketInfoForDisplay.assignedToName || 'Participante';
       setLastResult({
         ok: true,
         msg: 'ACCESO PERMITIDO',
-        detail: `${ticketInfoForDisplay.assignedToName || 'Participante'} - N° ${ticketInfoForDisplay.ticketNumber || 'S/N'}`,
+        detail: `${attendeeName} - N° ${ticketInfoForDisplay.ticketNumber || 'S/N'}`,
       });
       feedback(true);
     } catch (err) {
@@ -958,6 +962,7 @@ export const StudentTicketsViewerModal = ({ isOpen, onClose, student, event, db,
                            <span className="font-bold text-gray-800">Entrada N° {ticket.ticketNumber || 'S/N'}</span>
                            <StatusBadge status={ticket.status} />
                         </div>
+                        {ticket.guestName && <p className="text-xs text-gray-700 mt-1">Invitado: {ticket.guestName}</p>}
                         <p className="text-xs text-gray-500 font-mono mt-1">ID: {ticket.id}</p>
                       </div>
                       {/* BOTÓN ELIMINAR */}

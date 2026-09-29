@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { collection as fsCollection, doc, getDoc, getDocs, updateDoc, addDoc as fsAddDoc, query, where, orderBy, onSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref as stRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebaseConfig.js';
 import { Modal, ModalHeader } from './Modal.jsx';
@@ -27,6 +28,29 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
 
   const [openEventId, setOpenEventId] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [guestNameDraft, setGuestNameDraft] = useState('');
+  const [savingGuestName, setSavingGuestName] = useState(false);
+
+  React.useEffect(() => {
+    setGuestNameDraft(selectedTicket?.guestName || '');
+  }, [selectedTicket?.id]);
+
+  const handleSaveGuestName = async () => {
+    if (!selectedTicket || !student?.id) return;
+    const guestName = guestNameDraft.trim();
+    if (guestName === (selectedTicket.guestName || '')) return;
+    setSavingGuestName(true);
+    try {
+      const fn = httpsCallable(getFunctions(), 'setTicketGuestName');
+      await fn({ appId, eventId: selectedTicket.eventId, ticketId: selectedTicket.id, studentId: student.id, guestName });
+      setSelectedTicket(prev => prev && prev.id === selectedTicket.id ? { ...prev, guestName } : prev);
+    } catch (e) {
+      console.error('Error al guardar el nombre del invitado', e);
+      alert('No se pudo guardar el nombre. Probá de nuevo.');
+    } finally {
+      setSavingGuestName(false);
+    }
+  };
 
   const fmtDate = (iso, time) => {
     if (!iso) return "";
@@ -302,7 +326,10 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
                       {g.rows.map(t => (
                         <li key={t.id}>
                           <button type="button" onClick={() => setSelectedTicket(t)} className="w-full flex justify-between items-center py-2.5 text-left hover:bg-rose-50 rounded-md px-2 transition">
-                            <span className="font-semibold text-sm text-gray-800">{t.ticketNumber ? `Entrada N° ${t.ticketNumber}` : `ID: ${t.id.slice(0, 6)}...`}</span>
+                            <span className="min-w-0">
+                              <span className="block font-semibold text-sm text-gray-800">{t.ticketNumber ? `Entrada N° ${t.ticketNumber}` : `ID: ${t.id.slice(0, 6)}...`}</span>
+                              {t.guestName && <span className="block text-xs text-gray-500 truncate">{t.guestName}</span>}
+                            </span>
                             <StatusBadge status={t.status} />
                           </button>
                         </li>
@@ -340,7 +367,26 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
               <div className="w-56 h-56 bg-gray-100 flex items-center justify-center rounded-lg text-sm">Cargando QR...</div>
             )}
             <p className="mt-4 font-semibold text-gray-800">{selectedTicket.ticketNumber ? `Entrada N° ${selectedTicket.ticketNumber}` : `ID: ${selectedTicket.id.slice(0, 10)}...`}</p>
-            <div className="mt-6 w-full space-y-2">
+
+            <div className="mt-4 w-full text-left">
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Nombre del invitado (opcional)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={guestNameDraft}
+                  onChange={(e) => setGuestNameDraft(e.target.value)}
+                  onBlur={handleSaveGuestName}
+                  placeholder="¿Quién va a usar esta entrada?"
+                  maxLength={80}
+                  className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-400"
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                {savingGuestName ? 'Guardando...' : 'Se guarda solo, al salir del campo.'}
+              </p>
+            </div>
+
+            <div className="mt-4 w-full space-y-2">
               <button onClick={() => handleShareOrDownload('download', selectedTicket, student.name)} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gray-100 text-gray-800 font-semibold hover:bg-gray-200 disabled:opacity-50">
                 <IconDownload /> {loading ? 'Generando...' : 'Descargar PNG'}
               </button>
