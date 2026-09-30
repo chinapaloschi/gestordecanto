@@ -1387,6 +1387,69 @@ const handleExportTicketsCSV = async () => {
       setSaving(false);
     }
   };
+  const handleExportGuestsPDF = async () => {
+    if (!db || !appId || !localEvent?.id) return;
+    setSaving(true);
+    try {
+      const col = fsCollection(db, `artifacts/${appId}/events/${localEvent.id}/tickets`);
+      const q = query(col, where("status", "in", ["active", "used"]));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        showMessage && showMessage("No hay entradas para exportar.", "info");
+        return;
+      }
+
+      // Agrupamos por alumno (quien compró/revende), y adentro por entrada
+      // con el nombre del invitado que le puso desde su portal -- esto es
+      // lo que se pidió: un PDF ordenado por alumno de sus invitados.
+      const byStudent = new Map();
+      snap.docs.forEach(d => {
+        const t = d.data();
+        const key = t.assignedTo || '_sin_alumno';
+        if (!byStudent.has(key)) byStudent.set(key, { name: t.assignedToName || 'Sin alumno', rows: [] });
+        byStudent.get(key).rows.push(t);
+      });
+      const groups = Array.from(byStudent.values());
+      groups.forEach(g => g.rows.sort((a, b) => (a.ticketNumber || 0) - (b.ticketNumber || 0)));
+      groups.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+
+      const { default: jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ unit: 'pt', format: 'A4' });
+      const left = 48;
+      const pageBottom = 780;
+      let y = 56;
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+      doc.text('Invitados por alumno', left, y);
+      y += 22;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+      const subtitle = `${localEvent.title || 'Evento'} — ${fmtDate(localEvent.date)}${localEvent.startTime ? ` · ${localEvent.startTime} hs` : ''}`;
+      doc.text(subtitle, left, y);
+      y += 30;
+
+      groups.forEach(g => {
+        if (y > pageBottom - 40) { doc.addPage(); y = 56; }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+        doc.text(`${g.name} (${g.rows.length})`, left, y);
+        y += 18;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+        g.rows.forEach(t => {
+          if (y > pageBottom) { doc.addPage(); y = 56; }
+          doc.text(`N° ${t.ticketNumber ?? '—'} — ${t.guestName ? t.guestName : 'Sin nombre asignado'}`, left + 14, y);
+          y += 16;
+        });
+        y += 12;
+      });
+
+      doc.save(`Invitados_${(localEvent.title || 'evento').replace(/\s+/g, '_')}.pdf`);
+    } catch (e) {
+      console.error(e);
+      showMessage && showMessage("Error al exportar invitados.", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
   const handleShareScanLink = async () => {
     // El PIN se guarda una sola vez por estudio (no por evento) en
     // artifacts/{appId}/scanAccess/config -- lo verifica verifyScanPin.
@@ -1450,6 +1513,9 @@ const handleExportTicketsCSV = async () => {
                 </button>
                 <button onClick={handleExportTicketsCSV} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 disabled:opacity-50 transition">
                   <IconDownload /> Exportar Excel
+                </button>
+                <button onClick={handleExportGuestsPDF} disabled={saving} title="PDF con los invitados de cada entrada, ordenado por alumno" className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-100 disabled:opacity-50 transition">
+                  <IconDownload /> Invitados (PDF)
                 </button>
               </div>
           </div>

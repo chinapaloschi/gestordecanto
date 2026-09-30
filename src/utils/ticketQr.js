@@ -94,7 +94,7 @@ export async function generateComposedTicketImage(qrData, eventInfo, logoSrc, ba
 
     const cardWidth = 750;
     const flyerHeight = Math.round(cardWidth * (bgImage.naturalHeight / bgImage.naturalWidth));
-    const footerHeight = 340;
+    const footerHeight = 430;
     const cardHeight = flyerHeight + footerHeight;
 
     const finalCanvas = document.createElement('canvas');
@@ -108,7 +108,18 @@ export async function generateComposedTicketImage(qrData, eventInfo, logoSrc, ba
     ctx.fillStyle = '#170f0c';
     ctx.fillRect(0, flyerHeight, cardWidth, footerHeight);
 
-    let y = flyerHeight + 46;
+    let y = flyerHeight + 44;
+
+    // El nombre del invitado va primero, pegado a "20 HORAS" del afiche --
+    // es lo que Javier pidió para poder identificar de un vistazo quién usa
+    // cada entrada sin tener que buscarlo más abajo.
+    if (eventInfo.attendee) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#f5efe4';
+      ctx.font = '24px Georgia, "Times New Roman", serif';
+      ctx.fillText(eventInfo.attendee.toUpperCase(), cardWidth / 2, y);
+      y += 50;
+    }
 
     const qrSize = 210;
     const qrCodeWithLogoUrl = await generateQrWithLogo(qrData, logoSrc, qrSize * 2);
@@ -122,19 +133,12 @@ export async function generateComposedTicketImage(qrData, eventInfo, logoSrc, ba
     roundRectPath(ctx, qrBoxX, y, qrBoxSize, qrBoxSize, 18);
     ctx.fill();
     ctx.drawImage(qrImage, qrBoxX + qrPad, y + qrPad, qrSize, qrSize);
-    y += qrBoxSize + 38;
+    y += qrBoxSize + 40;
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e3c17e';
     ctx.font = 'bold 28px Georgia, "Times New Roman", serif';
     ctx.fillText(eventInfo.ticketNumber ? `ENTRADA N° ${eventInfo.ticketNumber}` : 'ENTRADA', cardWidth / 2, y);
-
-    if (eventInfo.attendee) {
-      y += 36;
-      ctx.fillStyle = '#f5efe4';
-      ctx.font = '22px Georgia, "Times New Roman", serif';
-      ctx.fillText(eventInfo.attendee.toUpperCase(), cardWidth / 2, y);
-    }
 
     return finalCanvas.toDataURL('image/png');
   } catch (error) {

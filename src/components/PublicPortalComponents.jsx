@@ -384,10 +384,17 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
               <p className="font-ticket text-3xl font-bold tracking-wide mt-0.5">
                 N° {selectedTicket.ticketNumber ?? selectedTicket.id.slice(0, 6)}
               </p>
+              {selectedTicket.guestName && (
+                <p className="text-sm text-gray-300 mt-1.5">
+                  Invitado: <span className="font-semibold text-white">{selectedTicket.guestName}</span>
+                </p>
+              )}
             </div>
 
             <div className="px-6 mt-6 text-left">
-              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Nombre del invitado (opcional)</label>
+              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                {selectedTicket.guestName ? 'Editar nombre del invitado' : 'Nombre del invitado (opcional)'}
+              </label>
               {/* input-dark-theme: la regla global de index.css fuerza fondo
                   blanco con !important en todo <input>, así que hace falta
                   esta clase (pensada justo para este caso) para pisarla. */}
