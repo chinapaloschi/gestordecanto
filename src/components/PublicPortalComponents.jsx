@@ -388,6 +388,9 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
 
             <div className="px-6 mt-6 text-left">
               <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Nombre del invitado (opcional)</label>
+              {/* input-dark-theme: la regla global de index.css fuerza fondo
+                  blanco con !important en todo <input>, así que hace falta
+                  esta clase (pensada justo para este caso) para pisarla. */}
               <input
                 type="text"
                 value={guestNameDraft}
@@ -395,8 +398,7 @@ export const PublicTicketsSection = ({ db, appId, student }) => {
                 onBlur={handleSaveGuestName}
                 placeholder="¿Quién va a usar esta entrada?"
                 maxLength={80}
-                style={{ colorScheme: 'dark' }}
-                className="w-full px-3 py-2.5 bg-[#2a232a] border border-white/15 rounded-lg text-sm text-white caret-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
+                className="input-dark-theme w-full px-3 py-2.5 rounded-lg text-sm placeholder-gray-500"
               />
               <p className="text-[11px] text-gray-500 mt-1.5">
                 {savingGuestName ? 'Guardando...' : 'Se guarda solo, al salir del campo.'}
