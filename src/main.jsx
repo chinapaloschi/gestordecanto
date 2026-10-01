@@ -12,7 +12,7 @@ function isPublicUrl() {
   try {
     const hash = window.location.hash || '';
     // Definimos todas las rutas que consideramos públicas
-    const publicRoutes = ['/checkin', '/muestras', '/portal', '/ticket'];
+    const publicRoutes = ['/checkin', '/muestras', '/portal', '/ticket', '/scan'];
     return publicRoutes.some(route => hash.startsWith('#' + route));
   } catch {
     return false;

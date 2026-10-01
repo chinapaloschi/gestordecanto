@@ -3,6 +3,7 @@ import { doc, getDoc, collection as fsCollection, query, orderBy, limit, getDocs
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ScanTicketsView } from './EventModals.jsx';
 import { IconTicket } from './Icons.jsx';
+import { UpdateBanner } from './UpdateBanner.jsx';
 
 const getHashParams = () => new URLSearchParams(window.location.hash.split('?')[1] || '');
 
@@ -75,6 +76,9 @@ export const ScanPage = ({ db, appId }) => {
   if (!verified) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
+        <div className="fixed top-0 left-0 right-0 z-[1000]" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <UpdateBanner />
+        </div>
         <form onSubmit={handleVerify} className="bg-white rounded-2xl shadow-xl p-8 max-w-xs w-full text-center">
           <img src="/nuevologo.gif" alt="Logo" className="h-16 w-auto mx-auto mb-4" />
           <h1 className="text-lg font-bold text-gray-900 mb-1">Escaneo de Entradas</h1>
@@ -104,6 +108,9 @@ export const ScanPage = ({ db, appId }) => {
   if (selectedEvent) {
     return (
       <div className="min-h-screen bg-gray-900">
+        <div className="fixed top-0 left-0 right-0 z-[1000]" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <UpdateBanner />
+        </div>
         <ScanTicketsView
           isOpen={true}
           onClose={() => {
@@ -121,6 +128,9 @@ export const ScanPage = ({ db, appId }) => {
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-8">
+      <div className="fixed top-0 left-0 right-0 z-[1000]" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <UpdateBanner />
+      </div>
       <div className="max-w-md mx-auto">
         <div className="text-center mb-6">
           <img src="/nuevologo.gif" alt="Logo" className="h-14 w-auto mx-auto mb-2" />

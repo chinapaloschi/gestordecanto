@@ -5,6 +5,10 @@ const SW_URL = '/sw-public.js';
 export function isPublicPortal() {
   try {
     const hash = window.location.hash || '';
+    // La página de escaneo es standalone y pública (sin login de admin) --
+    // no lleva el query param ?a= como /checkin, así que no pasa por el
+    // chequeo de PUBLIC_APP_ID de abajo.
+    if (hash.includes('/scan')) return true;
     if (!hash.includes('/checkin')) return false;
     const q = new URLSearchParams(hash.split('?')[1] || '');
     return q.get('a') === PUBLIC_APP_ID;

@@ -14,7 +14,8 @@
           var PUBLIC = ['/checkin', '/muestras', '/portal', '/ticket', '/inscripcion'];
           var isPublic = PUBLIC.some(function(r) { return hash.startsWith('#' + r); });
           var isFinanzas = hash.startsWith('#/finanzas');
-          var href = isFinanzas ? '/manifest-finanzas.webmanifest' : (isPublic ? '/manifest-public.webmanifest' : '/manifest-admin.webmanifest');
+          var isScan = hash.startsWith('#/scan');
+          var href = isScan ? '/manifest-scan.webmanifest' : isFinanzas ? '/manifest-finanzas.webmanifest' : (isPublic ? '/manifest-public.webmanifest' : '/manifest-admin.webmanifest');
 
           // Crear el link AQUÍ — el browser nunca ve el manifest incorrecto
           var link = document.createElement('link');
@@ -24,8 +25,8 @@
           document.currentScript.parentNode.insertBefore(link, document.currentScript.nextSibling);
 
           // apple-touch-icon: portal público → icono regular (negro sobre blanco)
-          //                   admin         → icono inverted (blanco sobre oscuro)
-          var iconHref = isPublic ? '/icon-192.png' : '/icon-192-inverted.png';
+          //                   admin/escaneo → icono inverted (blanco sobre oscuro)
+          var iconHref = (isPublic && !isScan) ? '/icon-192.png' : '/icon-192-inverted.png';
           var apl = document.createElement('link');
           apl.rel  = 'apple-touch-icon';
           apl.href = iconHref;
