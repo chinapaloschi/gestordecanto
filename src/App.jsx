@@ -1,23 +1,26 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense } from 'react';
 import { signOut } from 'firebase/auth';
 import { db, auth, firebaseConfig } from './firebaseConfig.js';
 import { ROUTES } from './constants.js';
 import { AuthGate } from './components/AuthComponents.jsx';
 import { PrivacyProvider } from './context/PrivacyContext.jsx';
+import { lazyWithRetry } from './utils/lazyWithRetry.js';
 
 // Cada ruta es su propia pantalla (admin, portal de alumno, inscripción,
 // lencería, finanzas, escaneo...) y antes se importaban todas de una, así
 // que un alumno entrando solo a marcar asistencia descargaba igual el panel
 // completo de admin, jsPDF, html2canvas, etc. Con lazy() cada una se baja
-// recién cuando hace falta.
-const PublicLenceriaCatalogo = lazy(() => import('./PublicLenceriaCatalogo'));
-const MainApp = lazy(() => import('./components/MainApp.jsx').then(m => ({ default: m.MainApp })));
-const PublicCheckInViewPIN = lazy(() => import('./components/PublicCheckInViewPIN.jsx').then(m => ({ default: m.PublicCheckInViewPIN })));
-const PublicTicketView = lazy(() => import('./components/PublicTicketView.jsx').then(m => ({ default: m.PublicTicketView })));
-const ScanPage = lazy(() => import('./components/ScanPage.jsx').then(m => ({ default: m.ScanPage })));
-const LenceriaStockModal = lazy(() => import('./components/LenceriaStockModal.jsx').then(m => ({ default: m.LenceriaStockModal })));
-const InscripcionPage = lazy(() => import('./components/InscripcionPage.jsx').then(m => ({ default: m.InscripcionPage })));
-const FinanzasStandalone = lazy(() => import('./components/FinanzasStandalone.jsx').then(m => ({ default: m.FinanzasStandalone })));
+// recién cuando hace falta. lazyWithRetry (no lazy de React a secas) evita
+// que una pestaña abierta desde antes del último deploy se quede pegada
+// con un error de chunk viejo -- ver el comentario en ese archivo.
+const PublicLenceriaCatalogo = lazyWithRetry(() => import('./PublicLenceriaCatalogo'));
+const MainApp = lazyWithRetry(() => import('./components/MainApp.jsx').then(m => ({ default: m.MainApp })));
+const PublicCheckInViewPIN = lazyWithRetry(() => import('./components/PublicCheckInViewPIN.jsx').then(m => ({ default: m.PublicCheckInViewPIN })));
+const PublicTicketView = lazyWithRetry(() => import('./components/PublicTicketView.jsx').then(m => ({ default: m.PublicTicketView })));
+const ScanPage = lazyWithRetry(() => import('./components/ScanPage.jsx').then(m => ({ default: m.ScanPage })));
+const LenceriaStockModal = lazyWithRetry(() => import('./components/LenceriaStockModal.jsx').then(m => ({ default: m.LenceriaStockModal })));
+const InscripcionPage = lazyWithRetry(() => import('./components/InscripcionPage.jsx').then(m => ({ default: m.InscripcionPage })));
+const FinanzasStandalone = lazyWithRetry(() => import('./components/FinanzasStandalone.jsx').then(m => ({ default: m.FinanzasStandalone })));
 
 const appId = firebaseConfig.appId;
 

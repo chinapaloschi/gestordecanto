@@ -50,11 +50,14 @@ import { MassEventsAdminModal } from './MassEvents.jsx';
 
 // Ambas se abren desde modales gateados por `isOpen` (nunca se montan hasta
 // que se abren), así que las cargamos bajo demanda en vez de sumarlas al
-// bundle principal que se descarga en cada sesión.
-const BlockDaysModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.BlockDaysModal })));
-const StudentPreviewModal = React.lazy(() => import('./StudentPreviewModal.jsx').then(m => ({ default: m.StudentPreviewModal })));
-const BackupRestoreModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.BackupRestoreModal })));
-const OptimizeStudentPhotosModal = React.lazy(() => import('./AdminModals.jsx').then(m => ({ default: m.OptimizeStudentPhotosModal })));
+// bundle principal que se descarga en cada sesión. lazyWithRetry (no
+// React.lazy a secas) evita que una pestaña abierta desde antes del último
+// deploy se quede pegada con un error de chunk viejo.
+import { lazyWithRetry } from '../utils/lazyWithRetry.js';
+const BlockDaysModal = lazyWithRetry(() => import('./AdminModals.jsx').then(m => ({ default: m.BlockDaysModal })));
+const StudentPreviewModal = lazyWithRetry(() => import('./StudentPreviewModal.jsx').then(m => ({ default: m.StudentPreviewModal })));
+const BackupRestoreModal = lazyWithRetry(() => import('./AdminModals.jsx').then(m => ({ default: m.BackupRestoreModal })));
+const OptimizeStudentPhotosModal = lazyWithRetry(() => import('./AdminModals.jsx').then(m => ({ default: m.OptimizeStudentPhotosModal })));
 import { AvailableSlotsManager } from './AvailableSlotsManager.jsx';
 import { TrialRequestsPanel } from './TrialRequestsPanel.jsx';
 import { ExercisePacksManager } from './ExercisePacksManager.jsx';
