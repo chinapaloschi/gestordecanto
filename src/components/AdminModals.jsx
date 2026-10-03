@@ -379,6 +379,10 @@ const BACKUP_TOP_LEVEL_COLLECTIONS = [
     'trialRequests', 'adminTokens', 'reminderLog', 'availableSlots',
     'exercisePacks', 'lenceriaStock', 'lenceriaVentas', 'massEvents',
     'publicMessages', 'settings',
+    // Agregadas: confirmAttendance (check-in del portal) escribe acá, y
+    // Servicios Fijos + el PIN de la página de escaneo no estaban cubiertos.
+    'attendance', 'fixedPayments', 'fixedPaymentSettings',
+    'fixedPaymentReminderLog', 'scanAccess',
 ];
 
 // Subcolecciones reales que viven anidadas bajo un documento padre (no se
@@ -386,7 +390,10 @@ const BACKUP_TOP_LEVEL_COLLECTIONS = [
 // login del portal (pinIndex/{pin}/entries) queda afuera a propósito: es
 // puramente derivado de `students`, así que después de restaurar alcanza
 // con el botón "Reconstruir índice de PINs" en vez de cargar con esto.
-const BACKUP_SUBCOLLECTIONS = ['repertoire', 'receipts', 'voiceNotes', 'tickets'];
+// 'tickets' cubre tanto events/{id}/tickets como studentTickets/{id}/tickets
+// (mismo nombre de subcolección, collectionGroup trae ambas). 'messages' son
+// los mensajes por alumno (students/{id}/messages).
+const BACKUP_SUBCOLLECTIONS = ['repertoire', 'receipts', 'voiceNotes', 'tickets', 'messages', 'practiceSessions', 'deviceTokens'];
 
 function backupReviveDates(obj) {
     Object.keys(obj).forEach(key => {
