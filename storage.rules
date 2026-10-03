@@ -13,13 +13,18 @@ service firebase.storage {
              request.resource.contentType == 'application/octet-stream';
     }
 
+    // El claim "staff" lo otorga la Cloud Function ensureStaffClaim (ver
+    // functions/index.js). El chequeo por email queda como red de
+    // contención hasta confirmar que todas las cuentas de staff ya tienen
+    // el claim en su token (ver mismo comentario en firestore.rules).
     function isStaff() {
       return request.auth != null &&
-             request.auth.token.email in [
+             (request.auth.token.staff == true ||
+              request.auth.token.email in [
                'sandrupaloschi@gmail.com',
                'gracielamargheritis8@gmail.com',
                'javicampa010@gmail.com'
-             ];
+             ]);
     }
 
     // --- Reglas Específicas ---

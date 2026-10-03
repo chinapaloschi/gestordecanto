@@ -7,13 +7,20 @@ service cloud.firestore {
       return appId == '1:786390581865:web:ed47531cf7415ae5ca18f8';
     }
 
+    // El claim "staff" lo otorga la Cloud Function ensureStaffClaim (ver
+    // functions/index.js) la primera vez que cada cuenta hace login después
+    // de este cambio. El chequeo por email queda como red de contención: si
+    // alguien todavía no tiene el claim en su token (por ejemplo, no volvió
+    // a loguearse desde que se agregó esto), igual puede entrar. No se saca
+    // hasta confirmar que todas las cuentas de staff ya tienen el claim.
     function isStaff() {
       return request.auth != null &&
-        request.auth.token.email in [
+        (request.auth.token.staff == true ||
+         request.auth.token.email in [
           'sandrupaloschi@gmail.com',
           'gracielamargheritis8@gmail.com',
           'javicampa010@gmail.com'
-        ];
+        ]);
     }
 
     // Colecciones internas (financieras / de seguridad) que nunca deben ser
