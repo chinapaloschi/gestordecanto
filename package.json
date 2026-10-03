@@ -11,9 +11,6 @@
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
-    "@fullcalendar/daygrid": "^6.1.19",
-    "@fullcalendar/interaction": "^6.1.19",
-    "@fullcalendar/react": "^6.1.19",
     "firebase": "^10.13.1",
     "jspdf": "^3.0.1",
     "jszip": "^3.10.1",

@@ -1,20 +1,33 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { signOut } from 'firebase/auth';
 import { db, auth, firebaseConfig } from './firebaseConfig.js';
 import { ROUTES } from './constants.js';
-import PublicLenceriaCatalogo from './PublicLenceriaCatalogo';
 import { AuthGate } from './components/AuthComponents.jsx';
-import { MainApp } from './components/MainApp.jsx';
-import { PublicCheckInViewPIN } from './components/PublicCheckInViewPIN.jsx';
-import { PublicEventsPortal } from './components/PublicEventsPortal.jsx';
-import { PublicTicketView } from './components/PublicTicketView.jsx';
-import { ScanPage } from './components/ScanPage.jsx';
-import { LenceriaStockModal } from './components/LenceriaStockModal.jsx';
-import { InscripcionPage } from './components/InscripcionPage.jsx';
 import { PrivacyProvider } from './context/PrivacyContext.jsx';
-import { FinanzasStandalone } from './components/FinanzasStandalone.jsx';
+
+// Cada ruta es su propia pantalla (admin, portal de alumno, inscripción,
+// lencería, finanzas, escaneo...) y antes se importaban todas de una, así
+// que un alumno entrando solo a marcar asistencia descargaba igual el panel
+// completo de admin, jsPDF, html2canvas, etc. Con lazy() cada una se baja
+// recién cuando hace falta.
+const PublicLenceriaCatalogo = lazy(() => import('./PublicLenceriaCatalogo'));
+const MainApp = lazy(() => import('./components/MainApp.jsx').then(m => ({ default: m.MainApp })));
+const PublicCheckInViewPIN = lazy(() => import('./components/PublicCheckInViewPIN.jsx').then(m => ({ default: m.PublicCheckInViewPIN })));
+const PublicTicketView = lazy(() => import('./components/PublicTicketView.jsx').then(m => ({ default: m.PublicTicketView })));
+const ScanPage = lazy(() => import('./components/ScanPage.jsx').then(m => ({ default: m.ScanPage })));
+const LenceriaStockModal = lazy(() => import('./components/LenceriaStockModal.jsx').then(m => ({ default: m.LenceriaStockModal })));
+const InscripcionPage = lazy(() => import('./components/InscripcionPage.jsx').then(m => ({ default: m.InscripcionPage })));
+const FinanzasStandalone = lazy(() => import('./components/FinanzasStandalone.jsx').then(m => ({ default: m.FinanzasStandalone })));
 
 const appId = firebaseConfig.appId;
+
+function RouteLoading() {
+  return (
+    <div className="min-h-dvh w-full flex items-center justify-center bg-[#FBF6F3]">
+      <div className="w-8 h-8 border-2 border-rose-200 border-t-rose-500 rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function LenceriaStandalone({ db, appId, showMessage, handleSignOut }) {
   return (
@@ -61,8 +74,12 @@ export default function App() {
 
   // /#/portal quedó sin ningún link visible en la app y duplicaba toda la
   // superficie de /#/checkin — redirigimos en vez de servir esa pantalla.
+  // /#/muestras (PublicEventsPortal) tenía el mismo problema -- además,
+  // estaba rota (orderBy sin importar, LOGO_URL sin definir: crasheaba
+  // apenas alguien la abría) y nada en la app la enlazaba. Ver las
+  // muestras/entradas de uno ya vive en el portal del alumno.
   React.useEffect(() => {
-    if (h.startsWith(ROUTES.PORTAL)) {
+    if (h.startsWith(ROUTES.PORTAL) || h.startsWith(ROUTES.MUESTRAS)) {
       window.location.hash = `${ROUTES.CHECKIN}?a=${appId}`;
     }
   }, [h]);
@@ -80,37 +97,42 @@ export default function App() {
     alert(`[${type.toUpperCase()}] ${text}`);
   };
 
-  if (h.startsWith(ROUTES.INSCRIPCION)) return <InscripcionPage db={db} appId={appId} />;
-  if (h.startsWith(ROUTES.CATALOGO)) return <PublicLenceriaCatalogo db={db} appId={appId} />;
-  if (h.startsWith(ROUTES.MUESTRAS)) return <PublicEventsPortal db={db} appId={appId} />;
-  if (h.startsWith(ROUTES.PORTAL))   return null; // redirigiendo a /#/checkin (ver useEffect arriba)
-  if (h.startsWith(ROUTES.CHECKIN))  return <PublicCheckInViewPIN db={db} />;
-  if (h.startsWith(ROUTES.TICKET))   return <PublicTicketView db={db} />;
-  if (h.startsWith(ROUTES.SCAN))     return <ScanPage db={db} appId={appId} />;
-
-  if (h.startsWith(ROUTES.LENCERIA)) {
-    return (
+  let content;
+  if (h.startsWith(ROUTES.INSCRIPCION)) {
+    content = <InscripcionPage db={db} appId={appId} />;
+  } else if (h.startsWith(ROUTES.CATALOGO)) {
+    content = <PublicLenceriaCatalogo db={db} appId={appId} />;
+  } else if (h.startsWith(ROUTES.MUESTRAS) || h.startsWith(ROUTES.PORTAL)) {
+    content = null; // redirigiendo a /#/checkin (ver useEffect arriba)
+  } else if (h.startsWith(ROUTES.CHECKIN)) {
+    content = <PublicCheckInViewPIN db={db} />;
+  } else if (h.startsWith(ROUTES.TICKET)) {
+    content = <PublicTicketView db={db} />;
+  } else if (h.startsWith(ROUTES.SCAN)) {
+    content = <ScanPage db={db} appId={appId} />;
+  } else if (h.startsWith(ROUTES.LENCERIA)) {
+    content = (
       <AuthGate>
         <LenceriaStandalone db={db} appId={appId} showMessage={showMessage} handleSignOut={handleSignOut} />
       </AuthGate>
     );
-  }
-
-  if (h.startsWith(ROUTES.FINANZAS)) {
-    return (
+  } else if (h.startsWith(ROUTES.FINANZAS)) {
+    content = (
       <AuthGate>
         <PrivacyProvider>
           <FinanzasStandalone appId={appId} />
         </PrivacyProvider>
       </AuthGate>
     );
+  } else {
+    content = (
+      <AuthGate>
+        <PrivacyProvider>
+          <MainApp />
+        </PrivacyProvider>
+      </AuthGate>
+    );
   }
 
-  return (
-    <AuthGate>
-      <PrivacyProvider>
-        <MainApp />
-      </PrivacyProvider>
-    </AuthGate>
-  );
+  return <Suspense fallback={<RouteLoading />}>{content}</Suspense>;
 }

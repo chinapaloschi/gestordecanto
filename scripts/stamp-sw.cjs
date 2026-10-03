@@ -7,7 +7,6 @@ const now = Date.now().toString();
 const re  = /const\s+SW_VERSION\s*=\s*'[^']*';/;
 
 const files = [
-  path.join(process.cwd(), 'public', 'service-worker.js'),
   path.join(process.cwd(), 'public', 'sw-admin.js'),
 ];
 

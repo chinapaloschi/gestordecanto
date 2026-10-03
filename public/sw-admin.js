@@ -1,5 +1,5 @@
 // Service Worker para el Panel de Administración (sw-admin.js)
-const SW_VERSION = '1790871748727';
+const SW_VERSION = '1791040787512';
 const CACHE_SHELL = 'admin-shell-' + SW_VERSION;
 const CACHE_RUNTIME = 'admin-runtime-' + SW_VERSION;
 
