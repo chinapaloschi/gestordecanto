@@ -1,6 +1,7 @@
 ﻿import React from 'react';
 import { LoadingScreen } from './LoadingScreen.jsx';
 import { GoogleAuthProvider, getAuth, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut, getRedirectResult } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { registerNotifications } from '../notifications.js';
 import { FCM_VAPID_KEY } from '../constants.js';
 import { getFirestore, collection as fsCollection, doc, getDoc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
@@ -593,6 +594,24 @@ export function AuthGate({ children }) {
         console.warn('[Auth] migrateSpecificUids falló (no crítico):', e.message);
       }
       setPhase('ready');
+
+      // Primer paso de la migración a custom claims: le pide al servidor que
+      // le ponga el claim "staff" a este uid (si ya lo tiene, no hace nada).
+      // Puramente aditivo -- las reglas de Firestore/Storage siguen
+      // chequeando el email como siempre hasta que se confirme que esto
+      // está funcionando para todos.
+      (async () => {
+        try {
+          const fn = httpsCallable(getFunctions(), 'ensureStaffClaim');
+          const res = await fn();
+          if (res.data?.granted && !res.data?.alreadySet) {
+            await currentUser.getIdToken(true);
+            console.log('[Auth] Claim "staff" otorgado y token refrescado.');
+          }
+        } catch (e) {
+          console.warn('[Auth] ensureStaffClaim falló (no crítico, todavía se usa el email):', e.message);
+        }
+      })();
 
       // Registrar token push para notificaciones de admin (silencioso)
       registerNotifications({

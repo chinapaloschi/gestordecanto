@@ -28,6 +28,30 @@ function assertC(cond, msg) {
   if (!cond) throw new functions.https.HttpsError("failed-precondition", msg);
 }
 
+// ---------------- 0) Migración a Custom Claims (staff) ----------------
+// Antes "quién es staff" estaba copiado a mano en 5 lugares (firestore.rules,
+// storage.rules, este archivo y AuthComponents.jsx) -- cambiar un acceso
+// significaba acordarse de actualizar los 5. Esta función es el único lugar
+// que todavía necesita conocer la lista de emails: la usa para otorgar un
+// custom claim ("staff": true) al UID que corresponda. AuthGate la llama
+// apenas loguea un email ya autorizado (chequeo existente, sin cambios), así
+// que esto es 100% aditivo -- no cambia nada de lo que ya funciona. Una vez
+// confirmado que los claims están puestos, firestore.rules/storage.rules
+// pasan a leer el claim en vez del email (segunda etapa, aparte).
+exports.ensureStaffClaim = functions.https.onCall(async (data, context) => {
+  assertC(!!context.auth, "No autorizado.");
+  const email = String(context.auth.token.email || "").toLowerCase().trim();
+  if (!ALLOWED_EMAILS.has(email)) return { granted: false };
+
+  const uid = context.auth.uid;
+  const user = await admin.auth().getUser(uid);
+  if (user.customClaims && user.customClaims.staff === true) {
+    return { granted: true, alreadySet: true };
+  }
+  await admin.auth().setCustomUserClaims(uid, { ...(user.customClaims || {}), staff: true });
+  return { granted: true, alreadySet: false };
+});
+
 // ---------------- 1) Listar clases de HOY por PIN (público) ----------------
 exports.listTodayClassesByPin = functions.https.onCall(async (data, context) => {
   const appId = String(data?.appId || "");
