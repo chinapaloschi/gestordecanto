@@ -412,6 +412,7 @@ export const BackupRestoreModal = ({ isOpen, onClose, db, userId, appId, showMes
     const [confirmImport, setConfirmImport] = useState(false);
     const [fileToImport, setFileToImport] = useState(null);
     const [reindexing, setReindexing] = useState(false);
+    const [exportStatus, setExportStatus] = useState('');
 
     const handleReindexPins = async () => {
         setReindexing(true);
@@ -432,22 +433,43 @@ export const BackupRestoreModal = ({ isOpen, onClose, db, userId, appId, showMes
             return;
         }
         setLoading(true);
+        setExportStatus('');
         try {
             const data = {};
+            // Antes, si UNA sola colección fallaba (ej. una regla de permisos
+            // sin actualizar), el error cortaba todo el backup sin descargar
+            // nada -- ahora cada una se intenta por separado: si falla, se
+            // salta y queda anotada, pero el resto del backup sigue. También
+            // se muestra qué colección se está leyendo, para que "se quedó
+            // pegado" deje de ser una caja negra.
+            const failed = [];
 
             for (const collectionName of BACKUP_TOP_LEVEL_COLLECTIONS) {
-                const querySnapshot = await getDocs(fsCollection(db, `artifacts/${appId}/${collectionName}`));
-                data[collectionName] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setExportStatus(`Leyendo ${collectionName}...`);
+                try {
+                    const querySnapshot = await getDocs(fsCollection(db, `artifacts/${appId}/${collectionName}`));
+                    data[collectionName] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                } catch (e) {
+                    console.error(`Error leyendo ${collectionName}:`, e);
+                    failed.push(collectionName);
+                }
             }
             for (const subName of BACKUP_SUBCOLLECTIONS) {
-                const snap = await getDocs(collectionGroup(db, subName));
-                // Un collectionGroup trae todo lo que se llame igual en toda
-                // la base — filtramos por el prefijo del path para quedarnos
-                // sólo con lo de esta app.
-                data[`_sub_${subName}`] = snap.docs
-                    .filter(d => d.ref.path.startsWith(`artifacts/${appId}/`))
-                    .map(d => ({ path: d.ref.path, ...d.data() }));
+                setExportStatus(`Leyendo ${subName} (de todos los alumnos/eventos)...`);
+                try {
+                    const snap = await getDocs(collectionGroup(db, subName));
+                    // Un collectionGroup trae todo lo que se llame igual en toda
+                    // la base — filtramos por el prefijo del path para quedarnos
+                    // sólo con lo de esta app.
+                    data[`_sub_${subName}`] = snap.docs
+                        .filter(d => d.ref.path.startsWith(`artifacts/${appId}/`))
+                        .map(d => ({ path: d.ref.path, ...d.data() }));
+                } catch (e) {
+                    console.error(`Error leyendo subcolección ${subName}:`, e);
+                    failed.push(`_sub_${subName}`);
+                }
             }
+            setExportStatus('Armando el archivo...');
 
             const jsonString = JSON.stringify(data, (key, value) => {
                 if (value && typeof value.toDate === 'function') {
@@ -464,12 +486,17 @@ export const BackupRestoreModal = ({ isOpen, onClose, db, userId, appId, showMes
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showMessage('Copia de seguridad exportada exitosamente!', 'success');
+            if (failed.length > 0) {
+                showMessage(`Backup descargado, pero no se pudo leer: ${failed.join(', ')}. Avisale a Javier.`, 'error');
+            } else {
+                showMessage('Copia de seguridad exportada exitosamente!', 'success');
+            }
         } catch (e) {
             console.error("Error exporting data: ", e);
             showMessage(`Error al exportar datos: ${e.message}`, 'error');
         } finally {
             setLoading(false);
+            setExportStatus('');
         }
     };
 
@@ -600,6 +627,9 @@ export const BackupRestoreModal = ({ isOpen, onClose, db, userId, appId, showMes
                     >
                         {loading ? 'Exportando...' : 'Exportar Todos los Datos'}
                     </button>
+                    {loading && exportStatus && (
+                        <p className="text-xs text-gray-500 font-mono">{exportStatus}</p>
+                    )}
                 </div>
 
                 {/* --- IMPORTAR --- */}

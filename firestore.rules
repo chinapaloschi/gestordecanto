@@ -296,6 +296,20 @@ service cloud.firestore {
     match /{path=**}/repertoire/{songId} {
       allow read: if isStaff();
     }
+    // Agregadas junto con messages/practiceSessions/deviceTokens al backup
+    // (ver AdminModals.jsx, BACKUP_SUBCOLLECTIONS) -- mismo motivo que las
+    // 4 de arriba: sin esta regla, el botón "Exportar" se queda esperando
+    // para siempre en el collectionGroup de la primera de estas que
+    // encuentre, porque la consulta rechaza con permission-denied.
+    match /{path=**}/messages/{msgId} {
+      allow read: if isStaff();
+    }
+    match /{path=**}/practiceSessions/{sessionId} {
+      allow read: if isStaff();
+    }
+    match /{path=**}/deviceTokens/{tokenId} {
+      allow read: if isStaff();
+    }
 
     // --- REGLAS PRIVADAS (solo para staff) ---
 
