@@ -19,6 +19,7 @@ export const FinancialManagementModal = ({ isOpen, onClose, allPayments, extraIn
     const [searchText, setSearchText] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
+    const [sortBy, setSortBy] = useState('date_desc'); // 'date_desc' | 'date_asc' | 'name'
     
     const [showAddExtraIncomeModal, setShowAddExtraIncomeModal] = useState(false);
     const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
@@ -55,7 +56,7 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
         setAvailableMonthOptions(options);
     }, [allPayments, extraIncomes, expenses]);
 
-    const processFinancialData = (items, filterMonthKey, type) => {
+    const processFinancialData = (items, filterMonthKey, type, sortMode) => {
         const dataByMonth = {};
         items.forEach(item => {
             const itemDate = type === 'income' ? (item.paymentDate || item.date) : item.date;
@@ -104,14 +105,18 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
                     latestDate
                 };
             })
-            .sort((a, b) => b.latestDate.localeCompare(a.latestDate));
+            .sort((a, b) => {
+                if (sortMode === 'name') return a.sourceName.localeCompare(b.sourceName, 'es');
+                if (sortMode === 'date_asc') return a.latestDate.localeCompare(b.latestDate);
+                return b.latestDate.localeCompare(a.latestDate);
+            });
 
             return { monthKey, monthName, sources: sourcesData, monthlyTotal: sourcesData.reduce((sum, s) => sum + s.totalAmount, 0) };
         });
     };
 
-    const incomeData = useMemo(() => processFinancialData([...allPayments, ...extraIncomes], selectedMonthFilter, 'income'), [allPayments, extraIncomes, selectedMonthFilter, searchText, dateFrom, dateTo]);
-    const expenseData = useMemo(() => processFinancialData(expenses, selectedMonthFilter, 'expense'), [expenses, selectedMonthFilter, searchText, dateFrom, dateTo]);
+    const incomeData = useMemo(() => processFinancialData([...allPayments, ...extraIncomes], selectedMonthFilter, 'income', sortBy), [allPayments, extraIncomes, selectedMonthFilter, searchText, dateFrom, dateTo, sortBy]);
+    const expenseData = useMemo(() => processFinancialData(expenses, selectedMonthFilter, 'expense', sortBy), [expenses, selectedMonthFilter, searchText, dateFrom, dateTo, sortBy]);
 
     const summaryData = useMemo(() => {
         const allMonths = new Set([...incomeData.map(d => d.monthKey), ...expenseData.map(d => d.monthKey)]);
@@ -392,6 +397,17 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
                 <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
                     placeholder="Buscar alumno..."
                     className="flex-1 min-w-[120px] px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-gray-300" />
+
+                {/* Orden */}
+                {(activeTab === 'ingresos' || activeTab === 'egresos') && (
+                    <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+                        title="Ordenar"
+                        className="px-2 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300">
+                        <option value="date_desc">Más recientes primero</option>
+                        <option value="date_asc">Más antiguos primero</option>
+                        <option value="name">Por nombre (A-Z)</option>
+                    </select>
+                )}
 
                 {/* Acciones contextuales */}
                 <div className="flex items-center gap-1.5 ml-auto">
