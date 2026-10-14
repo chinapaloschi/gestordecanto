@@ -71,16 +71,19 @@ export function FixedPaymentsPanel({ db, appId, userId, showMessage, expenses = 
         const prev = byId[e.fixedPaymentTemplateId];
         if (!prev || ymd > prev.date) byId[e.fixedPaymentTemplateId] = e;
       } else if (e.category) {
-        const prev = byName[e.category];
-        if (!prev || ymd > prev.date) byName[e.category] = e;
+        const key = e.category.trim().toLowerCase();
+        const prev = byName[key];
+        if (!prev || ymd > prev.date) byName[key] = e;
       }
     });
     // Red de contención: si un egreso quedó sin fixedPaymentTemplateId (o
     // apuntando a un id que ya no existe), igual lo reconocemos como pagado
-    // cuando su categoría coincide con el nombre del servicio — evita que
-    // un pago que ya figura en Egresos se vea acá como "sin pagar".
+    // cuando su categoría coincide (sin importar mayúsculas) con el nombre
+    // del servicio — evita que un pago que ya figura en Egresos se vea acá
+    // como "sin pagar" solo por una diferencia de mayúsculas/minúsculas.
     templates.forEach(t => {
-      if (!byId[t.id] && byName[t.name]) byId[t.id] = byName[t.name];
+      const key = (t.name || '').trim().toLowerCase();
+      if (!byId[t.id] && byName[key]) byId[t.id] = byName[key];
     });
     return byId;
   }, [expenses, periodKey, templates]);
