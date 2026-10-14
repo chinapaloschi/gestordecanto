@@ -61,16 +61,29 @@ export function FixedPaymentsPanel({ db, appId, userId, showMessage, expenses = 
   // Último egreso de este período por plantilla (si hay más de uno, el más
   // reciente gana — no debería pasar en uso normal, pero no hay que crashear).
   const paidMap = useMemo(() => {
-    const map = {};
+    const byId = {};
+    const byName = {};
     (expenses || []).forEach(e => {
-      if (!e.fixedPaymentTemplateId) return;
-      const ymd = typeof e.date === 'string' ? e.date : '';
-      if (ymd.slice(0, 7) !== periodKey) return;
-      const prev = map[e.fixedPaymentTemplateId];
-      if (!prev || ymd > prev.date) map[e.fixedPaymentTemplateId] = e;
+      const ymd = typeof e.date === 'string' ? e.date
+        : (e.date && typeof e.date.toDate === 'function' ? e.date.toDate().toISOString().slice(0, 10) : '');
+      if (!ymd || ymd.slice(0, 7) !== periodKey) return;
+      if (e.fixedPaymentTemplateId) {
+        const prev = byId[e.fixedPaymentTemplateId];
+        if (!prev || ymd > prev.date) byId[e.fixedPaymentTemplateId] = e;
+      } else if (e.category) {
+        const prev = byName[e.category];
+        if (!prev || ymd > prev.date) byName[e.category] = e;
+      }
     });
-    return map;
-  }, [expenses, periodKey]);
+    // Red de contención: si un egreso quedó sin fixedPaymentTemplateId (o
+    // apuntando a un id que ya no existe), igual lo reconocemos como pagado
+    // cuando su categoría coincide con el nombre del servicio — evita que
+    // un pago que ya figura en Egresos se vea acá como "sin pagar".
+    templates.forEach(t => {
+      if (!byId[t.id] && byName[t.name]) byId[t.id] = byName[t.name];
+    });
+    return byId;
+  }, [expenses, periodKey, templates]);
 
   const activeTemplates = templates.filter(t => t.isActive !== false);
 
