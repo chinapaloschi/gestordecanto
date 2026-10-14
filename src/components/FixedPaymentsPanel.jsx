@@ -126,7 +126,7 @@ export function FixedPaymentsPanel({ db, appId, userId, showMessage, expenses = 
         date: payDate,
         description: t.name,
         amount,
-        category: 'Servicios Fijos',
+        category: t.name,
         recordedAt: new Date(),
         userId,
         fixedPaymentTemplateId: t.id,
