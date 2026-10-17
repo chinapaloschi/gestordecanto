@@ -112,12 +112,19 @@ const ClassNotesHistory = ({ db, appId, studentId }) => {
   );
 };
 
+const classTypeLabel = (t) => (t === 'group' || t === 'grupal') ? 'Grupal' : (t === 'choir' || t === 'coral') ? 'Coral' : 'Individual';
+
 // ── Historial de aumentos de cuota ────────────────────────────────────────────
-// Combina dos fuentes: los pagos de abono mensual ya cobrados (se detecta un
-// "aumento" cada vez que el monto cambia respecto al pago anterior — no hace
-// falta cargar nada a mano) y registros manuales (para anotar un aumento
-// antes de que exista el primer pago con el monto nuevo).
-const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
+// Combina tres fuentes de pagos ya cobrados (no hace falta cargar nada a
+// mano): abono mensual, abono flexible (tarifa por clase) y clases sueltas
+// — cubre individual, grupal y coral, sea cual sea el método que use cada
+// alumno. Cada combinación (tipo de clase + forma de pago) se compara contra
+// su propio aumento anterior, nunca entre sí, para no mostrar un "aumento"
+// falso cuando en realidad el alumno cambió de abono mensual a clases
+// sueltas (montos que no son comparables entre sí). Los registros manuales
+// siguen disponibles para anotar un aumento antes de que exista el primer
+// pago con el monto nuevo.
+const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMessage }) => {
   const [autoEntries, setAutoEntries] = useState([]);
   const [manualEntries, setManualEntries] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -134,7 +141,7 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
     const load = async () => {
       setLoading(true);
       try {
-        const [manualSnap, paymentsSnap] = await Promise.all([
+        const [manualSnap, paymentsSnap, classesSnap] = await Promise.all([
           getDocs(query(
             fsCollection(db, `artifacts/${appId}/students/${studentId}/priceIncreases`),
             orderBy('date', 'desc')
@@ -148,6 +155,14 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
             orderBy('createdAt', 'asc'),
             limit(200)
           )),
+          // Clases sueltas pagadas una por una (no abono) — reusa el índice
+          // existente studentId + classDate.
+          getDocs(query(
+            fsCollection(db, `artifacts/${appId}/scheduledClasses`),
+            where('studentId', '==', studentId),
+            orderBy('classDate', 'asc'),
+            limit(300)
+          )),
         ]);
         if (cancelled) return;
 
@@ -157,21 +172,45 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
           || (p.paymentDate?.seconds ? new Date(p.paymentDate.seconds * 1000).toISOString().slice(0, 10) : '')
           || (p.createdAt?.seconds ? new Date(p.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
 
-        const monthly = paymentsSnap.docs
-          .map(d => d.data())
+        const payments = paymentsSnap.docs.map(d => d.data());
+
+        const monthly = payments
           .filter(p => p.paymentMethod === 'monthly_package_payment' && p.isPaidForPackage)
-          .map(p => ({ date: dateKey(p), amount: Number(p.amount || p.paidAmount || 0) }))
+          .map(p => {
+            const type = p.classType || defaultClassType;
+            return { date: dateKey(p), amount: Number(p.amount || 0), kind: `mensual-${type}`, label: `${classTypeLabel(type)} · Abono mensual` };
+          });
+
+        const flex = payments
+          .filter(p => p.paymentMethod === 'abono_flexible')
+          .map(p => {
+            const perClase = p.montoPorClase || (p.clasesTotal ? Math.round((p.amount || 0) / p.clasesTotal) : 0);
+            return { date: dateKey(p), amount: Number(perClase || 0), kind: `flex-${defaultClassType}`, label: `${classTypeLabel(defaultClassType)} · Abono flexible (por clase)` };
+          });
+
+        const loose = classesSnap.docs
+          .map(d => d.data())
+          .filter(c => c.scheduleType === 'single' && c.isPaid)
+          .map(c => {
+            const type = c.studentType || c.classType || defaultClassType;
+            return { date: c.classDate, amount: Number(c.paidAmount ?? c.price ?? 0), kind: `suelta-${type}`, label: `${classTypeLabel(type)} · Clase suelta` };
+          });
+
+        const all = [...monthly, ...flex, ...loose]
           .filter(p => p.date && p.amount > 0)
           .sort((a, b) => a.date.localeCompare(b.date));
 
-        // Solo queda un punto en la línea de tiempo cada vez que el monto
-        // cambia respecto al pago anterior — meses sin cambio no se listan.
+        // Un punto nuevo en la línea de tiempo cada vez que el monto cambia
+        // respecto al pago anterior DEL MISMO tipo — cada combinación se
+        // compara solo contra sí misma.
+        const lastByKind = {};
         const detected = [];
-        let lastAmount = null;
-        monthly.forEach(p => {
-          if (p.amount !== lastAmount) {
-            detected.push({ id: `auto-${p.date}-${p.amount}`, date: p.date, amount: p.amount, auto: true });
-            lastAmount = p.amount;
+        all.forEach(p => {
+          const prevAmount = lastByKind[p.kind];
+          if (p.amount !== prevAmount) {
+            const pct = (prevAmount != null && prevAmount > 0) ? ((p.amount - prevAmount) / prevAmount) * 100 : null;
+            detected.push({ id: `auto-${p.kind}-${p.date}-${p.amount}`, date: p.date, amount: p.amount, auto: true, label: p.label, pct });
+            lastByKind[p.kind] = p.amount;
           }
         });
         setAutoEntries(detected);
@@ -181,7 +220,7 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
     };
     load();
     return () => { cancelled = true; };
-  }, [db, appId, studentId]);
+  }, [db, appId, studentId, defaultClassType]);
 
   const addEntry = async () => {
     const amount = parseMoneyAr(newAmount);
@@ -241,18 +280,21 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
             <div className="p-4 text-center text-xs text-gray-400">Cargando...</div>
           ) : entries.length === 0 ? (
             <div className="p-4 text-center text-xs text-gray-400">
-              Todavía no hay pagos de abono mensual registrados para detectar aumentos. Podés anotar uno a mano.
+              Todavía no hay pagos registrados para detectar aumentos. Podés anotar uno a mano.
             </div>
           ) : entries.map((entry, i) => {
-            const prev = entries[i + 1];
-            const pct = prev && prev.amount ? ((entry.amount - prev.amount) / prev.amount) * 100 : null;
+            const pct = entry.auto ? entry.pct : (() => {
+              const prev = entries[i + 1];
+              return prev && prev.amount ? ((entry.amount - prev.amount) / prev.amount) * 100 : null;
+            })();
             return (
               <div key={entry.id} className="px-3 py-2.5 flex items-center justify-between gap-2 group">
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold text-emerald-500 uppercase">
-                    {fmt(entry.date)} {entry.auto && <span className="text-emerald-300 normal-case font-semibold">· de un pago</span>}
+                    {fmt(entry.date)}
                   </p>
                   <p className="text-sm font-bold text-gray-800">{formatMoneyAr(entry.amount)}</p>
+                  {entry.auto && entry.label && <p className="text-[11px] text-gray-400">{entry.label}</p>}
                   {entry.note && <p className="text-xs text-gray-400 truncate">{entry.note}</p>}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -929,7 +971,7 @@ export const StudentDetailsModal = ({
           <ClassNotesHistory db={db} appId={appId} studentId={localStudent.id} />
 
           {/* HISTORIAL DE AUMENTOS DE CUOTA */}
-          <PriceIncreaseHistory db={db} appId={appId} studentId={localStudent.id} showMessage={showMessage} />
+          <PriceIncreaseHistory db={db} appId={appId} studentId={localStudent.id} defaultClassType={localStudent.defaultClassType} showMessage={showMessage} />
 
           {/* INFO SECUNDARIA */}
           <div className="text-xs text-gray-400 space-y-0.5 pt-1 border-t border-gray-100">
