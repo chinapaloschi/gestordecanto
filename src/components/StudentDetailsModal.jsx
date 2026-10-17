@@ -127,6 +127,7 @@ const classTypeLabel = (t) => (t === 'group' || t === 'grupal') ? 'Grupal' : (t 
 const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMessage }) => {
   const [autoEntries, setAutoEntries] = useState([]);
   const [manualEntries, setManualEntries] = useState([]);
+  const [debugInfo, setDebugInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -214,8 +215,20 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
           }
         });
         setAutoEntries(detected);
+        setDebugInfo({
+          payments: payments.length,
+          monthlyPaid: payments.filter(p => p.paymentMethod === 'monthly_package_payment' && p.isPaidForPackage).length,
+          monthlyUnpaid: payments.filter(p => p.paymentMethod === 'monthly_package_payment' && !p.isPaidForPackage).length,
+          flex: payments.filter(p => p.paymentMethod === 'abono_flexible').length,
+          otherMethods: [...new Set(payments.map(p => p.paymentMethod).filter(m => m && m !== 'monthly_package_payment' && m !== 'abono_flexible'))],
+          classes: classesSnap.docs.length,
+          classesSinglePaid: classesSnap.docs.filter(d => d.data().scheduleType === 'single' && d.data().isPaid).length,
+          classesPaidTotal: classesSnap.docs.filter(d => d.data().isPaid).length,
+          scheduleTypes: [...new Set(classesSnap.docs.map(d => d.data().scheduleType).filter(Boolean))],
+        });
       } catch (e) {
         console.error('Error cargando historial de aumentos:', e);
+        setDebugInfo({ error: e.message });
       } finally { if (!cancelled) setLoading(false); }
     };
     load();
@@ -279,8 +292,15 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
           {loading ? (
             <div className="p-4 text-center text-xs text-gray-400">Cargando...</div>
           ) : entries.length === 0 ? (
-            <div className="p-4 text-center text-xs text-gray-400">
-              Todavía no hay pagos registrados para detectar aumentos. Podés anotar uno a mano.
+            <div className="p-4 text-center text-xs text-gray-400 space-y-2">
+              <p>Todavía no hay pagos registrados para detectar aumentos. Podés anotar uno a mano.</p>
+              {debugInfo && (
+                <p className="text-left bg-gray-50 border border-gray-100 rounded-lg p-2 text-[10px] text-gray-400 font-mono whitespace-pre-wrap">
+                  {debugInfo.error
+                    ? `Error: ${debugInfo.error}`
+                    : `pagos: ${debugInfo.payments} (mensual pagado: ${debugInfo.monthlyPaid}, mensual sin pagar: ${debugInfo.monthlyUnpaid}, flex: ${debugInfo.flex}, otros métodos: ${debugInfo.otherMethods.join(', ') || 'ninguno'})\nclases: ${debugInfo.classes} (pagadas: ${debugInfo.classesPaidTotal}, sueltas pagadas: ${debugInfo.classesSinglePaid}, tipos: ${debugInfo.scheduleTypes.join(', ') || 'ninguno'})`}
+                </p>
+              )}
             </div>
           ) : entries.map((entry, i) => {
             const pct = entry.auto ? entry.pct : (() => {
