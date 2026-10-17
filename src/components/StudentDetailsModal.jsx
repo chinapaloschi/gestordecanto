@@ -189,12 +189,19 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
             return { date: dateKey(p), amount: Number(perClase || 0), kind: `flex-${defaultClassType}`, label: `${classTypeLabel(defaultClassType)} · Abono flexible (por clase)` };
           });
 
+        // No restringimos a scheduleType === 'single': muchos alumnos (como
+        // los de abono mensual recurrente sin un doc en payments — se cobran
+        // clase a clase marcando isPaid directo en scheduledClasses) sólo
+        // tienen el precio ahí. Cada clase paga cuenta como un punto de
+        // precio, agrupado por tipo de agenda + tipo de clase para no
+        // comparar peras con manzanas.
         const loose = classesSnap.docs
           .map(d => d.data())
-          .filter(c => c.scheduleType === 'single' && c.isPaid)
+          .filter(c => c.isPaid)
           .map(c => {
             const type = c.studentType || c.classType || defaultClassType;
-            return { date: c.classDate, amount: Number(c.paidAmount ?? c.price ?? 0), kind: `suelta-${type}`, label: `${classTypeLabel(type)} · Clase suelta` };
+            const scheduleLabel = c.scheduleType === 'single' ? 'Clase suelta' : 'Clase (recurrente)';
+            return { date: c.classDate, amount: Number(c.paidAmount ?? c.price ?? 0), kind: `clase-${c.scheduleType || 'na'}-${type}`, label: `${classTypeLabel(type)} · ${scheduleLabel}` };
           });
 
         const all = [...monthly, ...flex, ...loose]
@@ -224,7 +231,10 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
           classes: classesSnap.docs.length,
           classesSinglePaid: classesSnap.docs.filter(d => d.data().scheduleType === 'single' && d.data().isPaid).length,
           classesPaidTotal: classesSnap.docs.filter(d => d.data().isPaid).length,
+          classesPaidWithPrice: classesSnap.docs.filter(d => d.data().isPaid && Number(d.data().paidAmount ?? d.data().price ?? 0) > 0).length,
+          distinctPrices: [...new Set(classesSnap.docs.filter(d => d.data().isPaid).map(d => Number(d.data().paidAmount ?? d.data().price ?? 0)))].slice(0, 8),
           scheduleTypes: [...new Set(classesSnap.docs.map(d => d.data().scheduleType).filter(Boolean))],
+          autoEntriesFound: detected.length,
         });
       } catch (e) {
         console.error('Error cargando historial de aumentos:', e);
@@ -298,7 +308,7 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
                 <p className="text-left bg-gray-50 border border-gray-100 rounded-lg p-2 text-[10px] text-gray-400 font-mono whitespace-pre-wrap">
                   {debugInfo.error
                     ? `Error: ${debugInfo.error}`
-                    : `pagos: ${debugInfo.payments} (mensual pagado: ${debugInfo.monthlyPaid}, mensual sin pagar: ${debugInfo.monthlyUnpaid}, flex: ${debugInfo.flex}, otros métodos: ${debugInfo.otherMethods.join(', ') || 'ninguno'})\nclases: ${debugInfo.classes} (pagadas: ${debugInfo.classesPaidTotal}, sueltas pagadas: ${debugInfo.classesSinglePaid}, tipos: ${debugInfo.scheduleTypes.join(', ') || 'ninguno'})`}
+                    : `pagos: ${debugInfo.payments} (mensual pagado: ${debugInfo.monthlyPaid}, mensual sin pagar: ${debugInfo.monthlyUnpaid}, flex: ${debugInfo.flex}, otros métodos: ${debugInfo.otherMethods.join(', ') || 'ninguno'})\nclases: ${debugInfo.classes} (pagadas: ${debugInfo.classesPaidTotal}, con precio>0: ${debugInfo.classesPaidWithPrice}, tipos: ${debugInfo.scheduleTypes.join(', ') || 'ninguno'})\nprecios distintos encontrados: ${debugInfo.distinctPrices.join(', ') || 'ninguno'}\npuntos detectados: ${debugInfo.autoEntriesFound}`}
                 </p>
               )}
             </div>
