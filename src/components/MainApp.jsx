@@ -364,6 +364,8 @@ const { amountsHidden, toggleAmountsHidden } = useAmountsHidden();
 
     const [showFinancialManagementModal, setShowFinancialManagementModal] = useState(false);
 
+    const [debtorsFilterTrigger, setDebtorsFilterTrigger] = useState(0);
+
     const [showAttendanceModal, setShowAttendanceModal] = useState(false);
 
     const [showBlockDaysModal, setShowBlockDaysModal] = useState(false);
@@ -2243,6 +2245,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
   appId={appId}
   onOpenAttendance={(classGroup) => { setSelectedClassForAttendance(classGroup); setShowAttendanceModal(true); }}
   onOpenReceipts={() => { const btn = document.querySelector('button[title="Comprobantes"]'); if(btn) btn.click(); }}
+  onFilterDebtors={() => setDebtorsFilterTrigger(t => t + 1)}
 />
 
 <CalendarShell>
@@ -2260,6 +2263,7 @@ const handleRenewSelectedSubscription = async (student, packageToRenew, newAmoun
     appId={appId}
     showMessage={showMessage}
     studentsWithNewReceipts={studentsWithNewReceipts}
+    filterDebtorsSignal={debtorsFilterTrigger}
 />
 
                 </div>

@@ -273,7 +273,7 @@ function TodayClasses({ classes, students, db, appId, onOpenAttendance }) {
 }
 
 // ── Pendientes ────────────────────────────────────────────────────────────────
-function PendingAlerts({ studentsWithStats, pendingReceiptsCount, onOpenReceipts }) {
+function PendingAlerts({ studentsWithStats, pendingReceiptsCount, onOpenReceipts, onFilterDebtors }) {
   const debtors = useMemo(() =>
     (studentsWithStats || []).filter(s => !s.isArchived && (s.pendingBalance || 0) > 0),
   [studentsWithStats]);
@@ -287,6 +287,7 @@ function PendingAlerts({ studentsWithStats, pendingReceiptsCount, onOpenReceipts
     debtors.length > 0 && {
       icon: '🔴', color: 'text-rose-700 bg-rose-50 border-rose-200',
       label: `${debtors.length} alumno${debtors.length !== 1 ? 's' : ''} con deuda este mes`,
+      action: onFilterDebtors,
     },
   ].filter(Boolean);
 
@@ -317,7 +318,7 @@ function PendingAlerts({ studentsWithStats, pendingReceiptsCount, onOpenReceipts
 // ── Componente principal ──────────────────────────────────────────────────────
 export function TodayDashboard({
   studentsWithStats, scheduledClasses, allPayments,
-  db, appId, onOpenAttendance, onOpenReceipts,
+  db, appId, onOpenAttendance, onOpenReceipts, onFilterDebtors,
 }) {
   const [pendingReceipts, setPendingReceipts] = useState(0);
   const today = todayKey();
@@ -473,6 +474,7 @@ export function TodayDashboard({
               studentsWithStats={studentsWithStats}
               pendingReceiptsCount={pendingReceipts}
               onOpenReceipts={onOpenReceipts}
+              onFilterDebtors={onFilterDebtors}
             />
           </div>
         </div>

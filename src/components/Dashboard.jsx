@@ -35,6 +35,7 @@ export const Dashboard = ({
     appId,
     showMessage,
     studentsWithNewReceipts = new Set(),
+    filterDebtorsSignal,
 }) => {
 
     const [expandedStudentId, setExpandedStudentId] = React.useState(null);
@@ -42,6 +43,18 @@ export const Dashboard = ({
     const [filterDate, setFilterDate] = useState("");
     const [showDebtorsOnly, setShowDebtorsOnly] = useState(false);
     const [showPaidOnly, setShowPaidOnly] = useState(false);
+
+    // Disparado desde "Pendientes" en TodayDashboard (tocar "N alumnos con
+    // deuda este mes") — activa el mismo filtro que el botón "Con saldo
+    // pendiente" de acá abajo y lleva la vista hasta la grilla de alumnos.
+    useEffect(() => {
+        if (!filterDebtorsSignal) return;
+        setShowDebtorsOnly(true);
+        setShowPaidOnly(false);
+        requestAnimationFrame(() => {
+            document.getElementById('alumnos-dashboard-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }, [filterDebtorsSignal]);
     const [studentFilter, setStudentFilter] = useState('active'); // 'active' o 'archived'
     const [sortBy, setSortBy] = useState('name'); // 'name' | 'debt' | 'restantes'
     
@@ -167,7 +180,7 @@ const classesOnSelectedDate = React.useMemo(() => {
         const typeColor = (type) => type === 'individual' ? 'bg-blue-100 text-blue-700' : type === 'group' ? 'bg-amber-100 text-amber-700' : 'bg-pink-100 text-pink-700';
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6" id="alumnos-dashboard-anchor">
 
             {/* ── CLASES DEL DÍA — solo desktop (en mobile lo cubre TodayDashboard) ── */}
             <div className="hidden sm:block bg-white rounded-xl border border-line shadow-sm overflow-hidden">
