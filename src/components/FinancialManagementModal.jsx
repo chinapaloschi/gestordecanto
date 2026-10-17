@@ -118,6 +118,46 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
     const incomeData = useMemo(() => processFinancialData([...allPayments, ...extraIncomes], selectedMonthFilter, 'income', sortBy), [allPayments, extraIncomes, selectedMonthFilter, searchText, dateFrom, dateTo, sortBy]);
     const expenseData = useMemo(() => processFinancialData(expenses, selectedMonthFilter, 'expense', sortBy), [expenses, selectedMonthFilter, searchText, dateFrom, dateTo, sortBy]);
 
+    // ── % de aumento mes a mes por categoría de gasto ──────────────────────
+    // Ignora el filtro de mes (necesita varios meses para comparar), pero sí
+    // respeta el buscador para poder enfocarse en un gasto puntual.
+    const expenseGrowthData = useMemo(() => {
+        const byCategoryMonth = {};
+        const monthsSet = new Set();
+        (expenses || []).forEach(item => {
+            const ymd = normalizeYMD(item.date);
+            if (!ymd) return;
+            const monthKey = ymd.slice(0, 7);
+            const category = item.category || 'Sin categoría';
+            monthsSet.add(monthKey);
+            if (!byCategoryMonth[category]) byCategoryMonth[category] = {};
+            byCategoryMonth[category][monthKey] = (byCategoryMonth[category][monthKey] || 0) + parseFloat(item.amount || 0);
+        });
+
+        const sortedMonths = Array.from(monthsSet).sort((a, b) => a.localeCompare(b));
+        const recentMonths = sortedMonths.slice(-6);
+
+        const categories = Object.keys(byCategoryMonth)
+            .filter(cat => !searchText || cat.toLowerCase().includes(searchText.toLowerCase()))
+            .sort((a, b) => a.localeCompare(b, 'es'));
+
+        const rows = categories.map(cat => ({
+            category: cat,
+            series: recentMonths.map(mk => byCategoryMonth[cat][mk] || 0),
+        })).filter(r => r.series.some(v => v > 0));
+
+        const totalSeries = recentMonths.map(mk =>
+            categories.reduce((sum, cat) => sum + (byCategoryMonth[cat][mk] || 0), 0)
+        );
+
+        const monthLabels = recentMonths.map(mk => {
+            const [y, m] = mk.split('-');
+            return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
+        });
+
+        return { months: recentMonths, monthLabels, rows, totalSeries };
+    }, [expenses, searchText]);
+
     const summaryData = useMemo(() => {
         const allMonths = new Set([...incomeData.map(d => d.monthKey), ...expenseData.map(d => d.monthKey)]);
         const sortedMonths = Array.from(allMonths).sort((a, b) => b.localeCompare(a));
@@ -375,7 +415,7 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
             <div className="flex items-center gap-2 flex-wrap">
                 {/* Tabs */}
                 <div className="flex rounded-xl border border-gray-200 overflow-hidden">
-                    {[['ingresos','💚 Ingresos'],['egresos','🔴 Egresos'],['fijos','📌 Fijos'],['total','📊 Total']].map(([id, label]) => (
+                    {[['ingresos','💚 Ingresos'],['egresos','🔴 Egresos'],['fijos','📌 Fijos'],['total','📊 Total'],['aumentos','📈 Aumentos']].map(([id, label]) => (
                         <button key={id} onClick={() => setActiveTab(id)}
                             className={`px-3 py-2 text-xs font-bold transition ${activeTab === id ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                             {label}
@@ -385,8 +425,9 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
 
                 {/* Filtro mes + buscador + acciones — no aplican a "Fijos" (es
                     el estado del mes actual, no una lista de registros para
-                    filtrar por fecha/texto). */}
-                {activeTab !== 'fijos' && <>
+                    filtrar por fecha/texto) ni a "Aumentos" (mira varios
+                    meses a la vez, un filtro de un solo mes no tiene sentido). */}
+                {activeTab !== 'fijos' && activeTab !== 'aumentos' && <>
                 {/* Filtro mes */}
                 <select value={selectedMonthFilter} onChange={e => setSelectedMonthFilter(e.target.value)}
                     className="px-2 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300">
@@ -604,6 +645,72 @@ const [showPercentageCalculator, setShowPercentageCalculator] = useState(false);
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {activeTab === 'aumentos' && (
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    {expenseGrowthData.months.length < 2 ? (
+                        <div className="text-center py-12 text-gray-400">
+                            <div className="text-4xl mb-2">📈</div>
+                            <p className="font-medium text-sm">Todavía no hay suficientes meses cargados para comparar.</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                                <thead>
+                                    <tr className="bg-gray-50 border-b border-gray-100">
+                                        <th className="text-left px-4 py-2.5 font-bold text-gray-600 sticky left-0 bg-gray-50">Gasto</th>
+                                        {expenseGrowthData.monthLabels.map((label, i) => (
+                                            <th key={expenseGrowthData.months[i]} className="text-right px-3 py-2.5 font-bold text-gray-600 capitalize whitespace-nowrap">{label}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    <tr className="bg-gray-50/80 font-black">
+                                        <td className="px-4 py-2.5 sticky left-0 bg-gray-50/80 text-gray-900">Total</td>
+                                        {expenseGrowthData.totalSeries.map((val, i) => {
+                                            const prev = i > 0 ? expenseGrowthData.totalSeries[i - 1] : null;
+                                            const pct = prev ? ((val - prev) / prev) * 100 : null;
+                                            return (
+                                                <td key={i} className="px-3 py-2.5 text-right whitespace-nowrap">
+                                                    <div className="text-gray-900">{formatMoneyAr(val)}</div>
+                                                    {pct !== null && (
+                                                        <div className={`text-[10px] font-bold ${pct > 0 ? 'text-rose-600' : pct < 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                                            {pct > 0 ? '↑' : pct < 0 ? '↓' : '—'} {Math.abs(pct).toFixed(1)}%
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                    {expenseGrowthData.rows.map(row => (
+                                        <tr key={row.category} className="hover:bg-gray-50">
+                                            <td className="px-4 py-2.5 font-semibold text-gray-800 sticky left-0 bg-white">{row.category}</td>
+                                            {row.series.map((val, i) => {
+                                                const prev = i > 0 ? row.series[i - 1] : null;
+                                                const pct = prev ? ((val - prev) / prev) * 100 : null;
+                                                return (
+                                                    <td key={i} className="px-3 py-2.5 text-right whitespace-nowrap">
+                                                        {val > 0 ? (
+                                                            <>
+                                                                <div className="text-gray-700">{formatMoneyAr(val)}</div>
+                                                                {pct !== null && (
+                                                                    <div className={`text-[10px] font-bold ${pct > 0 ? 'text-rose-600' : pct < 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                                                        {pct > 0 ? '↑' : pct < 0 ? '↓' : '—'} {Math.abs(pct).toFixed(1)}%
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        ) : <span className="text-gray-300">—</span>}
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
