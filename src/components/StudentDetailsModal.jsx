@@ -113,8 +113,13 @@ const ClassNotesHistory = ({ db, appId, studentId }) => {
 };
 
 // ── Historial de aumentos de cuota ────────────────────────────────────────────
+// Combina dos fuentes: los pagos de abono mensual ya cobrados (se detecta un
+// "aumento" cada vez que el monto cambia respecto al pago anterior — no hace
+// falta cargar nada a mano) y registros manuales (para anotar un aumento
+// antes de que exista el primer pago con el monto nuevo).
 const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
-  const [entries, setEntries] = useState([]);
+  const [autoEntries, setAutoEntries] = useState([]);
+  const [manualEntries, setManualEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -129,13 +134,50 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
     const load = async () => {
       setLoading(true);
       try {
-        const q = query(
-          fsCollection(db, `artifacts/${appId}/students/${studentId}/priceIncreases`),
-          orderBy('date', 'desc')
-        );
-        const snap = await getDocs(q);
-        if (!cancelled) setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch {} finally { if (!cancelled) setLoading(false); }
+        const [manualSnap, paymentsSnap] = await Promise.all([
+          getDocs(query(
+            fsCollection(db, `artifacts/${appId}/students/${studentId}/priceIncreases`),
+            orderBy('date', 'desc')
+          )),
+          // Reusa el índice existente (studentId + createdAt) — filtrar por
+          // tipo/pagado se hace en el cliente para no necesitar un índice
+          // compuesto nuevo.
+          getDocs(query(
+            fsCollection(db, `artifacts/${appId}/payments`),
+            where('studentId', '==', studentId),
+            orderBy('createdAt', 'asc'),
+            limit(200)
+          )),
+        ]);
+        if (cancelled) return;
+
+        setManualEntries(manualSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+        const dateKey = (p) => p.periodStartDate
+          || (p.paymentDate?.seconds ? new Date(p.paymentDate.seconds * 1000).toISOString().slice(0, 10) : '')
+          || (p.createdAt?.seconds ? new Date(p.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
+
+        const monthly = paymentsSnap.docs
+          .map(d => d.data())
+          .filter(p => p.paymentMethod === 'monthly_package_payment' && p.isPaidForPackage)
+          .map(p => ({ date: dateKey(p), amount: Number(p.amount || p.paidAmount || 0) }))
+          .filter(p => p.date && p.amount > 0)
+          .sort((a, b) => a.date.localeCompare(b.date));
+
+        // Solo queda un punto en la línea de tiempo cada vez que el monto
+        // cambia respecto al pago anterior — meses sin cambio no se listan.
+        const detected = [];
+        let lastAmount = null;
+        monthly.forEach(p => {
+          if (p.amount !== lastAmount) {
+            detected.push({ id: `auto-${p.date}-${p.amount}`, date: p.date, amount: p.amount, auto: true });
+            lastAmount = p.amount;
+          }
+        });
+        setAutoEntries(detected);
+      } catch (e) {
+        console.error('Error cargando historial de aumentos:', e);
+      } finally { if (!cancelled) setLoading(false); }
     };
     load();
     return () => { cancelled = true; };
@@ -150,7 +192,7 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
       const ref = await addDoc(fsCollection(db, `artifacts/${appId}/students/${studentId}/priceIncreases`), {
         date: newDate, amount, note, createdAt: serverTimestamp(),
       });
-      setEntries(prev => [...prev, { id: ref.id, date: newDate, amount, note }]
+      setManualEntries(prev => [...prev, { id: ref.id, date: newDate, amount, note }]
         .sort((a, b) => b.date.localeCompare(a.date)));
       setNewAmount(''); setNewNote(''); setShowAddForm(false);
       showMessage?.('Aumento registrado.', 'success');
@@ -162,13 +204,18 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
     if (!window.confirm('¿Borrar este registro de aumento?')) return;
     try {
       await deleteDoc(doc(db, `artifacts/${appId}/students/${studentId}/priceIncreases`, id));
-      setEntries(prev => prev.filter(e => e.id !== id));
+      setManualEntries(prev => prev.filter(e => e.id !== id));
     } catch (e) { showMessage?.('Error: ' + e.message, 'error'); }
   };
 
   const fmt = (dateStr) => {
     try { const [y, m, d] = (dateStr || '').split('-'); return `${d}/${m}/${y}`; } catch { return dateStr; }
   };
+
+  // Mezcla ambas fuentes y ordena de más reciente a más viejo; el % de cada
+  // una se calcula contra la que la precede cronológicamente (la siguiente
+  // en esta lista, ya que está en orden descendente).
+  const entries = [...autoEntries, ...manualEntries].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
     <div className="border border-emerald-100 rounded-xl overflow-hidden">
@@ -193,16 +240,18 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
           {loading ? (
             <div className="p-4 text-center text-xs text-gray-400">Cargando...</div>
           ) : entries.length === 0 ? (
-            <div className="p-4 text-center text-xs text-gray-400">Todavía no registraste ningún aumento.</div>
+            <div className="p-4 text-center text-xs text-gray-400">
+              Todavía no hay pagos de abono mensual registrados para detectar aumentos. Podés anotar uno a mano.
+            </div>
           ) : entries.map((entry, i) => {
-            // entries está ordenado de más reciente a más viejo — el % se
-            // calcula contra el siguiente de la lista (el aumento anterior).
             const prev = entries[i + 1];
             const pct = prev && prev.amount ? ((entry.amount - prev.amount) / prev.amount) * 100 : null;
             return (
               <div key={entry.id} className="px-3 py-2.5 flex items-center justify-between gap-2 group">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold text-emerald-500 uppercase">{fmt(entry.date)}</p>
+                  <p className="text-[10px] font-bold text-emerald-500 uppercase">
+                    {fmt(entry.date)} {entry.auto && <span className="text-emerald-300 normal-case font-semibold">· de un pago</span>}
+                  </p>
                   <p className="text-sm font-bold text-gray-800">{formatMoneyAr(entry.amount)}</p>
                   {entry.note && <p className="text-xs text-gray-400 truncate">{entry.note}</p>}
                 </div>
@@ -212,10 +261,12 @@ const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
                       {pct > 0 ? '↑' : pct < 0 ? '↓' : '—'} {Math.abs(pct).toFixed(1)}%
                     </span>
                   )}
-                  <button onClick={() => removeEntry(entry.id)}
-                    className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-500 transition-opacity p-0.5">
-                    <IconTrash />
-                  </button>
+                  {!entry.auto && (
+                    <button onClick={() => removeEntry(entry.id)}
+                      className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-500 transition-opacity p-0.5">
+                      <IconTrash />
+                    </button>
+                  )}
                 </div>
               </div>
             );
