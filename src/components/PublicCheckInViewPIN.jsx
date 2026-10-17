@@ -71,6 +71,15 @@ function getArgentinaTomorrowKey() {
   d.setDate(d.getDate() + 1);
   return fmt.format(d);
 }
+// Ventana en la que se puede marcar presente/ausente: desde una semana antes
+// de la clase hasta el día mismo (mismo límite que valida confirmAttendance
+// del lado del servidor, functions/index.js).
+const ATTENDANCE_WINDOW_DAYS = 6;
+function daysBetweenKeys(fromKey, toKey) {
+  const a = new Date(fromKey + 'T00:00:00Z');
+  const b = new Date(toKey + 'T00:00:00Z');
+  return Math.round((b - a) / 86400000);
+}
 
 const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
@@ -920,7 +929,7 @@ const handleClassClick = (classItem) => {
 
   const alreadyMarked = isPresent(classItem.status) || isAbsent(classItem.status);
 
-  if ((classItem.isToday || classItem.isTomorrow) && !alreadyMarked) {
+  if (classItem.canMark && !alreadyMarked) {
 
     setSelectedClassForAttendance(classItem);
 
@@ -932,10 +941,9 @@ const handleClassClick = (classItem) => {
 
   } else if (classItem.isInCurrentWeek) {
 
-    // Se puede marcar la clase de hoy o la de mañana (apenas llega el
-    // recordatorio) — el servidor rechaza cualquier otro día, aunque sea de
-    // esta misma semana.
-    showToast('Sólo podés marcar la clase de hoy o de mañana.', 'info');
+    // Se puede marcar desde una semana antes de la clase hasta el día
+    // mismo — el servidor rechaza cualquier otro día.
+    showToast('Podés marcar tu asistencia desde una semana antes de la clase.', 'info');
 
   }
 
@@ -1039,12 +1047,13 @@ for (const r of rows) {
 
   const isInCurrentWeek = r.classDate >= weekRange.start && r.classDate <= weekRange.end;
 
-  // El servidor (confirmAttendance) acepta marcar la clase de hoy o la de
-  // mañana (para que el alumno pueda confirmar apenas le llega el
-  // recordatorio la noche anterior) — cualquier otro día, antes se ofrecía
+  // El servidor (confirmAttendance) acepta marcar desde una semana antes de
+  // la clase hasta el día mismo — cualquier otro día, antes se ofrecía
   // "Marcar →" igual, lo que hacía fallar el pedido en silencio.
   const isToday = r.classDate === todayKey;
   const isTomorrow = r.classDate === tomorrowKey;
+  const daysAhead = daysBetweenKeys(todayKey, r.classDate);
+  const canMark = daysAhead >= 0 && daysAhead <= ATTENDANCE_WINDOW_DAYS;
 
   groups[g].push({
 
@@ -1062,6 +1071,7 @@ for (const r of rows) {
 
     isToday,
     isTomorrow,
+    canMark,
 
     topicLink: r.topicLink || null,
 
@@ -1994,7 +2004,7 @@ const renderCalendarGrid = () => {
                                 const absent   = isAbsent(c.status);
                                 const isWeek   = c.isInCurrentWeek;
                                 const isPast   = new Date(c.date + 'T00:00:00') < today;
-                                const canMark  = (c.isToday || c.isTomorrow) && !present && !absent;
+                                const canMark  = c.canMark && !present && !absent;
                                 const tipo     = (c.realType || '').toLowerCase();
                                 const typeLabel = (tipo === 'choir' || tipo === 'coral') ? 'Coral' : (tipo === 'group' || tipo === 'grupal') ? 'Grupal' : 'Individual';
 
@@ -2061,7 +2071,7 @@ const renderCalendarGrid = () => {
                 <div className="flex items-start gap-3 p-3 bg-rose-50 border border-rose-100 rounded-xl">
                   <span className="text-xl flex-shrink-0 mt-0.5">✅</span>
                   <p className="text-sm text-rose-900 font-medium">
-                    Registrá tu asistencia tocando la clase de hoy o de mañana — apenas te llega el recordatorio ya podés avisar si venís
+                    Registrá tu asistencia tocando la clase — podés hacerlo desde una semana antes y hasta el día mismo
                   </p>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">

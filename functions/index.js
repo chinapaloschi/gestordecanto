@@ -24,6 +24,15 @@ function todayKey() {
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year:"numeric", month:"2-digit", day:"2-digit" });
   return fmt.format(new Date()); // YYYY-MM-DD
 }
+// Ventana en la que un alumno puede marcar presente/ausente: desde una
+// semana antes de la clase (ej. clase el jueves -> habilitado desde el
+// viernes anterior) hasta el día mismo.
+const ATTENDANCE_WINDOW_DAYS = 6;
+function daysBetween(fromKey, toKey) {
+  const a = new Date(fromKey + "T00:00:00Z");
+  const b = new Date(toKey + "T00:00:00Z");
+  return Math.round((b - a) / 86400000);
+}
 function assertC(cond, msg) {
   if (!cond) throw new functions.https.HttpsError("failed-precondition", msg);
 }
@@ -95,7 +104,6 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
 
   const db = admin.firestore();
   const todayD = todayKey();
-  const tomorrowD = tomorrowKey();
   const clsRef = db.doc(`artifacts/${appId}/scheduledClasses/${classId}`);
 
   await db.runTransaction(async (tx) => {
@@ -103,10 +111,10 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
     assertC(clsSnap.exists, "Clase no encontrada.");
     const cls = clsSnap.data();
     assertC(cls.studentId === studentId, "Clase no corresponde al alumno.");
-    // Se puede confirmar el día de la clase o la víspera (cuando llega el
-    // recordatorio push "tenés clase mañana"), para que Sandra sepa de
-    // antemano si el alumno va a venir.
-    assertC(cls.classDate === todayD || cls.classDate === tomorrowD, "Sólo podés marcar la clase de hoy o de mañana.");
+    // Se puede confirmar desde una semana antes de la clase hasta el día
+    // mismo, para que Sandra sepa con anticipación si el alumno va a venir.
+    const daysAhead = daysBetween(todayD, cls.classDate);
+    assertC(daysAhead >= 0 && daysAhead <= ATTENDANCE_WINDOW_DAYS, "Podés marcar tu asistencia desde una semana antes de la clase.");
 
     // Ya tiene un estado final registrado -- no lo pisamos (evita que un
     // doble tap, o presente+ausente en rápida sucesión, revierta un
