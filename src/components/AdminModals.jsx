@@ -24,7 +24,100 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
     const [endTime,    setEndTime]    = useState('20:00');
     const [loading,    setLoading]    = useState(false);
     const [notifyStudents, setNotifyStudents] = useState(false);
-    const [activeTab,  setActiveTab]  = useState('new'); // 'new' | 'active'
+    const [activeTab,  setActiveTab]  = useState('new'); // 'new' | 'active' | 'feriados'
+
+    // ── Feriados nacionales (api.argentinadatos.com, datos oficiales) ───────
+    const [holidaysYear, setHolidaysYear] = useState(() => new Date().getFullYear());
+    const [holidays, setHolidays] = useState([]);
+    const [holidaysLoading, setHolidaysLoading] = useState(false);
+    const [holidaysError, setHolidaysError] = useState('');
+    const [selectedHolidays, setSelectedHolidays] = useState(() => new Set());
+    const [notifyHolidayStudents, setNotifyHolidayStudents] = useState(false);
+    const [blockingHolidays, setBlockingHolidays] = useState(false);
+
+    useEffect(() => {
+        if (activeTab !== 'feriados') return;
+        let cancelled = false;
+        setHolidaysLoading(true);
+        setHolidaysError('');
+        fetch(`https://api.argentinadatos.com/v1/feriados/${holidaysYear}`)
+            .then(r => { if (!r.ok) throw new Error('No se pudo obtener el calendario.'); return r.json(); })
+            .then(data => {
+                if (cancelled) return;
+                const list = (Array.isArray(data) ? data : []).map(h => ({ date: h.fecha, name: h.nombre, type: h.tipo }));
+                setHolidays(list);
+                // Preseleccionados: feriados reales (inamovible/trasladable), no los
+                // "puente" (son no laborables opcionales, a criterio de cada negocio).
+                setSelectedHolidays(new Set(
+                    list.filter(h => h.type !== 'puente' && !blockedSlots.some(s => s.date === h.date)).map(h => h.date)
+                ));
+            })
+            .catch(e => { if (!cancelled) setHolidaysError(e.message || 'Error al cargar los feriados.'); })
+            .finally(() => { if (!cancelled) setHolidaysLoading(false); });
+        return () => { cancelled = true; };
+    }, [activeTab, holidaysYear]);
+
+    const toggleHoliday = (date) => {
+        setSelectedHolidays(prev => {
+            const next = new Set(prev);
+            if (next.has(date)) next.delete(date); else next.add(date);
+            return next;
+        });
+    };
+
+    const affectedByHoliday = useMemo(() => {
+        const map = {};
+        holidays.forEach(h => {
+            map[h.date] = scheduledClasses.filter(cls => cls.classDate === h.date && (cls.status === 'scheduled' || !cls.status));
+        });
+        return map;
+    }, [holidays, scheduledClasses]);
+
+    const handleBlockHolidays = async () => {
+        const toBlock = holidays.filter(h => selectedHolidays.has(h.date) && !blockedSlots.some(s => s.date === h.date));
+        if (toBlock.length === 0) { showMessage('No hay feriados nuevos para bloquear.', 'info'); return; }
+        setBlockingHolidays(true);
+        try {
+            const batch = writeBatch(db);
+            const blockedSlotIdByDate = {};
+            toBlock.forEach(h => {
+                const newSlotRef = doc(fsCollection(db, `artifacts/${appId}/blockedSlots`));
+                batch.set(newSlotRef, {
+                    date: h.date, reason: h.name, isAllDay: true, startTime: null, endTime: null,
+                    createdAt: new Date(),
+                });
+                blockedSlotIdByDate[h.date] = newSlotRef.id;
+            });
+
+            const allAffected = toBlock.flatMap(h => affectedByHoliday[h.date] || []);
+            allAffected.forEach(cls => {
+                batch.update(doc(db, `artifacts/${appId}/scheduledClasses`, cls.id), {
+                    status: 'cancelled',
+                    cancelledByBlockId: blockedSlotIdByDate[cls.classDate] || null,
+                });
+            });
+
+            await batch.commit();
+
+            if (notifyHolidayStudents && allAffected.length > 0) {
+                const studentIds = [...new Set(allAffected.map(c => c.studentId))];
+                try {
+                    const fn = httpsCallable(getFunctions(), 'sendPushNotification');
+                    fn({
+                        studentIds,
+                        title: '📅 Cambio en tu agenda',
+                        body: `Se suspendieron tus clases que caían en feriado nacional este ${holidaysYear}.`,
+                        appId, url: `/#/checkin?a=${appId}`,
+                    }).catch(() => {});
+                } catch {}
+            }
+
+            const cancelMsg = allAffected.length > 0 ? ` ${allAffected.length} clase${allAffected.length!==1?'s':''} cancelada${allAffected.length!==1?'s':''}.` : '';
+            showMessage(`✅ ${toBlock.length} feriado${toBlock.length!==1?'s':''} bloqueado${toBlock.length!==1?'s':''}.${cancelMsg}`, 'success');
+        } catch (err) {
+            showMessage(`Error: ${err.message}`, 'error');
+        } finally { setBlockingHolidays(false); }
+    };
 
     // ── Alumnos afectados en el rango ────────────────────────────────────────
     const affectedClasses = useMemo(() => {
@@ -188,7 +281,7 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
 
                 {/* Tabs */}
                 <div className="flex gap-1 mt-3">
-                    {[['new','+ Nuevo bloqueo'],['active',`Activos (${sorted.length})`]].map(([id, label]) => (
+                    {[['new','+ Nuevo bloqueo'],['active',`Activos (${sorted.length})`],['feriados','🇦🇷 Feriados']].map(([id, label]) => (
                         <button key={id} onClick={() => setActiveTab(id)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${activeTab===id ? 'bg-white text-gray-900' : 'text-gray-400 hover:text-white'}`}>
                             {label}
@@ -362,6 +455,92 @@ export const BlockDaysModal = ({ db, userId, appId, showMessage, onClose, blocke
                     ))}
                 </div>
             )}
+
+            {/* ── TAB: FERIADOS NACIONALES ── */}
+            {activeTab === 'feriados' && (() => {
+                const totalAffected = holidays
+                    .filter(h => selectedHolidays.has(h.date))
+                    .reduce((sum, h) => sum + (affectedByHoliday[h.date]?.length || 0), 0);
+                return (
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <button type="button" onClick={() => setHolidaysYear(y => y - 1)}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
+                            </button>
+                            <span className="text-sm font-black text-gray-800">{holidaysYear}</span>
+                            <button type="button" onClick={() => setHolidaysYear(y => y + 1)}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
+                            </button>
+                        </div>
+                        <p className="text-[11px] text-gray-400 text-center -mt-2">
+                            Fuente: calendario oficial de feriados nacionales (Ley 27.399). Los "puente" (no laborables con fines turísticos) vienen destildados — son opcionales, a tu criterio.
+                        </p>
+
+                        {holidaysLoading ? (
+                            <div className="py-10 text-center text-gray-400 text-sm">Cargando feriados...</div>
+                        ) : holidaysError ? (
+                            <div className="py-6 text-center text-rose-500 text-sm">{holidaysError}</div>
+                        ) : holidays.length === 0 ? (
+                            <div className="py-10 text-center text-gray-400 text-sm">Sin datos para este año.</div>
+                        ) : (
+                            <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
+                                {holidays.map(h => {
+                                    const alreadyBlocked = blockedSlots.some(s => s.date === h.date);
+                                    const affected = affectedByHoliday[h.date] || [];
+                                    const checked = selectedHolidays.has(h.date);
+                                    const typeLabel = h.type === 'inamovible' ? 'Fijo' : h.type === 'trasladable' ? 'Trasladado' : 'Puente (opcional)';
+                                    const typeColor = h.type === 'puente' ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700';
+                                    return (
+                                        <label key={h.date}
+                                            className={`flex items-center gap-3 p-3 rounded-xl border transition cursor-pointer
+                                                ${alreadyBlocked ? 'bg-gray-50 border-gray-100 opacity-60 cursor-default' : checked ? 'bg-rose-50 border-rose-200' : 'bg-white border-gray-100 hover:border-gray-300'}`}>
+                                            <input type="checkbox" disabled={alreadyBlocked}
+                                                checked={alreadyBlocked || checked}
+                                                onChange={() => toggleHoliday(h.date)}
+                                                className="w-4 h-4 text-rose-600 rounded flex-shrink-0"/>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="font-bold text-sm text-gray-900">{formatDateToDDMMYYYY(h.date)}</span>
+                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${typeColor}`}>{typeLabel}</span>
+                                                    {alreadyBlocked && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700">Ya bloqueado</span>}
+                                                    {affected.length > 0 && (
+                                                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">
+                                                            ⚠️ {affected.length} clase{affected.length!==1?'s':''}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-gray-500 truncate">{h.name}</p>
+                                            </div>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {totalAffected > 0 && (
+                            <label className="flex items-center gap-2 cursor-pointer px-1">
+                                <div className="relative flex-shrink-0">
+                                    <input type="checkbox" checked={notifyHolidayStudents} onChange={e => setNotifyHolidayStudents(e.target.checked)} className="sr-only peer"/>
+                                    <div className="w-8 h-4 bg-gray-300 rounded-full peer peer-checked:bg-amber-500
+                                        after:content-[''] after:absolute after:top-0 after:left-0 after:bg-white
+                                        after:border after:rounded-full after:h-4 after:w-4 after:transition-all
+                                        peer-checked:after:translate-x-4"/>
+                                </div>
+                                <span className="text-xs text-amber-800 font-semibold">🔔 Notificar a los {totalAffected} alumno{totalAffected!==1?'s':''} afectado{totalAffected!==1?'s':''}</span>
+                            </label>
+                        )}
+
+                        <button type="button" onClick={handleBlockHolidays} disabled={blockingHolidays || holidaysLoading || selectedHolidays.size === 0}
+                            className="w-full py-3 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-black text-sm shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2">
+                            {blockingHolidays
+                                ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>Bloqueando...</>
+                                : `Bloquear seleccionados (${selectedHolidays.size})`}
+                        </button>
+                    </div>
+                );
+            })()}
 
             </div>
         </div>
