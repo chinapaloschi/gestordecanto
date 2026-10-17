@@ -27,12 +27,16 @@ service cloud.firestore {
     // legibles públicamente, aunque vivan bajo el mismo appId público que el
     // resto de los datos. Sin esto, el catch-all de más abajo las expondría.
     function isInternalOnlyCollection(path) {
-      return path.size() > 0 && path[0] in [
+      return (path.size() > 0 && path[0] in [
         'expenses', 'expenseCategories', 'extraIncomes',
         'adminTokens', 'reminderLog', 'loginAttempts',
         'fixedPayments', 'fixedPaymentSettings', 'fixedPaymentReminderLog',
         'scanAccess'
-      ];
+      ])
+      // Subcolecciones de students que son financieras/privadas — a
+      // diferencia de repertoire/receipts (pensadas para que el propio
+      // alumno las vea), esto nunca debe quedar expuesto por el catch-all.
+      || (path.size() > 2 && path[0] == 'students' && path[2] == 'priceIncreases');
     }
 
     // ===================================================================
@@ -205,6 +209,11 @@ service cloud.firestore {
     match /artifacts/{appId}/students/{studentId}/repertoire/{songId} {
       allow read: if isPublicAppPath(appId) || isStaff();
       allow write: if isStaff();
+    }
+    // Historial de aumentos de cuota — dato financiero/privado, nunca
+    // legible por el portal público del alumno (a diferencia del repertorio).
+    match /artifacts/{appId}/students/{studentId}/priceIncreases/{entryId} {
+      allow read, write: if isStaff();
     }
     match /artifacts/{appId}/blockedSlots/{slotId} {
       allow read: if isPublicAppPath(appId) || isStaff();

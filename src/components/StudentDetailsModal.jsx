@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection as fsCollection, doc, getDocs, deleteDoc, updateDoc, increment, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection as fsCollection, doc, getDocs, addDoc, deleteDoc, updateDoc, increment, query, where, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { Modal } from './Modal.jsx';
-import { formatMoneyAr } from '../utils/money.js';
+import { formatMoneyAr, parseMoneyAr } from '../utils/money.js';
 import { isValidArgWhatsappNumber, buildWhatsappLink } from '../utils/whatsapp.js';
 import { formatDateToDDMMYYYY, mapClassTypeToSpanish } from '../utils/classHelpers.js';
 import { ProfilePictureUploader } from './UploadComponents.jsx';
@@ -9,6 +9,7 @@ import { RepertoireModal } from './RepertoireModals.jsx';
 import { CertificateGeneratorModal } from './CertificateModals.jsx';
 import { ReceiptsModal } from './ReceiptsComponents.jsx';
 import { UnpaidClassDeleteButton } from './PortalAlumnoComponents.jsx';
+import { MoneyInput } from './MoneyInput.jsx';
 import { isPresent, isAbsent } from '../utils/studentHelpers.js';
 import {
   IconPlusCircle, IconRefresh, IconCalendar, IconCreditCard,
@@ -105,6 +106,149 @@ const ClassNotesHistory = ({ db, appId, studentId }) => {
               <p className="text-sm text-gray-700 leading-snug whitespace-pre-wrap">{cls.classNotes}</p>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Historial de aumentos de cuota ────────────────────────────────────────────
+const PriceIncreaseHistory = ({ db, appId, studentId, showMessage }) => {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newAmount, setNewAmount] = useState('');
+  const [newDate, setNewDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newNote, setNewNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!db || !appId || !studentId) return;
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const q = query(
+          fsCollection(db, `artifacts/${appId}/students/${studentId}/priceIncreases`),
+          orderBy('date', 'desc')
+        );
+        const snap = await getDocs(q);
+        if (!cancelled) setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch {} finally { if (!cancelled) setLoading(false); }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [db, appId, studentId]);
+
+  const addEntry = async () => {
+    const amount = parseMoneyAr(newAmount);
+    if (!newDate || isNaN(amount) || amount <= 0) { showMessage?.('Ingresá fecha y monto válidos.', 'error'); return; }
+    setSaving(true);
+    try {
+      const note = newNote.trim() || null;
+      const ref = await addDoc(fsCollection(db, `artifacts/${appId}/students/${studentId}/priceIncreases`), {
+        date: newDate, amount, note, createdAt: serverTimestamp(),
+      });
+      setEntries(prev => [...prev, { id: ref.id, date: newDate, amount, note }]
+        .sort((a, b) => b.date.localeCompare(a.date)));
+      setNewAmount(''); setNewNote(''); setShowAddForm(false);
+      showMessage?.('Aumento registrado.', 'success');
+    } catch (e) { showMessage?.('Error: ' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const removeEntry = async (id) => {
+    if (!window.confirm('¿Borrar este registro de aumento?')) return;
+    try {
+      await deleteDoc(doc(db, `artifacts/${appId}/students/${studentId}/priceIncreases`, id));
+      setEntries(prev => prev.filter(e => e.id !== id));
+    } catch (e) { showMessage?.('Error: ' + e.message, 'error'); }
+  };
+
+  const fmt = (dateStr) => {
+    try { const [y, m, d] = (dateStr || '').split('-'); return `${d}/${m}/${y}`; } catch { return dateStr; }
+  };
+
+  return (
+    <div className="border border-emerald-100 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-3 py-2.5 bg-emerald-50 hover:bg-emerald-100 transition text-left">
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8L9 15l-4-4-6 6"/>
+          </svg>
+          <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
+            Historial de aumentos{entries.length > 0 ? ` (${entries.length})` : ''}
+          </span>
+        </div>
+        <svg className={`w-4 h-4 text-emerald-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      {open && (
+        <div className="divide-y divide-emerald-50">
+          {loading ? (
+            <div className="p-4 text-center text-xs text-gray-400">Cargando...</div>
+          ) : entries.length === 0 ? (
+            <div className="p-4 text-center text-xs text-gray-400">Todavía no registraste ningún aumento.</div>
+          ) : entries.map((entry, i) => {
+            // entries está ordenado de más reciente a más viejo — el % se
+            // calcula contra el siguiente de la lista (el aumento anterior).
+            const prev = entries[i + 1];
+            const pct = prev && prev.amount ? ((entry.amount - prev.amount) / prev.amount) * 100 : null;
+            return (
+              <div key={entry.id} className="px-3 py-2.5 flex items-center justify-between gap-2 group">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-emerald-500 uppercase">{fmt(entry.date)}</p>
+                  <p className="text-sm font-bold text-gray-800">{formatMoneyAr(entry.amount)}</p>
+                  {entry.note && <p className="text-xs text-gray-400 truncate">{entry.note}</p>}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {pct !== null && (
+                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap ${pct > 0 ? 'text-rose-600 bg-rose-50' : pct < 0 ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400 bg-gray-50'}`}>
+                      {pct > 0 ? '↑' : pct < 0 ? '↓' : '—'} {Math.abs(pct).toFixed(1)}%
+                    </span>
+                  )}
+                  <button onClick={() => removeEntry(entry.id)}
+                    className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-500 transition-opacity p-0.5">
+                    <IconTrash />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {showAddForm ? (
+            <div className="p-3 space-y-2 bg-emerald-50/40">
+              <div className="grid grid-cols-2 gap-2">
+                <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
+                  className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs" />
+                <MoneyInput value={newAmount} onValueChange={setNewAmount} placeholder="Monto nuevo"
+                  className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs" autoFocus />
+              </div>
+              <input type="text" value={newNote} onChange={e => setNewNote(e.target.value)}
+                placeholder="Nota (opcional)"
+                className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs" />
+              <div className="flex gap-2">
+                <button onClick={() => setShowAddForm(false)}
+                  className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition">
+                  Cancelar
+                </button>
+                <button onClick={addEntry} disabled={saving}
+                  className="flex-1 py-1.5 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition">
+                  {saving ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setShowAddForm(true)}
+              className="w-full py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition">
+              + Agregar aumento
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -732,6 +876,9 @@ export const StudentDetailsModal = ({
 
           {/* HISTORIAL DE NOTAS DE CLASE */}
           <ClassNotesHistory db={db} appId={appId} studentId={localStudent.id} />
+
+          {/* HISTORIAL DE AUMENTOS DE CUOTA */}
+          <PriceIncreaseHistory db={db} appId={appId} studentId={localStudent.id} showMessage={showMessage} />
 
           {/* INFO SECUNDARIA */}
           <div className="text-xs text-gray-400 space-y-0.5 pt-1 border-t border-gray-100">
