@@ -142,7 +142,7 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
     const load = async () => {
       setLoading(true);
       try {
-        const [manualSnap, paymentsSnap, classesSnap] = await Promise.all([
+        const [manualSnap, paymentsSnap, classesSnap, receiptsSnap] = await Promise.all([
           getDocs(query(
             fsCollection(db, `artifacts/${appId}/students/${studentId}/priceIncreases`),
             orderBy('date', 'desc')
@@ -164,6 +164,10 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
             orderBy('classDate', 'asc'),
             limit(300)
           )),
+          // Comprobantes aprobados con el monto anotado a mano (ver
+          // ReceiptsComponents.jsx) — único rastro real para alumnos cuyo
+          // pago nunca quedó en payments ni en scheduledClasses.
+          getDocs(fsCollection(db, `artifacts/${appId}/students/${studentId}/receipts`)),
         ]);
         if (cancelled) return;
 
@@ -204,7 +208,20 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
             return { date: c.classDate, amount: Number(c.paidAmount ?? c.price ?? 0), kind: `clase-${c.scheduleType || 'na'}-${type}`, label: `${classTypeLabel(type)} · ${scheduleLabel}` };
           });
 
-        const all = [...monthly, ...flex, ...loose]
+        // Comprobantes aprobados con monto anotado — un único timeline (no
+        // sabemos a qué tipo de clase corresponde cada uno), fecha = cuando
+        // se subió el comprobante.
+        const receipts = receiptsSnap.docs
+          .map(d => d.data())
+          .filter(r => String(r.status || '').toLowerCase() === 'approved' && Number(r.amount || 0) > 0)
+          .map(r => ({
+            date: r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000).toISOString().slice(0, 10) : '',
+            amount: Number(r.amount),
+            kind: 'comprobante',
+            label: 'Comprobante',
+          }));
+
+        const all = [...monthly, ...flex, ...loose, ...receipts]
           .filter(p => p.date && p.amount > 0)
           .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -234,6 +251,9 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
           classesPaidWithPrice: classesSnap.docs.filter(d => d.data().isPaid && Number(d.data().paidAmount ?? d.data().price ?? 0) > 0).length,
           distinctPrices: [...new Set(classesSnap.docs.filter(d => d.data().isPaid).map(d => Number(d.data().paidAmount ?? d.data().price ?? 0)))].slice(0, 8),
           scheduleTypes: [...new Set(classesSnap.docs.map(d => d.data().scheduleType).filter(Boolean))],
+          receipts: receiptsSnap.docs.length,
+          receiptsApproved: receiptsSnap.docs.filter(d => String(d.data().status || '').toLowerCase() === 'approved').length,
+          receiptsWithAmount: receiptsSnap.docs.filter(d => Number(d.data().amount || 0) > 0).length,
           autoEntriesFound: detected.length,
         });
       } catch (e) {
@@ -303,12 +323,17 @@ const PriceIncreaseHistory = ({ db, appId, studentId, defaultClassType, showMess
             <div className="p-4 text-center text-xs text-gray-400">Cargando...</div>
           ) : entries.length === 0 ? (
             <div className="p-4 text-center text-xs text-gray-400 space-y-2">
-              <p>Todavía no hay pagos registrados para detectar aumentos. Podés anotar uno a mano.</p>
+              <p>
+                Todavía no hay pagos registrados para detectar aumentos.
+                Si este alumno paga por comprobante, abrí "Comprobantes" y
+                anotá el monto que ves en cada uno — eso alimenta este
+                historial automáticamente. También podés anotar un aumento acá abajo a mano.
+              </p>
               {debugInfo && (
                 <p className="text-left bg-gray-50 border border-gray-100 rounded-lg p-2 text-[10px] text-gray-400 font-mono whitespace-pre-wrap">
                   {debugInfo.error
                     ? `Error: ${debugInfo.error}`
-                    : `pagos: ${debugInfo.payments} (mensual pagado: ${debugInfo.monthlyPaid}, mensual sin pagar: ${debugInfo.monthlyUnpaid}, flex: ${debugInfo.flex}, otros métodos: ${debugInfo.otherMethods.join(', ') || 'ninguno'})\nclases: ${debugInfo.classes} (pagadas: ${debugInfo.classesPaidTotal}, con precio>0: ${debugInfo.classesPaidWithPrice}, tipos: ${debugInfo.scheduleTypes.join(', ') || 'ninguno'})\nprecios distintos encontrados: ${debugInfo.distinctPrices.join(', ') || 'ninguno'}\npuntos detectados: ${debugInfo.autoEntriesFound}`}
+                    : `pagos: ${debugInfo.payments} (mensual pagado: ${debugInfo.monthlyPaid}, mensual sin pagar: ${debugInfo.monthlyUnpaid}, flex: ${debugInfo.flex}, otros métodos: ${debugInfo.otherMethods.join(', ') || 'ninguno'})\nclases: ${debugInfo.classes} (pagadas: ${debugInfo.classesPaidTotal}, con precio>0: ${debugInfo.classesPaidWithPrice}, tipos: ${debugInfo.scheduleTypes.join(', ') || 'ninguno'})\nprecios distintos encontrados: ${debugInfo.distinctPrices.join(', ') || 'ninguno'}\ncomprobantes: ${debugInfo.receipts} (aprobados: ${debugInfo.receiptsApproved}, con monto anotado: ${debugInfo.receiptsWithAmount})\npuntos detectados: ${debugInfo.autoEntriesFound}`}
                 </p>
               )}
             </div>

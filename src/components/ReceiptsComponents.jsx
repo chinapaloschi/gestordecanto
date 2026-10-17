@@ -27,12 +27,22 @@ function ReceiptCard({
   receipt, busyId, rejectingId, rejectNote, statusCfg,
   isImage, isPdf, fmtDate, onExpand,
   onApprove, onStartReject, onConfirmReject, onCancelReject, onRejectNoteChange, onReopen,
+  onSaveAmount, savingAmountId,
 }) {
   const status = String(receipt.status || 'pending').toLowerCase();
   const cfg = statusCfg[status] || statusCfg.pending;
   const isImg = isImage(receipt.filename, receipt.url);
   const isRejecting = rejectingId === receipt.id;
   const busy = busyId === receipt.id;
+
+  // El comprobante en sí es una imagen/PDF — nadie extrae el monto
+  // automáticamente de ahí (arriesgado para datos financieros). Sandra ya
+  // lo está mirando para aprobar/rechazar, así que anota acá el monto que
+  // ve; eso alimenta el Historial de aumentos de cada alumno.
+  const [amountInput, setAmountInput] = React.useState(receipt.amount ? String(receipt.amount) : '');
+  React.useEffect(() => { setAmountInput(receipt.amount ? String(receipt.amount) : ''); }, [receipt.amount]);
+  const savingAmount = savingAmountId === receipt.id;
+  const amountDirty = amountInput !== (receipt.amount ? String(receipt.amount) : '');
 
   return (
     <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden ${status === 'pending' ? 'border-amber-300' : status === 'approved' ? 'border-green-200' : 'border-rose-200'}`}>
@@ -82,6 +92,30 @@ function ReceiptCard({
         </div>
         <p className="text-xs text-gray-400 flex-shrink-0">{fmtDate(receipt.createdAt)}</p>
       </div>
+
+      {/* Monto del comprobante — lo escribe Sandra mirando la imagen/PDF de
+          arriba; alimenta el Historial de aumentos del alumno. */}
+      {onSaveAmount && (
+        <div className="px-4 pb-3 flex items-center gap-2">
+          <span className="text-xs text-gray-400 flex-shrink-0">$</span>
+          <input
+            type="text" inputMode="numeric"
+            value={amountInput}
+            onChange={e => setAmountInput(e.target.value.replace(/[^\d]/g, ''))}
+            placeholder="Monto del comprobante"
+            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+          />
+          {amountDirty && (
+            <button
+              onClick={() => onSaveAmount(receipt.id, amountInput)}
+              disabled={savingAmount}
+              className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition disabled:opacity-50 flex-shrink-0"
+            >
+              {savingAmount ? '...' : 'Guardar'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Acciones */}
       {status === 'pending' && !isRejecting && (
@@ -311,6 +345,17 @@ const [displayDebt, setDisplayDebt] = React.useState(student?.pendingBalance || 
   const [rejectingId, setRejectingId] = React.useState(null);
   const [rejectNote,  setRejectNote]  = React.useState('');
   const [expandedImg, setExpandedImg] = React.useState(null); // url de imagen expandida
+  const [savingAmountId, setSavingAmountId] = React.useState(null);
+
+  const handleSaveAmount = async (receiptId, amountStr) => {
+    const amount = Number(amountStr);
+    if (!amount || amount <= 0) { alert('Ingresá un monto válido.'); return; }
+    setSavingAmountId(receiptId);
+    try {
+      await updateDoc(doc(db, `artifacts/${appId}/students/${student.id}/receipts`, receiptId), { amount });
+    } catch (e) { console.error(e); alert('Error al guardar el monto: ' + e.message); }
+    finally { setSavingAmountId(null); }
+  };
 
   const isImage = (filename = '', url = '') => {
     const ext = (filename || url).split('.').pop().toLowerCase().split('?')[0];
@@ -499,6 +544,8 @@ const [displayDebt, setDisplayDebt] = React.useState(student?.pendingBalance || 
                     onCancelReject={() => { setRejectingId(null); setRejectNote(''); }}
                     onRejectNoteChange={setRejectNote}
                     onReopen={handleReopen}
+                    onSaveAmount={handleSaveAmount}
+                    savingAmountId={savingAmountId}
                   />
                 ))}
 
@@ -524,6 +571,8 @@ const [displayDebt, setDisplayDebt] = React.useState(student?.pendingBalance || 
                         onCancelReject={() => { setRejectingId(null); setRejectNote(''); }}
                         onRejectNoteChange={setRejectNote}
                         onReopen={handleReopen}
+                        onSaveAmount={handleSaveAmount}
+                        savingAmountId={savingAmountId}
                       />
                     ))}
                   </>
