@@ -7,6 +7,7 @@ import { IconReceipt, IconTrash } from './Icons.jsx';
 import { updateReceiptStatus, markStudentReceiptsAsSeen } from '../utils/authHelpers.js';
 import { withSurcharge } from '../utils/lateSurcharge.js';
 import { useStudentReceipts } from '../hooks/useStudentReceipts.js';
+import { ocrAmountFromImage } from '../utils/receiptOcr.js';
 export const FileTypeIcon = ({ mime = '', filename = '' }) => {
     const isPdf = mime.includes('pdf') || filename.endsWith('.pdf');
     if (isPdf) {
@@ -23,6 +24,49 @@ export const FileTypeIcon = ({ mime = '', filename = '' }) => {
     );
 };
 
+// Revisión de los montos leídos por OCR antes de guardarlos — cada fila es
+// editable (la lectura automática puede fallar) y las que no detectaron
+// nada arrancan vacías, nunca con un 0 que se cuele como si fuera real.
+function BulkOcrReview({ results, saving, onCancel, onConfirm }) {
+  const [edited, setEdited] = React.useState(() => results.map(r => ({ ...r, amount: r.amount ? String(r.amount) : '' })));
+  const foundCount = edited.filter(r => Number(r.amount) > 0).length;
+
+  return (
+    <div className="px-5 py-3 bg-violet-50 border-b border-violet-100 space-y-2 max-h-[45vh] overflow-y-auto">
+      <p className="text-xs font-bold text-violet-700">
+        Revisá los montos antes de guardar — {foundCount} de {edited.length} detectados
+      </p>
+      {edited.map((r, i) => (
+        <div key={r.id} className="flex items-center gap-2 bg-white rounded-lg border border-violet-100 p-2">
+          <img src={r.url} alt="" className="w-10 h-10 object-cover rounded flex-shrink-0 bg-gray-100" />
+          <p className="text-[11px] text-gray-400 flex-shrink-0 w-20">{r.date}</p>
+          <span className="text-xs text-gray-400 flex-shrink-0">$</span>
+          <input
+            type="text" inputMode="numeric"
+            value={r.amount}
+            onChange={e => {
+              const v = e.target.value.replace(/[^\d]/g, '');
+              setEdited(prev => prev.map((x, j) => j === i ? { ...x, amount: v } : x));
+            }}
+            placeholder={r.error ? 'Error al leer' : 'No detectado'}
+            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+          />
+        </div>
+      ))}
+      <div className="flex gap-2 pt-1">
+        <button onClick={onCancel} disabled={saving}
+          className="flex-1 py-2 text-xs font-semibold bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition disabled:opacity-50">
+          Cancelar
+        </button>
+        <button onClick={() => onConfirm(edited)} disabled={saving || foundCount === 0}
+          className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition disabled:opacity-50">
+          {saving ? 'Guardando...' : `Confirmar y guardar (${foundCount})`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ReceiptCard({
   receipt, busyId, rejectingId, rejectNote, statusCfg,
   isImage, isPdf, fmtDate, onExpand,
@@ -35,14 +79,24 @@ function ReceiptCard({
   const isRejecting = rejectingId === receipt.id;
   const busy = busyId === receipt.id;
 
-  // El comprobante en sí es una imagen/PDF — nadie extrae el monto
-  // automáticamente de ahí (arriesgado para datos financieros). Sandra ya
-  // lo está mirando para aprobar/rechazar, así que anota acá el monto que
-  // ve; eso alimenta el Historial de aumentos de cada alumno.
+  // El monto se puede leer solo (OCR de la imagen, abajo) o escribir a mano
+  // — en ambos casos queda en este input para que Sandra lo revise antes de
+  // guardarlo; eso alimenta el Historial de aumentos de cada alumno.
   const [amountInput, setAmountInput] = React.useState(receipt.amount ? String(receipt.amount) : '');
   React.useEffect(() => { setAmountInput(receipt.amount ? String(receipt.amount) : ''); }, [receipt.amount]);
   const savingAmount = savingAmountId === receipt.id;
   const amountDirty = amountInput !== (receipt.amount ? String(receipt.amount) : '');
+  const [readingAmount, setReadingAmount] = React.useState(false);
+  const handleReadAmount = async () => {
+    if (!receipt.url) return;
+    setReadingAmount(true);
+    try {
+      const found = await ocrAmountFromImage(receipt.url);
+      if (found) setAmountInput(String(found));
+      else alert('No pude detectar un monto con "$" en esta imagen — escribilo a mano.');
+    } catch (e) { alert('Error al leer la imagen: ' + e.message); }
+    finally { setReadingAmount(false); }
+  };
 
   return (
     <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden ${status === 'pending' ? 'border-amber-300' : status === 'approved' ? 'border-green-200' : 'border-rose-200'}`}>
@@ -93,8 +147,8 @@ function ReceiptCard({
         <p className="text-xs text-gray-400 flex-shrink-0">{fmtDate(receipt.createdAt)}</p>
       </div>
 
-      {/* Monto del comprobante — lo escribe Sandra mirando la imagen/PDF de
-          arriba; alimenta el Historial de aumentos del alumno. */}
+      {/* Monto del comprobante — se puede leer solo de la imagen (OCR) o
+          escribir a mano; alimenta el Historial de aumentos del alumno. */}
       {onSaveAmount && (
         <div className="px-4 pb-3 flex items-center gap-2">
           <span className="text-xs text-gray-400 flex-shrink-0">$</span>
@@ -105,6 +159,16 @@ function ReceiptCard({
             placeholder="Monto del comprobante"
             className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
           />
+          {isImg && (
+            <button
+              onClick={handleReadAmount}
+              disabled={readingAmount}
+              title="Leer el monto de la imagen automáticamente"
+              className="px-2.5 py-1.5 text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-lg transition disabled:opacity-50 flex-shrink-0"
+            >
+              {readingAmount ? '...' : '🔍 Leer'}
+            </button>
+          )}
           {amountDirty && (
             <button
               onClick={() => onSaveAmount(receipt.id, amountInput)}
@@ -357,6 +421,51 @@ const [displayDebt, setDisplayDebt] = React.useState(student?.pendingBalance || 
     finally { setSavingAmountId(null); }
   };
 
+  // ── Lectura masiva de montos (OCR) ───────────────────────────────────────
+  // Recorre los comprobantes de este alumno que todavía no tienen monto
+  // guardado, los lee uno por uno (secuencial, para no saturar el navegador)
+  // y después muestra una lista editable antes de guardar nada — un error
+  // de lectura no debe colarse solo en datos financieros.
+  const [bulkOcr, setBulkOcr] = React.useState(null); // { running, done, total } | { results }
+  const [bulkSaving, setBulkSaving] = React.useState(false);
+
+  const isImageFile = (filename = '', url = '') => {
+    const ext = (filename || url).split('.').pop().toLowerCase().split('?')[0];
+    return ['jpg','jpeg','png','gif','webp','heic','bmp'].includes(ext);
+  };
+
+  const receiptsNeedingAmount = receipts.filter(r => !r.amount && r.status !== 'rejected' && isImageFile(r.filename, r.url));
+
+  const handleBulkRead = async () => {
+    const total = receiptsNeedingAmount.length;
+    if (total === 0) return;
+    setBulkOcr({ running: true, done: 0, total });
+    const results = [];
+    for (const r of receiptsNeedingAmount) {
+      let amount = null, error = null;
+      try { amount = await ocrAmountFromImage(r.url); }
+      catch (e) { error = e.message; }
+      results.push({ id: r.id, url: r.url, date: fmtDate(r.createdAt), amount, error });
+      setBulkOcr(prev => ({ running: true, done: prev.done + 1, total }));
+    }
+    setBulkOcr({ running: false, results });
+  };
+
+  const handleBulkConfirm = async (finalResults) => {
+    const toSave = finalResults.filter(r => Number(r.amount) > 0);
+    if (toSave.length === 0) { setBulkOcr(null); return; }
+    setBulkSaving(true);
+    try {
+      const batch = writeBatch(db);
+      toSave.forEach(r => {
+        batch.update(doc(db, `artifacts/${appId}/students/${student.id}/receipts`, r.id), { amount: Number(r.amount) });
+      });
+      await batch.commit();
+      setBulkOcr(null);
+    } catch (e) { alert('Error al guardar: ' + e.message); }
+    finally { setBulkSaving(false); }
+  };
+
   const isImage = (filename = '', url = '') => {
     const ext = (filename || url).split('.').pop().toLowerCase().split('?')[0];
     return ['jpg','jpeg','png','gif','webp','heic','bmp'].includes(ext);
@@ -504,6 +613,33 @@ const [displayDebt, setDisplayDebt] = React.useState(student?.pendingBalance || 
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 font-bold flex-shrink-0">×</button>
           </div>
+
+          {/* ── BARRA DE LECTURA MASIVA ── */}
+          {!loading && !bulkOcr && receiptsNeedingAmount.length > 0 && (
+            <div className="px-5 py-2.5 bg-violet-50 border-b border-violet-100 flex items-center justify-between gap-2">
+              <p className="text-xs text-violet-700">
+                {receiptsNeedingAmount.length} comprobante{receiptsNeedingAmount.length !== 1 ? 's' : ''} sin monto guardado
+              </p>
+              <button onClick={handleBulkRead}
+                className="px-3 py-1.5 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition flex-shrink-0">
+                🔍 Leer todos ({receiptsNeedingAmount.length})
+              </button>
+            </div>
+          )}
+
+          {bulkOcr?.running && (
+            <div className="px-5 py-3 bg-violet-50 border-b border-violet-100">
+              <p className="text-xs font-bold text-violet-700 mb-1.5">Leyendo comprobante {bulkOcr.done + 1} de {bulkOcr.total}...</p>
+              <div className="h-1.5 bg-violet-100 rounded-full overflow-hidden">
+                <div className="h-full bg-violet-500 transition-all" style={{ width: `${(bulkOcr.done / bulkOcr.total) * 100}%` }} />
+              </div>
+            </div>
+          )}
+
+          {bulkOcr && !bulkOcr.running && (
+            <BulkOcrReview results={bulkOcr.results} saving={bulkSaving}
+              onCancel={() => setBulkOcr(null)} onConfirm={handleBulkConfirm} />
+          )}
 
           {/* ── CUERPO ── */}
           <div className="flex-1 overflow-y-auto bg-gray-50">
