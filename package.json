@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "prebuild": "node scripts/stamp-sw.cjs && node scripts/stamp-sw-public.cjs",
+    "prebuild": "node scripts/stamp-sw.cjs && node scripts/stamp-sw-public.cjs && node scripts/check-sw-cache-headers.cjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

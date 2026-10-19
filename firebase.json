@@ -138,7 +138,35 @@
           ]
         },
         {
+          "source": "/sw-admin.js",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache" },
+            { "key": "Content-Type", "value": "text/javascript" }
+          ]
+        },
+        {
           "source": "/manifest-public.webmanifest",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache" },
+            { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }
+          ]
+        },
+        {
+          "source": "/manifest-admin.webmanifest",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache" },
+            { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }
+          ]
+        },
+        {
+          "source": "/manifest-finanzas.webmanifest",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache" },
+            { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }
+          ]
+        },
+        {
+          "source": "/manifest-scan.webmanifest",
           "headers": [
             { "key": "Cache-Control", "value": "no-cache" },
             { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }
