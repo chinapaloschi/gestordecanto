@@ -23,7 +23,7 @@ function loadTesseract() {
 // ("$ 110.000", "$110.000,50") y se queda con el que tenga más dígitos —
 // en una captura de transferencia, el monto principal casi siempre es el
 // número más grande precedido de "$" (CBU/CUIT no llevan signo pesos).
-function parseAmountFromText(text) {
+export function parseAmountFromText(text) {
   const matches = [...text.matchAll(/\$\s*([\d.,]{3,})/g)].map(m => m[1]);
   if (matches.length === 0) return null;
 
