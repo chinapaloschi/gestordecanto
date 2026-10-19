@@ -4,6 +4,8 @@ import { collection as fsCollection, doc, getDoc, getDocs, addDoc as fsAddDoc, q
 
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
+import { signInWithCustomToken } from 'firebase/auth';
+
 import { auth } from '../firebaseConfig.js';
 
 import { Modal, ModalHeader } from './Modal.jsx';
@@ -763,6 +765,17 @@ const getCurrentWeekRange = () => {
       const studentData = res.data;
 
       if (studentData && studentData.id) {
+
+        // Ata la sesión de Firebase Auth a este alumno (request.auth.uid ==
+        // studentId) -- de esto dependen las reglas para que solo el propio
+        // alumno (ya identificado con DNI+PIN) pueda tocar su foto de perfil
+        // o el detector de rango vocal, no cualquier visitante anónimo. Si
+        // falla, seguimos igual con la sesión anónima -- el check-in en sí
+        // no depende de esto, sólo esas dos funciones de autoservicio.
+        if (studentData.customToken) {
+          try { await signInWithCustomToken(auth, studentData.customToken); }
+          catch (e) { console.error('No se pudo atar la sesión al alumno:', e); }
+        }
 
         setStudent(studentData);
         setStatus({ step: 'confirm', msg: 'Hacé clic en la clase de hoy para marcar tu presente.' });

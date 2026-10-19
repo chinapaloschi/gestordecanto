@@ -297,8 +297,18 @@ exports.loginStudent = functions.https.onCall(async (data, context) => {
   // Login correcto: resetear el contador de intentos por DNI.
   await dniAttemptRef.set({ windowStart: now, count: 0, lastAttemptAt: now }, { merge: true });
 
+  // Antes el portal público quedaba con sesión anónima aunque ya hubiera
+  // validado DNI+PIN -- las reglas de Firestore/Storage no tenían forma de
+  // distinguir "cualquier visitante" de "este alumno ya identificado", así
+  // que la foto de perfil y el detector de rango vocal quedaban abiertos a
+  // que cualquiera los pisara para cualquier alumno. Este custom token ata
+  // la sesión de Firebase Auth al studentId recién validado -- de acá en
+  // más, request.auth.uid == studentId es prueba real de identidad, no solo
+  // "alguien con sesión anónima".
+  const customToken = await admin.auth().createCustomToken(studentDoc.id, { studentId: studentDoc.id });
+
   const { pin: _omitPin, ...safeStudentData } = studentData;
-  return { id: studentDoc.id, ...safeStudentData };
+  return { id: studentDoc.id, customToken, ...safeStudentData };
 });
 
 // ---------------- 2b) Registrar comprobante de pago (server-side) ----------------

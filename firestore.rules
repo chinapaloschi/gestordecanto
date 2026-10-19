@@ -66,8 +66,12 @@ service cloud.firestore {
     match /artifacts/{appId}/students/{studentId} {
       allow read: if isPublicAppPath(appId);
       // El alumno puede actualizar su propia foto de perfil y el resultado del
-      // detector de rango vocal (Herramientas) — nada más.
+      // detector de rango vocal (Herramientas) — nada más, y solo el PROPIO
+      // alumno: loginStudent (DNI+PIN) ata la sesión con un custom token a
+      // request.auth.uid == studentId, así que antes de esto cualquier
+      // visitante con sesión anónima podía pisarle la foto a cualquier otro.
       allow update: if isPublicAppPath(appId)
+                  && request.auth != null && request.auth.uid == studentId
                   && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoURL', 'vocalRange'])
                   && request.resource.data.dni == resource.data.dni;
       allow write: if isStaff();
