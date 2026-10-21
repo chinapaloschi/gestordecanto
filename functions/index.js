@@ -305,7 +305,17 @@ exports.loginStudent = functions.https.onCall(async (data, context) => {
   // la sesión de Firebase Auth al studentId recién validado -- de acá en
   // más, request.auth.uid == studentId es prueba real de identidad, no solo
   // "alguien con sesión anónima".
-  const customToken = await admin.auth().createCustomToken(studentDoc.id, { studentId: studentDoc.id });
+  // CRÍTICO: va en try/catch propio y nunca bloquea el login. La primera
+  // vez que se desplegó esto, createCustomToken tiraba (al cuentq de
+  // servicio de la función le falta el rol "Service Account Token Creator"
+  // para firmar el token) y como no estaba protegido, el error tumbaba
+  // loginStudent entero -- nadie pudo entrar al portal hasta este fix.
+  let customToken = null;
+  try {
+    customToken = await admin.auth().createCustomToken(studentDoc.id, { studentId: studentDoc.id });
+  } catch (e) {
+    console.error('[loginStudent] createCustomToken falló (no bloquea el login):', e.message);
+  }
 
   const { pin: _omitPin, ...safeStudentData } = studentData;
   return { id: studentDoc.id, customToken, ...safeStudentData };
