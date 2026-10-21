@@ -941,8 +941,13 @@ const handleClassClick = (classItem) => {
   if (saving) return;
 
   const alreadyMarked = isPresent(classItem.status) || isAbsent(classItem.status);
+  // Se permite reabrir el diálogo una vez más aunque ya tenga un estado
+  // registrado, para corregir un toque equivocado -- confirmAttendance
+  // rechaza una segunda corrección del lado del servidor, esto solo
+  // decide si vale la pena ofrecer el diálogo de nuevo.
+  const canCorrect = alreadyMarked && !classItem.attendanceCorrected && classItem.canMark;
 
-  if (classItem.canMark && !alreadyMarked) {
+  if ((classItem.canMark && !alreadyMarked) || canCorrect) {
 
     setSelectedClassForAttendance(classItem);
 
@@ -950,7 +955,7 @@ const handleClassClick = (classItem) => {
 
   } else if (alreadyMarked) {
 
-    showToast('Ya registraste tu estado para esta clase.', 'info');
+    showToast('Ya corregiste tu estado para esta clase.', 'info');
 
   } else if (classItem.isInCurrentWeek) {
 
@@ -1079,6 +1084,7 @@ for (const r of rows) {
     label: dayLabel(r.classDate),
 
     status: r.attendanceStatus || 'pending',
+    attendanceCorrected: r.attendanceCorrected === true,
 
     isInCurrentWeek,   // ← nueva propiedad
 
@@ -2114,13 +2120,19 @@ const renderCalendarGrid = () => {
 
     </h3>
 
-    <p className="text-sm text-gray-600 mb-6">
+    <p className="text-sm text-gray-600 mb-2">
 
       Clase del {selectedClassForAttendance?.label} a las {selectedClassForAttendance?.time} hs
 
     </p>
 
-    <div className="flex flex-col gap-3">
+    {(isPresent(selectedClassForAttendance?.status) || isAbsent(selectedClassForAttendance?.status)) && (
+      <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
+        Ya habías marcado "{isPresent(selectedClassForAttendance?.status) ? 'Presente' : 'Ausente'}" — podés corregirlo, pero solo esta vez.
+      </p>
+    )}
+
+    <div className="flex flex-col gap-3 mt-4">
 
       <button
 

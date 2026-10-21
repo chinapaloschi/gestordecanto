@@ -116,12 +116,66 @@ exports.confirmAttendance = functions.https.onCall(async (data, context) => {
     const daysAhead = daysBetween(todayD, cls.classDate);
     assertC(daysAhead >= 0 && daysAhead <= ATTENDANCE_WINDOW_DAYS, "Podés marcar tu asistencia desde una semana antes de la clase.");
 
-    // Ya tiene un estado final registrado -- no lo pisamos (evita que un
-    // doble tap, o presente+ausente en rápida sucesión, revierta un
-    // "presente" ya sumado a créditos/asistencia).
-    const already = cls.attendanceStatus === "presente" || cls.attendanceStatus === "present"
-      || cls.attendanceStatus === "ausente" || cls.attendanceStatus === "absent";
-    if (already) return;
+    const isPresentStatus = (s) => s === "presente" || s === "present";
+    const isAbsentStatus = (s) => s === "ausente" || s === "absent";
+    const currentlyPresent = isPresentStatus(cls.attendanceStatus);
+    const currentlyAbsent = isAbsentStatus(cls.attendanceStatus);
+    const already = currentlyPresent || currentlyAbsent;
+
+    // Ya tiene un estado final registrado -- se permite UNA sola corrección
+    // (el alumno se equivocó de botón, o cambió de planes), nunca más
+    // después de esa. Tocar de nuevo el mismo estado no cuenta como
+    // corrección (evita que un doble tap gaste la única corrección).
+    if (already) {
+      const sameAsBefore = (currentlyPresent && status === "presente") || (currentlyAbsent && status === "ausente");
+      if (sameAsBefore) return;
+      assertC(cls.attendanceCorrected !== true, "Ya corregiste tu estado una vez para esta clase.");
+
+      const stRef = db.doc(`artifacts/${appId}/students/${studentId}`);
+      const stSnap = await tx.get(stRef);
+      const st = stSnap.exists ? stSnap.data() : {};
+
+      if (currentlyPresent && status === "ausente") {
+        // Deshace los efectos de "presente": borra el registro de
+        // asistencia y devuelve el crédito si se había descontado.
+        if (cls.attendanceRefId) {
+          tx.delete(db.doc(`artifacts/${appId}/attendance/${cls.attendanceRefId}`));
+        }
+        if (typeof st.remainingCredits === "number") {
+          tx.update(stRef, { remainingCredits: admin.firestore.FieldValue.increment(1) });
+        }
+        tx.set(clsRef, {
+          attendanceStatus: "ausente",
+          attendanceSource: "public",
+          attendanceCorrected: true,
+          attendanceRefId: admin.firestore.FieldValue.delete(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return;
+      }
+
+      // currentlyAbsent && status === "presente": aplica los mismos efectos
+      // que el alta normal de "presente", más abajo.
+      const studentName = st.name || st.fullName || "";
+      const attId = `public_${studentId}_${cls.classDate}`;
+      const attRef = db.doc(`artifacts/${appId}/attendance/${attId}`);
+      tx.set(attRef, {
+        studentId, studentName, classId,
+        dateKey: cls.classDate, checkedAt: admin.firestore.FieldValue.serverTimestamp(),
+        via: "public_pin_correction"
+      }, { merge: true });
+      tx.set(clsRef, {
+        attendanceStatus: "presente",
+        attendanceRefId: attRef.id,
+        attendanceSource: "public",
+        attendanceCorrected: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      if (typeof st.remainingCredits === "number") {
+        tx.update(stRef, { remainingCredits: admin.firestore.FieldValue.increment(-1) });
+      }
+      return;
+    }
 
     if (status === "ausente") {
       tx.set(clsRef, {
