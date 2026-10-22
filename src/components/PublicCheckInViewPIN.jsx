@@ -375,15 +375,18 @@ const getCurrentWeekRange = () => {
 
   monday.setDate(today.getDate() + diffToMonday);
 
-  const saturday = new Date(monday);
+  // +6 (no +5) para que la semana llegue hasta el domingo inclusive --
+  // antes se cortaba en sábado y una clase de domingo quedaba "fuera de
+  // la semana actual" para el mensaje de "podés marcar esta semana".
+  const sunday = new Date(monday);
 
-  saturday.setDate(monday.getDate() + 5);
+  sunday.setDate(monday.getDate() + 6);
 
   return {
 
     start: toLocalYYYYMMDD(monday),
 
-    end: toLocalYYYYMMDD(saturday),
+    end: toLocalYYYYMMDD(sunday),
 
   };
 
@@ -427,11 +430,12 @@ const getCurrentWeekRange = () => {
 
       const allUnpaidPackages = docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
 
-      const now = new Date();
+      // Fecha de Argentina, no new Date() cruda del dispositivo.
+      const [argYear, argMonth] = getArgentinaDateKey().split('-').map(Number);
 
-      const currentYear = now.getFullYear();
+      const currentYear = argYear;
 
-      const currentMonth = now.getMonth();
+      const currentMonth = argMonth - 1;
 
       const currentPackages = [];
 
@@ -807,7 +811,17 @@ const getCurrentWeekRange = () => {
         setNeedsPin(true);
         setStatus({ step: 'ok', msg: 'Este DNI tiene un PIN asignado — ingresalo para continuar.' });
       } else {
-        const msg = err?.message || 'Ocurrió un error al iniciar sesión.';
+        // loginStudent solo rechaza a propósito con código "failed-precondition"
+        // (DNI no encontrado, PIN incorrecto) o "resource-exhausted" (muchos
+        // intentos) -- esos mensajes están pensados para mostrarse tal cual.
+        // Cualquier otro código es un error inesperado del servidor (ej. el
+        // "INTERNAL" que vimos en producción) y mostrarlo crudo no le dice
+        // nada al alumno -- mejor un mensaje genérico en español.
+        const code = String(err?.code || '');
+        const isExpectedRejection = code.includes('failed-precondition') || code.includes('resource-exhausted');
+        const msg = isExpectedRejection
+          ? (err?.message || 'Ocurrió un error al iniciar sesión.')
+          : 'No se pudo iniciar sesión. Probá de nuevo en un momento.';
         setStatus({ step: 'ok', msg });
       }
 
@@ -973,11 +987,14 @@ const handleClassClick = (classItem) => {
 
     if (!db || !appId || !student?.id) return;
 
-    const now = new Date();
+    // Fecha de Argentina (todayKey), no new Date() cruda del dispositivo —
+    // si el reloj/huso del celular estaba mal, este fetch podía traer el
+    // mes equivocado (mismo motivo que todayKey más arriba).
+    const [tYear, tMonth] = todayKey.split('-').map(Number);
 
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = new Date(tYear, tMonth - 1, 1);
 
-    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const monthEnd   = new Date(tYear, tMonth, 0);
 
     const mk = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
@@ -1140,9 +1157,11 @@ for (const r of rows) {
   // sin necesidad de haber pagado ese mes todavía.
   React.useEffect(() => {
     if (!db || !appId || !student?.id) { setNextMonthClasses([]); return; }
-    const now = new Date();
-    const nmStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const nmEnd   = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+    // Fecha de Argentina, no new Date() cruda del dispositivo (ver el
+    // mismo fix en el fetch de "clases del mes" más arriba).
+    const [tYear, tMonth] = todayKey.split('-').map(Number);
+    const nmStart = new Date(tYear, tMonth, 1);
+    const nmEnd   = new Date(tYear, tMonth + 1, 0);
     const mk = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const qNext = query(
       fsCollection(db, `artifacts/${appId}/scheduledClasses`),
@@ -1155,7 +1174,7 @@ for (const r of rows) {
       setNextMonthClasses(snap.docs.map(d => ({ id: d.id, ...(d.data() || {}) })));
     }, () => setNextMonthClasses([]));
     return () => unsub();
-  }, [db, appId, student?.id]);
+  }, [db, appId, student?.id, todayKey]);
 
 // Abrir popup de eventos al iniciar sesión si hay eventos no confirmados
 
@@ -1167,7 +1186,11 @@ React.useEffect(() => {
 
     try {
 
-      const today = new Date().toISOString().split('T')[0];
+      // Fecha de Argentina -- toISOString() da la fecha en UTC, que ya es
+      // "mañana" entre las 21:00 y la medianoche hora Argentina, haciendo
+      // que un evento de mañana apareciera como si fuera de hoy desde esa
+      // hora en adelante.
+      const today = getArgentinaDateKey();
 
       const q = query(
 
@@ -1234,9 +1257,10 @@ React.useEffect(() => {
 }, [student, db, appId]);
 
 const renderCalendarGrid = () => {
-  const now   = new Date();
-  const year  = new Date(now.getFullYear(), now.getMonth() + calMonthOffset, 1).getFullYear();
-  const month = new Date(now.getFullYear(), now.getMonth() + calMonthOffset, 1).getMonth();
+  // Fecha de Argentina (todayKey), no new Date() cruda del dispositivo.
+  const [tYear, tMonth] = todayKey.split('-').map(Number);
+  const year  = new Date(tYear, (tMonth - 1) + calMonthOffset, 1).getFullYear();
+  const month = new Date(tYear, (tMonth - 1) + calMonthOffset, 1).getMonth();
   // Mes actual → clases ya cargadas (allMonthClasses). Mes siguiente → el
   // fetch aparte que solo alimenta este calendario (nextMonthClasses), para
   // no tocar los filtros de "Tus clases"/estadísticas del mes actual.
@@ -1541,7 +1565,7 @@ const renderCalendarGrid = () => {
               { id: 'inicio',       label: 'Inicio',       d: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
               { id: 'clases',       label: 'Clases',       d: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
               { id: 'pagos',        label: 'Pagos',        d: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
-              { id: 'herramientas', label: 'Herramientas', d: 'M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z' },
+              { id: 'herramientas', label: 'Útiles', d: 'M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z' },
               { id: 'mensajes',     label: 'Mensajes',     d: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
             ].map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -1595,16 +1619,23 @@ const renderCalendarGrid = () => {
                 realType: c.studentType || c.classType || 'individual',
               }));
             const now = new Date();
+            // -03:00 explícito (Argentina no tiene horario de verano desde
+            // 2009) en vez de dejar que new Date() interprete la hora con el
+            // huso horario del dispositivo -- si el celular tiene otro huso
+            // configurado, "próxima clase" podía calcularse mal aunque el
+            // reloj en sí estuviera bien.
             const next = allClasses
-              .map(c => { try { return { ...c, __dt: new Date(`${c.date}T${c.time || '00:00'}:00`) }; } catch { return null; } })
+              .map(c => { try { return { ...c, __dt: new Date(`${c.date}T${c.time || '00:00'}:00-03:00`) }; } catch { return null; } })
               .filter(Boolean).filter(c => c.__dt > now && !isPresent(c.status) && !isAbsent(c.status))
               .sort((a, b) => a.__dt - b.__dt)[0];
             const totalMes = allClasses.length;
             const asistidas = allClasses.filter(c => isPresent(c.status)).length;
             const ausentes  = allClasses.filter(c => isAbsent(c.status)).length;
             const pct = totalMes > 0 ? Math.round((asistidas / totalMes) * 100) : 0;
-            const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-            const sinMarcar = allClasses.filter(c => { try { return new Date(`${c.date}T00:00:00`) < hoy && !isPresent(c.status) && !isAbsent(c.status); } catch { return false; } });
+            // Comparación de fechas como texto (todayKey ya es la fecha de
+            // Argentina) -- evita reconstruir un Date local que dependa del
+            // huso del dispositivo solo para comparar días calendario.
+            const sinMarcar = allClasses.filter(c => c.date < todayKey && !isPresent(c.status) && !isAbsent(c.status));
 
             const showPaid = hasPaidThisMonth;
             const showDue = !hasPaidThisMonth && publicTotalToday > 0;
@@ -1617,7 +1648,7 @@ const renderCalendarGrid = () => {
             let isToday = false, isTomorrow = false, ds = '', label = null;
             if (next) {
               isToday = next.date === todayKey;
-              isTomorrow = (() => { const t = new Date(); t.setDate(t.getDate() + 1); return toLocalYYYYMMDD(t) === next.date; })();
+              isTomorrow = next.date === tomorrowKey;
               ds = next.__dt.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
               label = isToday ? '¡Hoy!' : isTomorrow ? 'Mañana' : null;
             }
@@ -1805,7 +1836,11 @@ const renderCalendarGrid = () => {
                   </div>
                   <div>
                     <p className="font-display font-semibold text-amber-800 text-sm">{sinMarcar.length} clase{sinMarcar.length>1?'s':''} sin marcar</p>
-                    <p className="text-xs text-amber-600">Marcalas en la pestaña Clases.</p>
+                    {/* Ya pasó la ventana para marcarla vos mismo (hasta el
+                        día de la clase) -- antes decía "marcalas en la
+                        pestaña Clases", una acción que ya no es posible y
+                        dejaba al alumno sin poder hacer nada igual. */}
+                    <p className="text-xs text-amber-600">Si fue un error, avisale a Sandra para que lo corrija.</p>
                   </div>
                 </div>
               )}

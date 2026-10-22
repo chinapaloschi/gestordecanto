@@ -543,31 +543,27 @@ export const PublicPaymentsList = ({ db, appId, student }) => {
 
   const toggleMonth = (key) => setOpenMonths(prev => ({ ...prev, [key]: !prev[key] }));
 
+  // El contenedor que usa este componente (pestaña Pagos del portal) ya
+  // pone su propia tarjeta blanca y el título "Historial de pagos" --
+  // antes esto agregaba otra tarjeta con otro título casi idéntico encima,
+  // uno repetido debajo del otro.
   if (!merged.length) {
-    return (
-      <div className="rounded-lg border border-gray-200 p-4 bg-white shadow-sm">
-        <div className="text-sm font-semibold text-gray-900 mb-2">Pagos</div>
-        <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-800">No hay pagos registrados.</div>
-      </div>
-    );
+    return <p className="text-sm text-gray-500">Todavía no hay pagos registrados.</p>;
   }
 
   return (
     <>
-      <div className="rounded-lg border border-gray-200 p-4 bg-white shadow-sm">
-        <div className="text-sm font-semibold text-gray-900 mb-2">Historial de Pagos</div>
-        <p className="text-sm text-gray-600 mb-4">
-          Aquí puedes consultar todos los comprobantes de tus pagos anteriores.
-        </p>
- 
-<button
-  onClick={() => setIsHistoryModalOpen(true)}
-  className="w-full text-center text-sm font-semibold text-rose-600 hover:text-rose-800 hover:underline transition-all"
->
-  Ver historial completo ({merged.length} en total)
-</button>
-      </div>
-      
+      <p className="text-sm text-gray-600 mb-3">
+        Acá podés consultar todos los comprobantes de tus pagos anteriores.
+      </p>
+
+      <button
+        onClick={() => setIsHistoryModalOpen(true)}
+        className="w-full text-center text-sm font-semibold text-rose-600 hover:text-rose-800 hover:underline transition-all"
+      >
+        Ver historial completo ({merged.length} en total)
+      </button>
+
       <Modal isOpen={isHistoryModalOpen} onClose={() => { setIsHistoryModalOpen(false); setIsFullyExpanded(false); }} title="Historial de Pagos" size="lg">
         <div className="p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
