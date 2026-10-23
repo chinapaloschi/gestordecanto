@@ -30,16 +30,21 @@ service firebase.storage {
     // --- Reglas Específicas ---
 
     // FOTOS DE PERFIL
-    // Antes "request.auth != null" alcanzaba para escribir acá -- la sesión
-    // anónima que la app le da a CUALQUIER visitante (ver firebaseConfig.js)
-    // cumplía eso igual, así que cualquiera podía pisarle la foto a
-    // cualquier alumno con solo saber/adivinar su studentId. loginStudent
-    // (DNI+PIN) ata ahora la sesión con un custom token a
-    // request.auth.uid == studentId, así que el autoservicio queda
-    // restringido al propio alumno ya identificado (o a staff).
+    // El plan era exigir request.auth.uid == studentId acá (loginStudent
+    // ata la sesión a un custom token tras validar DNI+PIN) para que solo
+    // el propio alumno pudiera tocar su foto -- revertido temporalmente:
+    // a la cuenta de servicio de las Functions le falta el permiso IAM
+    // "Service Account Token Creator" (rol "roles/iam.serviceAccountTokenCreator",
+    // distinto del que ya se agregó para poder deployar) para firmar ese
+    // token, así que NINGÚN alumno llegaba a tener uid == studentId y
+    // quedaban todos bloqueados para cambiar su propia foto. Hasta que se
+    // otorgue ese permiso, vuelve a alcanzar con estar autenticado (como
+    // antes de esa migración) -- sigue haciendo falta studentId para saber
+    // a quién pisarle la foto, así que no es un visitante 100% anónimo sin
+    // ningún contexto, pero no verifica identidad real todavía.
     match /students/{studentId}/profilePicture.jpg {
       allow read: if true;
-      allow write: if (isStaff() || (request.auth != null && request.auth.uid == studentId))
+      allow write: if request.auth != null
                     && request.resource.size < 5 * 1024 * 1024
                     && request.resource.contentType.matches('image/.*');
     }
