@@ -1235,6 +1235,11 @@ export const EventDetailModal = ({ isOpen, onClose, event, db, appId, showMessag
                 ...participant,
                 ticketsSold: newSoldCount,
                 ticketsDelivered: Math.max(Number(participant.ticketsDelivered || 0), newSoldCount),
+                // Asignar una entrada real (diff > 0, no un externo que ya
+                // estaba marcado) la da por pagada -- antes había que tocar
+                // "Sin pagar" a mano aparte, y era fácil olvidarse después
+                // de cargar las entradas.
+                ...(diff > 0 ? { paid: true } : {}),
               };
               const updatePayload = { participants: nextParticipants };
               if (diff > 0) updatePayload.lastTicketNumberIssued = lastIssued;
@@ -1245,9 +1250,10 @@ export const EventDetailModal = ({ isOpen, onClose, event, db, appId, showMessag
             ...participant,
             ticketsSold: newSoldCount,
             ticketsDelivered: Math.max(Number(participant.ticketsDelivered || 0), newSoldCount),
+            ...(diff > 0 ? { paid: true } : {}),
           };
           setLocalEvent(prev => ({...prev, participants: nextParticipantsState}));
-          showMessage(`Se ${diff > 0 ? 'generaron' : 'eliminaron'} ${Math.abs(diff)} entrada(s) para ${studentName}.`, 'success');
+          showMessage(`Se ${diff > 0 ? 'generaron' : 'eliminaron'} ${Math.abs(diff)} entrada(s) para ${studentName}${diff > 0 && !isExternal ? ' y se marcó como pagado' : ''}.`, 'success');
       } catch (e) {
           console.error("Error al actualizar entradas:", e);
           showMessage(`Error: ${e.message}`, 'error');
