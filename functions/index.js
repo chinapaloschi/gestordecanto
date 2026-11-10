@@ -1170,7 +1170,7 @@ exports.checkUnpaidFixedPayments = functions.pubsub
       const periodKey = today.slice(0, 7); // YYYY-MM
 
       const settingsSnap = await db.doc(`artifacts/${appId}/fixedPaymentSettings/config`).get();
-      const notifyDay = settingsSnap.exists() ? (Number(settingsSnap.data()?.notifyDay) || 10) : 10;
+      const notifyDay = settingsSnap.exists ? (Number(settingsSnap.data()?.notifyDay) || 10) : 10;
       if (dayOfMonth < notifyDay) {
         console.log(`[FixedPayments] Día ${dayOfMonth} < ${notifyDay}, todavía no corresponde avisar.`);
         return { skipped: true, reason: 'before_notify_day' };
@@ -1186,7 +1186,7 @@ exports.checkUnpaidFixedPayments = functions.pubsub
       const toNotify = [];
       for (const tDoc of unpaid) {
         const logSnap = await db.doc(`artifacts/${appId}/fixedPaymentReminderLog/${tDoc.id}_${periodKey}`).get();
-        if (!logSnap.exists()) toNotify.push(tDoc);
+        if (!logSnap.exists) toNotify.push(tDoc);
       }
       if (!toNotify.length) {
         console.log('[FixedPayments] Ya se había avisado de todos los pendientes este período.');
