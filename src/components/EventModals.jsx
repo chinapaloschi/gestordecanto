@@ -1612,60 +1612,65 @@ const handleExportTicketsCSV = async () => {
                   <ul className="space-y-2">
                     {filteredParticipants.map((p) => (
                       <li key={getPid(p) || p.originalIndex} className="border border-gray-100 rounded-xl p-3">
-                        <div className="flex items-start gap-3">
+                        {/* Antes todo esto iba en una sola fila horizontal
+                            (avatar + nombre + contadores + Visible/ticket/
+                            borrar) -- en un celular angosto los íconos de la
+                            derecha quedaban empujados fuera de pantalla y
+                            había que girarlo a horizontal para tocar
+                            "Visible". Ahora es una pila vertical: cada fila
+                            entra entera sin importar el ancho. */}
+                        <div className="flex items-center gap-3">
                           <span className={`w-9 h-9 rounded-full text-white text-xs font-black flex items-center justify-center flex-shrink-0 ${p.isExternal ? 'bg-gradient-to-br from-gray-400 to-gray-500' : 'bg-gradient-to-br from-amber-400 to-rose-400'}`}>
                             {initials(getPname(p))}
                           </span>
-                          <div className="min-w-0 flex-grow">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-bold text-gray-800 truncate">{getPname(p)}</span>
-                              {p.isExternal ? (
-                                <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Externo</span>
-                              ) : (
-                                <button onClick={() => togglePaid(p.originalIndex)} className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full transition ${p.paid ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}>
-                                  {p.paid ? '✓ Pagado' : 'Sin pagar'}
-                                </button>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2 text-xs text-gray-600">
-                              <label className="flex items-center gap-1.5">
-                                Entregadas
-                                <input type="number" min="0" defaultValue={p.ticketsDelivered || 0} onBlur={(e) => handleDeliveredInput(p.originalIndex, Number(e.target.value))} className="w-16 p-1 text-center border border-gray-200 rounded-lg" />
-                              </label>
-                              <div className="flex items-center gap-1.5">
-                                Vendidas
-                                <button type="button" onClick={() => handleSoldInput(p.originalIndex, (p.ticketsSold || 0) - 1)} disabled={saving || (p.ticketsSold || 0) <= 0} className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 font-bold">−</button>
-                                <input type="number" min="0" value={p.ticketsSold || 0} onChange={(e) => handleSoldInput(p.originalIndex, Number(e.target.value))} className="w-12 text-center p-1 border border-gray-200 rounded-lg" />
-                                <button type="button" onClick={() => handleSoldInput(p.originalIndex, (p.ticketsSold || 0) + 1)} disabled={saving} className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 font-bold">+</button>
-                              </div>
-                              <span className="font-bold text-gray-800">${fmtMoney((p.ticketsSold || 0) * price)}</span>
-                            </div>
+                          <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-gray-800 truncate">{getPname(p)}</span>
+                            {p.isExternal ? (
+                              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Externo</span>
+                            ) : (
+                              <button onClick={() => togglePaid(p.originalIndex)} className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full transition ${p.paid ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}>
+                                {p.paid ? '✓ Pagado' : 'Sin pagar'}
+                              </button>
+                            )}
                           </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            {/* Antes era un ícono de ojo suelto, gris tanto activado como
-                                no -- se perdía entre los otros dos íconos de al lado y nadie
-                                se acordaba de tocarlo, dejando entradas creadas invisibles
-                                para el alumno sin que se notara. Ahora es una pastilla con
-                                texto, en ámbar bien visible mientras esté oculta -- misma
-                                idea que el "Sin pagar" de arriba. */}
-                            <button onClick={() => toggleTicketsVisibility(p.originalIndex)}
-                              title={p.ticketsVisible ? 'El alumno puede ver esta entrada en su portal' : 'El alumno todavía NO puede ver esta entrada'}
-                              className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-1.5 rounded-full transition ${p.ticketsVisible ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100'}`}>
-                              {p.ticketsVisible ? <IconEye /> : <IconEyeOff />}
-                              {p.ticketsVisible ? 'Visible' : 'Oculta'}
-                            </button>
-                            {/* Antes se deshabilitaba con ticketsSold === 0, pero ese
-                                contador puede quedar en 0 mientras todavía existan
-                                entradas reales huérfanas en la subcolección (el bug
-                                que este botón sirve para destrabar) -- ahora siempre
-                                se puede abrir. */}
-                            <button onClick={() => setStudentForTickets(p)} title={`Ver entradas de ${getPname(p)}`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition flex-shrink-0">
-                              <IconTicket />
-                            </button>
-                            <button onClick={() => removeParticipant(p.originalIndex)} title={`Quitar a ${getPname(p)}`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition flex-shrink-0">
-                              <IconTrash />
-                            </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5 pl-12 text-xs text-gray-600">
+                          <label className="flex items-center gap-1.5">
+                            Entregadas
+                            <input type="number" min="0" defaultValue={p.ticketsDelivered || 0} onBlur={(e) => handleDeliveredInput(p.originalIndex, Number(e.target.value))} className="w-16 p-1 text-center border border-gray-200 rounded-lg" />
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            Vendidas
+                            <button type="button" onClick={() => handleSoldInput(p.originalIndex, (p.ticketsSold || 0) - 1)} disabled={saving || (p.ticketsSold || 0) <= 0} className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 font-bold">−</button>
+                            <input type="number" min="0" value={p.ticketsSold || 0} onChange={(e) => handleSoldInput(p.originalIndex, Number(e.target.value))} className="w-12 text-center p-1 border border-gray-200 rounded-lg" />
+                            <button type="button" onClick={() => handleSoldInput(p.originalIndex, (p.ticketsSold || 0) + 1)} disabled={saving} className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 font-bold">+</button>
                           </div>
+                          <span className="font-bold text-gray-800">${fmtMoney((p.ticketsSold || 0) * price)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-2.5 pl-12 flex-wrap">
+                          {/* Antes era un ícono de ojo suelto, gris tanto activado como
+                              no -- se perdía entre los otros dos íconos de al lado y nadie
+                              se acordaba de tocarlo, dejando entradas creadas invisibles
+                              para el alumno sin que se notara. Ahora es una pastilla con
+                              texto, en ámbar bien visible mientras esté oculta -- misma
+                              idea que el "Sin pagar" de arriba. */}
+                          <button onClick={() => toggleTicketsVisibility(p.originalIndex)}
+                            title={p.ticketsVisible ? 'El alumno puede ver esta entrada en su portal' : 'El alumno todavía NO puede ver esta entrada'}
+                            className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-1.5 rounded-full transition ${p.ticketsVisible ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100'}`}>
+                            {p.ticketsVisible ? <IconEye /> : <IconEyeOff />}
+                            {p.ticketsVisible ? 'Visible' : 'Oculta'}
+                          </button>
+                          {/* Antes se deshabilitaba con ticketsSold === 0, pero ese
+                              contador puede quedar en 0 mientras todavía existan
+                              entradas reales huérfanas en la subcolección (el bug
+                              que este botón sirve para destrabar) -- ahora siempre
+                              se puede abrir. */}
+                          <button onClick={() => setStudentForTickets(p)} title={`Ver entradas de ${getPname(p)}`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition flex-shrink-0">
+                            <IconTicket />
+                          </button>
+                          <button onClick={() => removeParticipant(p.originalIndex)} title={`Quitar a ${getPname(p)}`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition flex-shrink-0">
+                            <IconTrash />
+                          </button>
                         </div>
                       </li>
                     ))}
